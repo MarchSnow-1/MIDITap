@@ -27,9 +27,20 @@ jobs:
       - name: Build EXE
         run: pkg .
 
+      - name: Rename EXE
+        run: mv dist\miditap.exe dist\MIDITap-${{ github.ref_name }}.exe        
+
+      - name: Package zip
+        run: |
+          mkdir release
+          copy dist\MIDITap-${{ github.ref_name }}.exe release\
+          xcopy config release\config\ /E /I
+          cd release
+          Compress-Archive -Path * -DestinationPath ..\MIDITap-${{ github.ref_name }}.zip
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/miditap.exe
+          files: MIDITap-${{ github.ref_name }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
