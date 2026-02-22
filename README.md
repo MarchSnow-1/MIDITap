@@ -4,10 +4,6 @@
 
 [简体中文](README.md) | [English](README_EN.md)
 
-<!-- prettier-ignore-start -->
-轻松映射MIDI设备
-<!-- prettier-ignore-end -->
-
 将 MIDI 键盘输入实时映射为键盘按键的轻量级工具
 
 </div>
