@@ -13,7 +13,7 @@ A lightweight tool to map MIDI keyboard input to keystrokes in real-time.
 
 MIDITap is a low-latency MIDI-to-keyboard mapping tool built on native Windows APIs.
 
-If you encounter any issues, please feel free to submit feedback via [ISSUES](../../issues).
+If you encounter any issues, please feel free to submit feedback via [Issues](../../issues).
 
 > 💡 **Tip**: Configuration files support comments. When sharing your config, you can annotate specific keys for better clarity.
 
