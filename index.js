@@ -98,9 +98,13 @@ const VK = {
   'sleep':0x5F,
 };
 
-// ── 加载配置 ──────────────────────────────────────────────────────────────────
+// 加载配置
 
-const configPath = path.join(__dirname, 'config', 'mapping.json');
+const baseDir = path.basename(process.execPath).startsWith('node')
+  ? __dirname
+  : path.dirname(process.execPath);
+
+const configPath = path.join(baseDir, 'config', 'mapping.json');
 let rawMapping = {};
 try {
   rawMapping = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
@@ -122,7 +126,7 @@ for (const [noteStr, keyChar] of Object.entries(rawMapping)) {
   console.log(`note ${noteStr} -> '${keyChar}' (VK=0x${vk.toString(16).toUpperCase()})`);
 }
 
-// ── MIDI 输入 ─────────────────────────────────────────────────────────────────
+// MIDI 输入
 
 const input = new midi.Input();
 const portCount = input.getPortCount();
