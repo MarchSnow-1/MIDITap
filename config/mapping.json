@@ -1,0 +1,18 @@
+{
+  // MIDITap 配置文件
+  // MIDITap Config File
+
+  // 左侧为 MIDI 编号，右侧为按键名称
+  // 完整按键名称列表请参阅 https://github.com/MarchSnow-1/MIDITap/guide/zh_cn.md
+
+  // Left side: MIDI Note Number | Right side: Key Name
+  // For a full list of supported key names, please refer to https://github.com/MarchSnow-1/MIDITap/guide/en_us.md
+
+  "48": "a",  // C3
+  "50": "s",  // D3
+  "52": "d",  // E3
+  "53": "f",  // F3
+  "55": "g",  // G3
+  "57": "h",  // A3
+  "59": "j"  // B3
+}

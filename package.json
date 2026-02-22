@@ -1,0 +1,25 @@
+{
+  "name": "miditap",
+  "version": "1.0.0",
+  "main": "index.js",
+  "bin": "index.js",
+  "pkg": {
+    "targets": ["node24-win-x64"],
+    "assets": [
+      "config/**/*",
+      "node_modules/koffi/build/**/*",
+      "node_modules/midi/build/**/*"
+    ],
+    "outputPath": "dist"
+  },
+  "description": "Convert MIDI signal in to Keyboard out",
+  "keywords": [],
+  "author": "MarchSnow",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "json5": "^2.2.3",
+    "koffi": "^2.15.1",
+    "midi": "^2.0.0"
+  }
+}
