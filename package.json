@@ -20,7 +20,7 @@
   "description": "Convert MIDI signal in to Keyboard out",
   "keywords": [],
   "author": "MarchSnow",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "json5": "^2.2.3",
