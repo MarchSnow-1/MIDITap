@@ -15,7 +15,8 @@ function loadConfig(baseDir) {
   }
 
   const noteMap = new Map();
-  for (const [noteStr, keyChar] of Object.entries(rawMapping)) {
+    for (const [noteStr, keyChar] of Object.entries(rawMapping)) {
+    if (noteStr === 'port') continue;  // 跳过 port 配置项
     const vk = VK[keyChar.toLowerCase()];
     if (vk === undefined) {
       console.warn(`Can't find '${keyChar}' in VK Code List, Skipping...`);
@@ -25,7 +26,7 @@ function loadConfig(baseDir) {
     console.log(`note ${noteStr} -> '${keyChar}' (VK=0x${vk.toString(16).toUpperCase()})`);
   }
 
-  return noteMap;
+  return { noteMap, port: rawMapping.port ?? null };
 }
 
 module.exports = { loadConfig };
