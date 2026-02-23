@@ -96,35 +96,12 @@ Write the number directly: `"0"` ~ `"9"`
 
 ---
 
-## Full Example
-
-```json
-{
-  // JSON5 format — comments are allowed
-  "48": "a",
-  "50": "s",
-  "52": "d",
-  "53": "f",
-  "55": "g",
-  "57": "h",
-  "59": "j",
-  "49": "lshift",
-  "51": "space",
-  "54": "lctrl",
-  "60": "f1",
-  "62": "f2",
-  "64": "f3"
-}
-```
-
----
-
 ## Specify MIDI Port
 
 If you have multiple MIDI devices, you can specify the port number in the config file:
 ```json
 {
-  // Specify port 1 (zero-indexed)
+  // Port index (zero-indexed: 0 = first device, 1 = second device)
   "port": 1,
 
   "48": "a",
@@ -145,6 +122,34 @@ Port priority (highest to lowest):
 ```bash
 # Specify port via command line, overrides config file
 MIDITap.exe --port 1
+```
+
+---
+
+## Full Example
+
+```json
+{
+  // JSON5 format — comments are allowed
+
+  // Port index (zero-indexed: 0 = first device, 1 = second device)
+  "port": 1,
+
+  // Mapping configuration
+  "48": "a",
+  "50": "s",
+  "52": "d",
+  "53": "f",
+  "55": "g",
+  "57": "h",
+  "59": "j",
+  "49": "lshift",
+  "51": "space",
+  "54": "lctrl",
+  "60": "f1",
+  "62": "f2",
+  "64": "f3"
+}
 ```
 
 ---
