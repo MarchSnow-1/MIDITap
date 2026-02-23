@@ -15,7 +15,7 @@
     "outputPath": "dist"
   },
   "scripts": {
-    "version": "auto-changelog -p && git add CHANGELOG.md"
+    "version": "auto-changelog-plus -p && git add CHANGELOG.md"
   },
   "description": "Convert MIDI signal in to Keyboard out",
   "keywords": [],
@@ -28,6 +28,6 @@
     "midi": "^2.0.0"
   },
   "devDependencies": {
-    "auto-changelog": "^2.5.0"
+    "auto-changelog-plus": "^1.2.3"
   }
 }
