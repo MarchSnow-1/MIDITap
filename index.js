@@ -29,6 +29,15 @@ function buildInputPair(vkCode) {
   ]);
 }
 
+// Exit
+
+function pauseAndExit(code = 1) {
+  console.log('MIDITap exited. Press any key to close...');
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.once('data', () => process.exit(code));
+}
+
 // VK Code List
 
 const VK = {
@@ -111,8 +120,10 @@ try {
   rawMapping = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
   console.log('Config Loaded:', rawMapping);
 } catch (err) {
+  // 无法加载配置文件
   console.error('Failed to Load Config:', err.message);
-  process.exit(1);
+  pauseAndExit();
+  return;
 }
 
 // noteMap 存 vkCode 和 flags，发送时现构建 buffer
@@ -132,7 +143,12 @@ for (const [noteStr, keyChar] of Object.entries(rawMapping)) {
 const input = new midi.Input();
 const portCount = input.getPortCount();
 for (let i = 0; i < portCount; i++) console.log(`Port ${i}: ${input.getPortName(i)}`);
-if (portCount === 0) { console.error('MIDI Device Not Found'); process.exit(1); }
+// 找不到 MIDI 设备
+if (portCount === 0) {
+  console.error('MIDI Device Not Found');
+  pauseAndExit();
+  return;
+}
 
 input.openPort(0);
 input.ignoreTypes(true, true, true);
