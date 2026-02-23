@@ -1,13 +1,26 @@
-name: Build EXE
-
-on:
-  push:
-    tags:
-      - 'v*.*.*'
-
 jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        run: |
+          npx auto-changelog-plus --starting-version ${{ github.ref_name }}
+          sed -i '1,4d' CHANGELOG.md
+
+      - name: Upload changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG.md
+
   build:
     runs-on: windows-latest
+    needs: changelog
 
     steps:
       - name: Checkout
@@ -15,10 +28,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Download changelog
+        uses: actions/download-artifact@v4
+        with:
+          name: changelog
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install
@@ -39,12 +57,6 @@ jobs:
           xcopy config release\config\ /E /I
           cd release
           Compress-Archive -Path * -DestinationPath ..\MIDITap-${{ github.ref_name }}.zip
-
-      - name: Generate release notes
-        run: |
-          npx auto-changelog --starting-version ${{ github.ref_name }}
-          $content = Get-Content CHANGELOG.md | Select-Object -Skip 4
-          $content | Set-Content CHANGELOG.md
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
