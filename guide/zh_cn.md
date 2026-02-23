@@ -1,6 +1,6 @@
 # MIDITap 配置教程
 
-配置文件位于 `config/mapping.json`，使用 JSON5 格式（支持注释）。
+配置文件位于 `config/mapping.json`，使用 JSON5 格式（支持注释）
 
 ## 基本格式
 
@@ -12,15 +12,15 @@
 
 ---
 
-## 第一步：找到琴键的 MIDI 编号
+## 第一步：找到 MIDI 编号
 
-启动程序后按下任意琴键，控制台会输出：
+启动程序后触发 MIDI 设备，控制台会输出：
 
 ```
-Note ON: 65, Velocity: 80
+Note ON: 65, Velocity: 80 (unbound)
 ```
 
-左边的数字（`65`）就是该琴键的 MIDI 编号。标准钢琴范围是 21（最低音 A0）到 108（最高音 C8）。
+左边的数字（`65`）就是该信号的 MIDI 编号。
 
 ---
 
@@ -101,8 +101,6 @@ Note ON: 65, Velocity: 80
 ```json
 {
   // 程序使用 JSON5 读取，可以写注释
-
-  // 白键区域
   "48": "a",
   "50": "s",
   "52": "d",
@@ -110,13 +108,9 @@ Note ON: 65, Velocity: 80
   "55": "g",
   "57": "h",
   "59": "j",
-
-  // 黑键区域
   "49": "lshift",
   "51": "space",
   "54": "lctrl",
-
-  // 高音区映射功能键
   "60": "f1",
   "62": "f2",
   "64": "f3"
@@ -133,16 +127,18 @@ Note ON: 65, Velocity: 80
   ```
   Can't find 'xxx' in VK Code List, Skipping...
   ```
-- 支持长按：按住琴键不放时，游戏内对应按键也会持续按下，松开琴键时同步释放
-- 按下琴键时控制台显示 `Note ON: <编号>, Velocity: <力度>`，松开时显示 `Note OFF: <编号>`
+- 支持长按：按住 MIDI 设备按键不放时，对应按键也会持续按下，松开时同步释放
+- 触发信号时控制台显示 `Note ON: <编号>, Velocity: <力度>`，释放时显示 `Note OFF: <编号>`
 
 ## 控制台输出说明
 
 | 信息 | 含义 |
 |------|------|
 | `Config Loaded: {...}` | 配置文件加载成功 |
-| `note 48 -> 'a' (VK=0x41)` | 启动时显示的音符映射关系 |
-| `Note ON: 65, Velocity: 80` | 琴键按下 |
-| `Note OFF: 65` | 琴键释放 |
+| `note 48 -> 'a' (VK=0x41)` | 启动时显示的信号映射关系 |
+| `Note ON: 65, Velocity: 80, Key: 'r'` | 信号触发（已绑定，会显示绑定的按键） |
+| `Note ON: 65, Velocity: 80 (unbound)` | 信号触发（未绑定） |
+| `Note OFF: 65, Key: 'r'` | 信号释放（已绑定） |
+| `Note OFF: 65 (unbound)` | 信号释放（未绑定） |
 | `Can't find 'xxx' in VK Code List, Skipping...` | 配置中存在未知按键名，已跳过 |
 | `SendInput Return 0` | 输入被拦截，请尝试以管理员身份运行 |
