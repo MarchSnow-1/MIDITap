@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const JSON5 = require('json5');
 const koffi = require('koffi');
+const { version } = require('./package.json');
 
 // SendInput Buffer 填字节
 const user32 = koffi.load('user32.dll');
@@ -161,6 +162,5 @@ input.on('message', (deltaTime, message) => {
     });
   }
 });
-
-console.log('MIDITap is running, press Ctrl+C to exit.');
+console.log(`MIDITap v${version} is running, press Ctrl+C to exit.`);
 process.on('SIGINT', () => { input.closePort(); process.exit(0); });
