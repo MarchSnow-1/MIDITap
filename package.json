@@ -15,7 +15,7 @@
     "outputPath": "dist"
   },
   "scripts": {
-    "version": "auto-changelog-plus -p && git add CHANGELOG.md"
+    "version": "npx auto-changelog-plus -p && git add CHANGELOG.md"
   },
   "description": "Convert MIDI signal in to Keyboard out",
   "keywords": [],
