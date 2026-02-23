@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -28,7 +30,7 @@ jobs:
         run: pkg .
 
       - name: Rename EXE
-        run: mv dist\miditap.exe dist\MIDITap-${{ github.ref_name }}.exe        
+        run: mv dist\miditap.exe dist\MIDITap-${{ github.ref_name }}.exe
 
       - name: Package zip
         run: |
@@ -38,9 +40,16 @@ jobs:
           cd release
           Compress-Archive -Path * -DestinationPath ..\MIDITap-${{ github.ref_name }}.zip
 
+      - name: Generate release notes
+        run: |
+          npx auto-changelog-plus --starting-version ${{ github.ref_name }}
+          $content = Get-Content CHANGELOG.md | Select-Object -Skip 4
+          $content | Set-Content CHANGELOG.md
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
+          body_path: CHANGELOG.md
           files: MIDITap-${{ github.ref_name }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

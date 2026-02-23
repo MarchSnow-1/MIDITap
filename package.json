@@ -4,13 +4,18 @@
   "main": "index.js",
   "bin": "index.js",
   "pkg": {
-    "targets": ["node24-win-x64"],
+    "targets": [
+      "node24-win-x64"
+    ],
     "assets": [
       "config/**/*",
       "node_modules/koffi/build/**/*",
       "node_modules/midi/build/**/*"
     ],
     "outputPath": "dist"
+  },
+  "scripts": {
+    "version": "auto-changelog-plus -p && git add CHANGELOG.md"
   },
   "description": "Convert MIDI signal in to Keyboard out",
   "keywords": [],
@@ -21,5 +26,8 @@
     "json5": "^2.2.3",
     "koffi": "^2.15.1",
     "midi": "^2.0.0"
+  },
+  "devDependencies": {
+    "auto-changelog-plus": "^1.2.3"
   }
 }
