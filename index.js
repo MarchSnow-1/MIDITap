@@ -3,6 +3,8 @@ const path = require('path');
 const { version } = require('./package.json');
 const { sendKey, getKeyName } = require('./libs/keyboard');
 const { loadConfig } = require('./libs/config');
+const minimist = require('minimist');
+const args = minimist(process.argv.slice(2));
 
 // 报错时暂停，等待用户按键后退出
 function pauseAndExit(code = 1) {
@@ -18,22 +20,33 @@ const baseDir = path.basename(process.execPath).startsWith('node')
   : path.dirname(process.execPath);
 
 // Load Config
-const noteMap = loadConfig(baseDir);
-if (!noteMap) { pauseAndExit(); return; }
+const configResult = loadConfig(baseDir);
+if (!configResult) { pauseAndExit(); return; }
+const { noteMap, port: configPort } = configResult;
+const portIndex = args.port !== undefined ? parseInt(args.port) : (configPort !== null ? configPort : 0);
 
 // Initializing MIDI
 const input = new midi.Input();
 const portCount = input.getPortCount();
-for (let i = 0; i < portCount; i++) console.log(`MIDI Device Found: Port ${i} (${input.getPortName(i)})`);
+
 if (portCount === 0) {
   console.error('MIDI Device Not Found');
   pauseAndExit();
   return;
 }
 
-// 打开 MIDI 端口
-// 多设备切换功能待实现
-input.openPort(0);
+if (portIndex >= portCount) {
+  console.error(`Port ${portIndex} not found, available: 0 ~ ${portCount - 1}`);
+  pauseAndExit();
+  return;
+}
+
+for (let i = 0; i < portCount; i++) {
+  const selected = i === portIndex ? ' <-- selected' : '';
+  console.log(`Port ${i}: ${input.getPortName(i)}${selected}`);
+}
+
+input.openPort(portIndex);
 input.ignoreTypes(true, true, true);
 
 // 监听
@@ -61,8 +74,11 @@ input.on('message', (deltaTime, message) => {
 console.log(`MIDITap v${version} is running, press Ctrl+C to exit.`);
 
 // Ctrl+C
-process.on('SIGINT', () => { 
-  input.closePort();
-  process.stdin.setRawMode(false);
-  process.exit(0); 
+process.stdin.setRawMode(true);
+process.stdin.resume();
+process.stdin.on('data', (key) => {
+  if (key[0] === 0x03) {  // Ctrl+C
+    input.closePort();
+    process.exit(0);
+  }
 });

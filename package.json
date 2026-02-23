@@ -25,7 +25,8 @@
   "dependencies": {
     "json5": "^2.2.3",
     "koffi": "^2.15.1",
-    "midi": "^2.0.0"
+    "midi": "^2.0.0",
+    "minimist": "^1.2.8"
   },
   "devDependencies": {
     "auto-changelog": "^2.5.0",
