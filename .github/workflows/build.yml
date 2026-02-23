@@ -1,3 +1,10 @@
+name: Build EXE
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
 jobs:
   changelog:
     runs-on: ubuntu-latest
