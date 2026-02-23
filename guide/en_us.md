@@ -119,6 +119,36 @@ Write the number directly: `"0"` ~ `"9"`
 
 ---
 
+## Specify MIDI Port
+
+If you have multiple MIDI devices, you can specify the port number in the config file:
+```json
+{
+  // Specify port 1 (zero-indexed)
+  "port": 1,
+
+  "48": "a",
+  "50": "s"
+}
+```
+
+On startup, all available devices and the selected port will be listed in the console:
+```
+Port 0: Other Device
+Port 1: Digital Piano <-- selected
+```
+
+Port priority (highest to lowest):
+1. Command line argument `--port`, highest priority, overrides everything when provided
+2. `port` field in the config file
+3. Defaults to `0` (first device) if neither is configured
+```bash
+# Specify port via command line, overrides config file
+MIDITap.exe --port 1
+```
+
+---
+
 ## Notes
 
 - MIDI numbers must be quoted as strings (`"48"` not `48`)

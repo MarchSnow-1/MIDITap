@@ -34,6 +34,8 @@ MIDITap 是一个调用 Windows 原生 API 的低延迟 MIDI → 键盘映射工
 2. 参考 [配置教程](guide/zh_cn.md) 完成配置
 
 3. 配置完成后双击 **MIDITap.exe** 即可启动, 无需安装
+   - 如有多个 MIDI 设备，可通过命令行启动来指定端口：`MIDITap.exe --port 1`
+   - 启动后控制台会列出所有已连接的 MIDI 设备及其端口号
 
 - [此处](/preset-configs) 提供了一些预设供参考或使用, 可下载查看
 
