@@ -12,15 +12,15 @@ The configuration file is located at `config/mapping.json`, using JSON5 format (
 
 ---
 
-## Step 1: Find the MIDI Number of a Key
+## Step 1: Find the MIDI Number
 
-Start the program and press any piano key. The console will output:
+Start the program and trigger your MIDI device. The console will output:
 
 ```
-Note ON: 65, Velocity: 80
+Note ON: 65, Velocity: 80 (unbound)
 ```
 
-The first number (`65`) is the MIDI number of that key. Standard piano range is 21 (lowest A0) to 108 (highest C8).
+The first number (`65`) is the MIDI number of that signal.
 
 ---
 
@@ -101,8 +101,6 @@ Write the number directly: `"0"` ~ `"9"`
 ```json
 {
   // JSON5 format — comments are allowed
-
-  // White keys
   "48": "a",
   "50": "s",
   "52": "d",
@@ -110,13 +108,9 @@ Write the number directly: `"0"` ~ `"9"`
   "55": "g",
   "57": "h",
   "59": "j",
-
-  // Black keys
   "49": "lshift",
   "51": "space",
   "54": "lctrl",
-
-  // Upper register mapped to function keys
   "60": "f1",
   "62": "f2",
   "64": "f3"
@@ -127,11 +121,24 @@ Write the number directly: `"0"` ~ `"9"`
 
 ## Notes
 
-- MIDI numbers on the left must be quoted as strings (`"48"` not `48`)
+- MIDI numbers must be quoted as strings (`"48"` not `48`)
 - Multiple MIDI numbers can map to the same key name
 - If a key name is not found in the supported list, a warning will be shown at startup and the entry will be skipped:
   ```
   Can't find 'xxx' in VK Code List, Skipping...
   ```
-- Long press is supported: holding a piano key down keeps the mapped key held in-game, and releasing the piano key releases it simultaneously
-- Pressing a key outputs `Note ON: <number>, Velocity: <velocity>` in the console; releasing outputs `Note OFF: <number>`
+- Long press is supported: holding a MIDI device button keeps the mapped key held down, releasing it simultaneously
+- Triggering a signal outputs `Note ON: <number>, Velocity: <velocity>` in the console; releasing outputs `Note OFF: <number>`
+
+## Console Output Reference
+
+| Message | Meaning |
+|---------|---------|
+| `Config Loaded: {...}` | Config file loaded successfully |
+| `note 48 -> 'a' (VK=0x41)` | Signal mapping shown at startup |
+| `Note ON: 65, Velocity: 80, Key: 'r'` | Signal triggered (bound, shows mapped key) |
+| `Note ON: 65, Velocity: 80 (unbound)` | Signal triggered (not bound) |
+| `Note OFF: 65, Key: 'r'` | Signal released (bound) |
+| `Note OFF: 65 (unbound)` | Signal released (not bound) |
+| `Can't find 'xxx' in VK Code List, Skipping...` | Unknown key name in config, skipped |
+| `SendInput Return 0` | Input blocked, try running as Administrator |
