@@ -8,11 +8,7 @@
   // Left side: MIDI Note Number | Right side: Key Name
   // For a full list of supported key names, please refer to https://github.com/MarchSnow-1/MIDITap/guide/en_us.md
 
-  "48": "a",  // C3
-  "50": "s",  // D3
-  "52": "d",  // E3
-  "53": "f",  // F3
-  "55": "g",  // G3
-  "57": "h",  // A3
-  "59": "j"  // B3
+  // Example:
+  // "48": "a",
+  // "50": "s"
 }

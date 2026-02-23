@@ -142,7 +142,7 @@ for (const [noteStr, keyChar] of Object.entries(rawMapping)) {
 
 const input = new midi.Input();
 const portCount = input.getPortCount();
-for (let i = 0; i < portCount; i++) console.log(`Port ${i}: ${input.getPortName(i)}`);
+for (let i = 0; i < portCount; i++) console.log(`MIDI Device Found: Port ${i} (${input.getPortName(i)})`);
 // 找不到 MIDI 设备
 if (portCount === 0) {
   console.error('MIDI Device Not Found');
