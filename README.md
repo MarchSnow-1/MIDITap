@@ -2,6 +2,10 @@
 
 # MIDITap
 
+![GitHub Release](https://img.shields.io/github/v/release/MarchSnow-1/MIDITap?style=for-the-badge)
+![GitHub Last Commit](https://img.shields.io/github/last-commit/MarchSnow-1/MIDITap?style=for-the-badge)
+![GitHub Repo stars](https://img.shields.io/github/stars/MarchSnow-1/MIDITap?style=for-the-badge)
+
 [简体中文](README.md) | [English](README_EN.md)
 
 将 MIDI 键盘输入实时映射为键盘按键的轻量级工具
