@@ -142,16 +142,19 @@ input.on('message', (deltaTime, message) => {
   const velocity = message[2];
 
   const vk = noteMap.get(note);
-  if (vk === undefined) return;
 
   if (status === 0x90 && velocity > 0) {
-    console.log(`Note ON: ${note}, Velocity: ${velocity}`);
+    const keyInfo = vk !== undefined ? `, Key: '${Object.keys(VK).find(k => VK[k] === vk)}'` : ' (unbound)';
+    console.log(`Note ON: ${note}, Velocity: ${velocity}${keyInfo}`);
+    if (vk === undefined) return;
     SendInput.async(1, makeKeyBuffer(vk, 0), 40, (err, ret) => {
       if (err) console.error('SendInput Error:', err);
       else if (ret === 0) console.error('SendInput Return 0');
     });
   } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
-    console.log(`Note OFF: ${note}`);
+    const keyInfo = vk !== undefined ? `, Key: '${Object.keys(VK).find(k => VK[k] === vk)}'` : ' (unbound)';
+    console.log(`Note OFF: ${note}${keyInfo}`);
+    if (vk === undefined) return;
     SendInput.async(1, makeKeyBuffer(vk, 0x0002), 40, (err, ret) => {
       if (err) console.error('SendInput Error:', err);
       else if (ret === 0) console.error('SendInput Return 0');
