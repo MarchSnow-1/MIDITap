@@ -42,7 +42,7 @@ jobs:
 
       - name: Generate release notes
         run: |
-          npx auto-changelog-plus --starting-version ${{ github.ref_name }}
+          npx auto-changelog --starting-version ${{ github.ref_name }}
           $content = Get-Content CHANGELOG.md | Select-Object -Skip 4
           $content | Set-Content CHANGELOG.md
 
