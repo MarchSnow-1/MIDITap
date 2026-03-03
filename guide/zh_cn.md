@@ -91,6 +91,7 @@ MIDITap.exe --port 1
 
 可用参数：
 - `--port <index>`：指定 MIDI 端口号
+- `--list-ports`：列出所有 MIDI 输入端口并退出
 - `--config <path>`：指定配置文件路径（支持绝对/相对路径）
 - `-config <path>`：`--config` 的兼容写法
 - `--check-config`：严格校验配置，输出 `true/false`
@@ -105,6 +106,7 @@ MIDITap.exe --port 1
 示例：
 
 ```bash
+MIDITap.exe --list-ports
 MIDITap.exe --config .\config\mapping.json
 MIDITap.exe -config .\config\mapping-dev.json
 MIDITap.exe --check-config --config .\config\mapping.json

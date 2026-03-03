@@ -91,6 +91,7 @@ MIDITap.exe --port 1
 
 Available options:
 - `--port <index>`: set MIDI port index
+- `--list-ports`: list all MIDI input ports and exit
 - `--config <path>`: specify config file path (absolute or relative)
 - `-config <path>`: compatibility form of `--config`
 - `--check-config`: strict config validation, prints `true/false`
@@ -105,6 +106,7 @@ Config file resolution priority:
 Examples:
 
 ```bash
+MIDITap.exe --list-ports
 MIDITap.exe --config .\config\mapping.json
 MIDITap.exe -config .\config\mapping-dev.json
 MIDITap.exe --check-config --config .\config\mapping.json
