@@ -15,16 +15,98 @@ function normalizeCliArgs(argv) {
   });
 }
 
+// 打印 CLI 帮助并退出：
+// 1) 先输出中文说明，便于中文用户快速上手
+// 2) 再输出英文说明，便于跨语言使用与分发
+function printHelp() {
+  console.log(`MIDITap v${version}
+
+[中文]
+用法:
+  MIDITap.exe [选项]
+  node index.js [选项]
+
+参数:
+  --port <index>            指定 MIDI 端口号（非负整数）
+  --config <path>           指定配置文件路径（支持绝对/相对路径）
+  -config <path>            --config 的兼容写法
+  --check-config            严格校验配置并输出 true/false
+  --verbose, -v             输出详细日志（devmode 下会强制开启）
+  --help, -h                显示帮助
+
+配置文件选择优先级:
+  1) 传入 --config/-config：使用指定文件
+  2) 若存在 .dev：默认使用 config/mapping-dev.json
+  3) 否则默认使用 config/mapping.json
+
+校验模式退出码:
+  true  => exit 0
+  false => exit 1
+
+按键映射提示:
+  单键: enter
+  组合键: ctrl+shift+esc
+  Esc 别名: esc = escape
+
+示例:
+  MIDITap.exe --port 1
+  MIDITap.exe --config .\\config\\mapping.json
+  MIDITap.exe -config C:\\path\\to\\mapping.json
+  MIDITap.exe --check-config
+  MIDITap.exe --check-config --config .\\config\\mapping-dev.json
+
+[English]
+Usage:
+  MIDITap.exe [options]
+  node index.js [options]
+
+Options:
+  --port <index>            Select MIDI port index (non-negative integer)
+  --config <path>           Specify config file path (absolute/relative)
+  -config <path>            Compatibility form of --config
+  --check-config            Strict config validation, print true/false
+  --verbose, -v             Enable verbose logs (forced in devmode)
+  --help, -h                Show help
+
+Config Resolution Priority:
+  1) --config/-config is provided: use that file
+  2) If .dev exists: default to config/mapping-dev.json
+  3) Otherwise: default to config/mapping.json
+
+Check Mode Exit Code:
+  true  => exit 0
+  false => exit 1
+
+Key Mapping Tips:
+  Single key: enter
+  Combo key: ctrl+shift+esc
+  Esc alias: esc = escape
+
+Examples:
+  MIDITap.exe --port 1
+  MIDITap.exe --config .\\config\\mapping.json
+  MIDITap.exe -config C:\\path\\to\\mapping.json
+  MIDITap.exe --check-config
+  MIDITap.exe --check-config --config .\\config\\mapping-dev.json
+`);
+}
+
 // 解析命令行参数：
 // - --port <number>：手动指定 MIDI 端口号（优先级高于配置文件）
 // - --verbose / -v：输出详细日志（包括每条 Note ON/OFF）
 // - --check-config：仅校验配置文件并输出 true/false
 // - --config / -config：指定配置文件（支持绝对路径与相对路径）
 const args = minimist(normalizeCliArgs(process.argv.slice(2)), {
-  alias: { v: 'verbose', c: 'config' },
-  boolean: ['verbose', 'check-config'],
+  alias: { v: 'verbose', c: 'config', h: 'help' },
+  boolean: ['verbose', 'check-config', 'help'],
   string: ['config'],
 });
+
+if (args.help) {
+  printHelp();
+  process.exit(0);
+}
+
 const cliVerbose = args.verbose === true;
 const checkConfigOnly = args['check-config'] === true;
 
