@@ -77,40 +77,40 @@ So both `ctrl+shift+esc` and `ctrl+shift+escape` work.
 ## 4. MIDI Port Selection Priority
 
 Priority (high to low):
-1. CLI argument `--port <index>`
+1. CLI argument `-port <index>`
 2. `"port"` in config file
 3. Default `0`
 
 Example:
 
 ```bash
-MIDITap.exe --port 1
+MIDITap.exe -port 1
 ```
 
 ## 5. CLI Options
 
 Available options:
-- `--port <index>`: set MIDI port index
-- `--list-ports`: list all MIDI input ports and exit
-- `--config <path>`: specify config file path (absolute or relative)
-- `-config <path>`: compatibility form of `--config`
-- `--check-config`: strict config validation, prints `true/false`
-- `--verbose` / `-v`: verbose logs (forced on in devmode)
-- `--help` / `-h`: show help
+- `-port <index>`: set MIDI port index
+- `-list-ports`: list all MIDI input ports and exit
+- `-config <path>`: specify config file path (absolute or relative)
+- `-check-config`: strict config validation, prints `true/false`
+- `-verbose` / `-v`: verbose logs (forced on in devmode)
+- `-help` / `-h`: show help
 
 Config file resolution priority:
-1. If `--config/-config` is provided, use that file
+1. If `-config` is provided, use that file
 2. Otherwise, if `.dev` exists in the app directory, default to `config/mapping-dev.json`
 3. Otherwise, default to `config/mapping.json`
 
 Examples:
 
 ```bash
-MIDITap.exe --list-ports
-MIDITap.exe --config .\config\mapping.json
+MIDITap.exe -list-ports
+MIDITap.exe -config .\config\mapping.json
 MIDITap.exe -config .\config\mapping-dev.json
-MIDITap.exe --check-config --config .\config\mapping.json
-MIDITap.exe --help
+MIDITap.exe -check-config -config .\config\mapping.json
+MIDITap.exe -check-config -config .\config\mapping-dev.json
+MIDITap.exe -help
 ```
 
 ## 6. Config Check Mode (Strict)
@@ -118,7 +118,7 @@ MIDITap.exe --help
 Command:
 
 ```bash
-MIDITap.exe --check-config
+MIDITap.exe -check-config
 ```
 
 Return behavior:

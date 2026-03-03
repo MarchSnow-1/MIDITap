@@ -6,13 +6,85 @@ const { sendKey, getKeyName } = require('./libs/keyboard');
 const { loadConfig } = require('./libs/config');
 const minimist = require('minimist');
 
-// 兼容 `-config xxx` 写法，将其标准化为 `--config xxx`。
+// 统一处理命令行参数：
+// - 对外约定使用单横杠长参数（例如 -config / -check-config / -list-ports）
+// - 为了兼容 minimist 的长参数解析，内部会把 `-xxx` 归一化为长参数格式
+// - 单字符短参数（如 -v / -h / -c）与负数（如 -1）保持原样
 function normalizeCliArgs(argv) {
-  return argv.map((arg) => {
-    if (arg === '-config') return '--config';
-    if (arg.startsWith('-config=')) return `--config=${arg.slice('-config='.length)}`;
-    return arg;
-  });
+  // 这些参数在“不带 = 的情况下”需要读取下一个 token 作为值。
+  // 这里使用“参数名”本身，而不是具体前缀，便于同时兼容 -config 与 --config 两种输入。
+  const optionsExpectValue = new Set(['port', 'config', 'c']);
+  const normalized = [];
+  let shouldTreatNextAsValue = false;
+
+  // 将单个参数标准化并提取参数名，返回：
+  // - normalizedArg: 归一化后的参数
+  // - keyName: 参数名（若无法识别则为 null）
+  // - hasInlineValue: 是否是 key=value 形式
+  function normalizeSingleArg(arg) {
+    if (!arg.startsWith('-') || /^-\d/.test(arg)) {
+      return { normalizedArg: arg, keyName: null, hasInlineValue: false };
+    }
+
+    // 已经是双横杠长参数：直接保留。
+    const longMatch = arg.match(/^--([a-zA-Z][a-zA-Z0-9-]*)(=.*)?$/);
+    if (longMatch) {
+      return {
+        normalizedArg: arg,
+        keyName: longMatch[1],
+        hasInlineValue: Boolean(longMatch[2]),
+      };
+    }
+
+    // 单字符短参数（例如 -v / -h / -c）：保持原样。
+    const shortMatch = arg.match(/^-([a-zA-Z])$/);
+    if (shortMatch) {
+      return {
+        normalizedArg: arg,
+        keyName: shortMatch[1],
+        hasInlineValue: false,
+      };
+    }
+
+    // 单横杠长参数（例如 -config / -check-config / -config=path）：
+    // 统一转换为长参数格式，以便 minimist 稳定解析。
+    const singleDashLongMatch = arg.match(/^-([a-zA-Z][a-zA-Z0-9-]*)(=.*)?$/);
+    if (singleDashLongMatch) {
+      const keyName = singleDashLongMatch[1];
+      const suffix = singleDashLongMatch[2] || '';
+      return {
+        normalizedArg: `--${keyName}${suffix}`,
+        keyName,
+        hasInlineValue: Boolean(singleDashLongMatch[2]),
+      };
+    }
+
+    return { normalizedArg: arg, keyName: null, hasInlineValue: false };
+  }
+
+  for (const arg of argv) {
+    // 若上一参数需要“下一个值”，则本项必须按值透传，避免误判成新参数。
+    // 例如：-config -my-file.json 中，-my-file.json 是路径值而不是参数名。
+    if (shouldTreatNextAsValue) {
+      normalized.push(arg);
+      shouldTreatNextAsValue = false;
+      continue;
+    }
+
+    const {
+      normalizedArg,
+      keyName,
+      hasInlineValue,
+    } = normalizeSingleArg(arg);
+    normalized.push(normalizedArg);
+
+    // 当前参数若需要值且不是 key=value 形式，则将下一项视作值。
+    if (!hasInlineValue && keyName !== null && optionsExpectValue.has(keyName)) {
+      shouldTreatNextAsValue = true;
+    }
+  }
+
+  return normalized;
 }
 
 // 打印 CLI 帮助并退出：
@@ -27,16 +99,15 @@ function printHelp() {
   node index.js [选项]
 
 参数:
-  --port <index>            指定 MIDI 端口号（非负整数）
-  --list-ports              列出所有 MIDI 输入端口并退出
-  --config <path>           指定配置文件路径（支持绝对/相对路径）
-  -config <path>            --config 的兼容写法
-  --check-config            严格校验配置并输出 true/false
-  --verbose, -v             输出详细日志（devmode 下会强制开启）
-  --help, -h                显示帮助
+  -port <index>             指定 MIDI 端口号（非负整数）
+  -list-ports               列出所有 MIDI 输入端口并退出
+  -config <path>            指定配置文件路径（支持绝对/相对路径）
+  -check-config             严格校验配置并输出 true/false
+  -verbose, -v              输出详细日志（devmode 下会强制开启）
+  -help, -h                 显示帮助
 
 配置文件选择优先级:
-  1) 传入 --config/-config：使用指定文件
+  1) 传入 -config：使用指定文件
   2) 若存在 .dev：默认使用 config/mapping-dev.json
   3) 否则默认使用 config/mapping.json
 
@@ -50,12 +121,12 @@ function printHelp() {
   Esc 别名: esc = escape
 
 示例:
-  MIDITap.exe --list-ports
-  MIDITap.exe --port 1
-  MIDITap.exe --config .\\config\\mapping.json
+  MIDITap.exe -list-ports
+  MIDITap.exe -port 1
+  MIDITap.exe -config .\\config\\mapping.json
   MIDITap.exe -config C:\\path\\to\\mapping.json
-  MIDITap.exe --check-config
-  MIDITap.exe --check-config --config .\\config\\mapping-dev.json
+  MIDITap.exe -check-config
+  MIDITap.exe -check-config -config .\\config\\mapping-dev.json
 
 [English]
 Usage:
@@ -63,16 +134,15 @@ Usage:
   node index.js [options]
 
 Options:
-  --port <index>            Select MIDI port index (non-negative integer)
-  --list-ports              List all MIDI input ports and exit
-  --config <path>           Specify config file path (absolute/relative)
-  -config <path>            Compatibility form of --config
-  --check-config            Strict config validation, print true/false
-  --verbose, -v             Enable verbose logs (forced in devmode)
-  --help, -h                Show help
+  -port <index>             Select MIDI port index (non-negative integer)
+  -list-ports               List all MIDI input ports and exit
+  -config <path>            Specify config file path (absolute/relative)
+  -check-config             Strict config validation, print true/false
+  -verbose, -v              Enable verbose logs (forced in devmode)
+  -help, -h                 Show help
 
 Config Resolution Priority:
-  1) --config/-config is provided: use that file
+  1) If -config is provided: use that file
   2) If .dev exists: default to config/mapping-dev.json
   3) Otherwise: default to config/mapping.json
 
@@ -86,21 +156,21 @@ Key Mapping Tips:
   Esc alias: esc = escape
 
 Examples:
-  MIDITap.exe --list-ports
-  MIDITap.exe --port 1
-  MIDITap.exe --config .\\config\\mapping.json
+  MIDITap.exe -list-ports
+  MIDITap.exe -port 1
+  MIDITap.exe -config .\\config\\mapping.json
   MIDITap.exe -config C:\\path\\to\\mapping.json
-  MIDITap.exe --check-config
-  MIDITap.exe --check-config --config .\\config\\mapping-dev.json
+  MIDITap.exe -check-config
+  MIDITap.exe -check-config -config .\\config\\mapping-dev.json
 `);
 }
 
 // 解析命令行参数：
-// - --port <number>：手动指定 MIDI 端口号（优先级高于配置文件）
-// - --list-ports：仅列出当前可用 MIDI 输入端口并退出
-// - --verbose / -v：输出详细日志（包括每条 Note ON/OFF）
-// - --check-config：仅校验配置文件并输出 true/false
-// - --config / -config：指定配置文件（支持绝对路径与相对路径）
+// - -port <number>：手动指定 MIDI 端口号（优先级高于配置文件）
+// - -list-ports：仅列出当前可用 MIDI 输入端口并退出
+// - -verbose / -v：输出详细日志（包括每条 Note ON/OFF）
+// - -check-config：仅校验配置文件并输出 true/false
+// - -config：指定配置文件（支持绝对路径与相对路径）
 const args = minimist(normalizeCliArgs(process.argv.slice(2)), {
   alias: { v: 'verbose', c: 'config', h: 'help' },
   boolean: ['verbose', 'check-config', 'help', 'list-ports'],
@@ -160,7 +230,7 @@ const baseDir = path.basename(process.execPath).startsWith('node')
 function resolveConfigOverride(configArg) {
   if (configArg === undefined) return { configPath: null, error: null };
   if (typeof configArg !== 'string' || configArg.trim() === '') {
-    return { configPath: null, error: 'Invalid --config value. Expected a non-empty file path.' };
+    return { configPath: null, error: 'Invalid -config value. Expected a non-empty file path.' };
   }
 
   const inputPath = configArg.trim();
@@ -216,7 +286,7 @@ const { noteMap, port: configPort, devmode, configPath: activeConfigPath } = con
 // devmode 为 1 时强制打开详细日志。
 const verbose = cliVerbose || devmode === 1;
 
-// 端口选择优先级：CLI --port > 配置文件 port > 默认 0
+// 端口选择优先级：CLI -port > 配置文件 port > 默认 0
 const selectedPort = args.port !== undefined ? Number(args.port) : (configPort !== null ? configPort : 0);
 
 // 启动前进行严格端口参数校验，避免 NaN、负数等非法输入继续执行。
@@ -326,7 +396,7 @@ input.on('message', (deltaTime, message) => {
     activeNotes.delete(note);
   }
 
-  // 详细日志默认关闭，仅在 --verbose 或 devmode 下输出，避免高频日志影响性能。
+  // 详细日志默认关闭，仅在 -verbose 或 devmode 下输出，避免高频日志影响性能。
   if (verbose) {
     const keyInfo = binding ? `, Key: '${formatBinding(binding)}'` : ' (unbound)';
     const stateInfo = isDuplicateNoteOn

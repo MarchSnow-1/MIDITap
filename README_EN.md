@@ -40,7 +40,7 @@ If you encounter any issues, please feel free to submit feedback via [Issues](..
 2. Follow the [Configuration Guide](guide/en_us.md) to set up your mappings.
 
 3. After configuration, double-click **MIDITap.exe** to launch, no installation required
-   - If you have multiple MIDI devices, you can specify the port via command line: `MIDITap.exe --port 1`
+   - If you have multiple MIDI devices, you can specify the port via command line: `MIDITap.exe -port 1`
    - All connected MIDI devices and their port numbers will be listed in the console on startup
 
 [Preset Configurations](/preset-configs) are available here for reference or direct use.

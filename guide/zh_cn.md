@@ -77,40 +77,40 @@
 ## 4. MIDI 端口选择规则
 
 端口优先级（从高到低）：
-1. 命令行 `--port <index>`
+1. 命令行 `-port <index>`
 2. 配置文件中的 `"port"`
 3. 默认 `0`
 
 示例：
 
 ```bash
-MIDITap.exe --port 1
+MIDITap.exe -port 1
 ```
 
 ## 5. 命令行参数（CLI）
 
 可用参数：
-- `--port <index>`：指定 MIDI 端口号
-- `--list-ports`：列出所有 MIDI 输入端口并退出
-- `--config <path>`：指定配置文件路径（支持绝对/相对路径）
-- `-config <path>`：`--config` 的兼容写法
-- `--check-config`：严格校验配置，输出 `true/false`
-- `--verbose` / `-v`：输出详细日志（devmode 下会强制开启）
-- `--help` / `-h`：显示帮助
+- `-port <index>`：指定 MIDI 端口号
+- `-list-ports`：列出所有 MIDI 输入端口并退出
+- `-config <path>`：指定配置文件路径（支持绝对/相对路径）
+- `-check-config`：严格校验配置，输出 `true/false`
+- `-verbose` / `-v`：输出详细日志（devmode 下会强制开启）
+- `-help` / `-h`：显示帮助
 
 配置文件选择优先级：
-1. 传入 `--config/-config` 时使用指定文件
+1. 传入 `-config` 时使用指定文件
 2. 否则若程序目录存在 `.dev`，默认使用 `config/mapping-dev.json`
 3. 否则默认使用 `config/mapping.json`
 
 示例：
 
 ```bash
-MIDITap.exe --list-ports
-MIDITap.exe --config .\config\mapping.json
+MIDITap.exe -list-ports
+MIDITap.exe -config .\config\mapping.json
 MIDITap.exe -config .\config\mapping-dev.json
-MIDITap.exe --check-config --config .\config\mapping.json
-MIDITap.exe --help
+MIDITap.exe -check-config -config .\config\mapping.json
+MIDITap.exe -check-config -config .\config\mapping-dev.json
+MIDITap.exe -help
 ```
 
 ## 6. 配置校验模式（严格）
@@ -118,7 +118,7 @@ MIDITap.exe --help
 命令：
 
 ```bash
-MIDITap.exe --check-config
+MIDITap.exe -check-config
 ```
 
 返回行为：
