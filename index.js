@@ -31,7 +31,7 @@ const baseDir = path.basename(process.execPath).startsWith('node')
   : path.dirname(process.execPath);
 
 // 读取并解析配置文件，返回：
-// - noteMap: MIDI note -> 虚拟键码（VK）映射
+// - noteMap: MIDI note -> 键位序列映射（单键是长度 1，组合键是长度 > 1）
 // - port: 配置文件中的默认端口号（可选）
 // - devmode: 当检测到 .dev 标记文件时为 1，否则为 0
 const configResult = loadConfig(baseDir, { verbose: cliVerbose });
@@ -83,6 +83,30 @@ for (let i = 0; i < portCount; i++) {
 input.openPort(portIndex);
 input.ignoreTypes(true, true, true);
 
+// 将键位序列格式化为可读日志字符串。
+// 例如：[0x11, 0x42] -> "ctrl+b"
+function formatBinding(vkCodes) {
+  return vkCodes
+    .map((vkCode) => getKeyName(vkCode) ?? `0x${vkCode.toString(16).toUpperCase()}`)
+    .join('+');
+}
+
+// 发送键位序列：
+// - 按下（Note On）：按配置顺序依次按下（左到右）
+// - 抬起（Note Off）：按逆序依次抬起（右到左）
+function sendBinding(vkCodes, isNoteOn) {
+  if (isNoteOn) {
+    for (const vkCode of vkCodes) {
+      sendKey(vkCode, 0);
+    }
+    return;
+  }
+
+  for (let i = vkCodes.length - 1; i >= 0; i--) {
+    sendKey(vkCodes[i], 0x0002);
+  }
+}
+
 // 监听 MIDI 消息：
 // message 典型格式为 [status, note, velocity]
 // - status 高 4 位表示消息类型（0x90=Note On, 0x80=Note Off）
@@ -104,13 +128,12 @@ input.on('message', (deltaTime, message) => {
   // 仅处理音符按下/抬起事件，其它 MIDI 消息直接忽略
   if (!isNoteOn && !isNoteOff) return;
 
-  // 查询当前音符是否已配置映射键位
-  const vk = noteMap.get(note);
+  // 查询当前音符是否已配置映射键位序列
+  const binding = noteMap.get(note);
 
   // 详细日志默认关闭，仅在 --verbose 下输出，避免高频日志影响性能
   if (verbose) {
-    const keyName = vk !== undefined ? getKeyName(vk) : undefined;
-    const keyInfo = keyName ? `, Key: '${keyName}'` : ' (unbound)';
+    const keyInfo = binding ? `, Key: '${formatBinding(binding)}'` : ' (unbound)';
     if (isNoteOn) {
       console.log(`Note ON: ${note}, Velocity: ${velocity}${keyInfo}`);
     } else {
@@ -119,11 +142,8 @@ input.on('message', (deltaTime, message) => {
   }
 
   // 未绑定键位时不发送键盘事件
-  if (vk === undefined) return;
-
-  // Note On -> 键按下（flags=0）
-  // Note Off -> 键抬起（KEYEVENTF_KEYUP=0x0002）
-  sendKey(vk, isNoteOn ? 0 : 0x0002);
+  if (!binding) return;
+  sendBinding(binding, isNoteOn);
 });
 
 console.log(`MIDITap v${version} is running, press Ctrl+C to exit.`);

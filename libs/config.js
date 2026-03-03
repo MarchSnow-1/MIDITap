@@ -29,6 +29,41 @@ function resolveConfigMeta(baseDir) {
   return { configPath, devmode, configFileName };
 }
 
+// 解析单条键位配置并返回 VK 序列：
+// - 单键示例："a" / "enter" -> [VK_A] / [VK_ENTER]
+// - 组合键示例："ctrl+b"      -> [VK_CTRL, VK_B]
+// 规则：仅当字符串长度 > 1 且包含 '+' 时，才按组合键拆分。
+function parseBinding(keySpec, noteStr) {
+  if (typeof keySpec !== 'string' || keySpec.trim() === '') {
+    console.warn(`Invalid key name for note "${noteStr}", expected non-empty string, skipping...`);
+    return null;
+  }
+
+  const normalizedSpec = keySpec.trim().toLowerCase();
+  const isCombo = normalizedSpec.length > 1 && normalizedSpec.includes('+');
+  const tokens = isCombo ? normalizedSpec.split('+').map((part) => part.trim()) : [normalizedSpec];
+
+  if (tokens.some((token) => token === '')) {
+    console.warn(`Invalid key combo "${keySpec}" for note "${noteStr}", skipping...`);
+    return null;
+  }
+
+  const vkCodes = [];
+  for (const token of tokens) {
+    const vk = VK[token];
+    if (vk === undefined) {
+      console.warn(`Can't find '${token}' in VK Code List, skipping note "${noteStr}"...`);
+      return null;
+    }
+    vkCodes.push(vk);
+  }
+
+  return {
+    vkCodes,
+    label: tokens.join('+'),
+  };
+}
+
 // 加载并校验映射配置。
 // 参数：
 // - baseDir: 配置根目录（开发态是项目目录，打包态是 exe 所在目录）
@@ -74,24 +109,19 @@ function loadConfig(baseDir, options = {}) {
       continue;
     }
 
-    // 按键名必须是非空字符串，避免错误类型导致运行时异常。
-    if (typeof keyChar !== 'string' || keyChar.trim() === '') {
-      console.warn(`Invalid key name for note "${noteStr}", expected non-empty string, skipping...`);
+    const binding = parseBinding(keyChar, noteStr);
+    if (!binding) {
       continue;
     }
 
-    // 统一清理空白并转为小写，减少配置书写差异。
-    const normalizedKeyName = keyChar.trim().toLowerCase();
-    const vk = VK[normalizedKeyName];
-    if (vk === undefined) {
-      console.warn(`Can't find '${keyChar}' in VK Code List, skipping...`);
-      continue;
-    }
-
-    // 记录合法映射。若同一 note 重复定义，后定义值会覆盖先定义值。
-    noteMap.set(note, vk);
+    // 记录合法映射（单键和组合键统一为 VK 数组）。
+    // 若同一 note 重复定义，后定义值会覆盖先定义值。
+    noteMap.set(note, binding.vkCodes);
     if (effectiveVerbose) {
-      console.log(`note ${note} -> '${normalizedKeyName}' (VK=0x${vk.toString(16).toUpperCase()})`);
+      const vkLabel = binding.vkCodes
+        .map((vkCode) => `0x${vkCode.toString(16).toUpperCase()}`)
+        .join('+');
+      console.log(`note ${note} -> '${binding.label}' (VK=${vkLabel})`);
     }
   }
 
