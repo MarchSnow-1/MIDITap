@@ -17,24 +17,40 @@ function parsePort(portValue) {
   return port;
 }
 
+// 根据运行目录是否存在 .dev 标记文件决定配置文件与 devmode：
+// - 存在 .dev：使用 mapping-dev.json，devmode=1
+// - 不存在 .dev：使用 mapping.json，devmode=0
+function resolveConfigMeta(baseDir, verbose = false) {
+  const devMarkerPath = path.join(baseDir, '.dev');
+  const devmode = fs.existsSync(devMarkerPath) ? 1 : 0;
+  const configFileName = devmode === 1 ? 'mapping-dev.json' : 'mapping.json';
+  const configPath = path.join(baseDir, 'config', configFileName);
+
+  if (verbose) {
+    console.log(`Config mode: ${devmode === 1 ? 'dev' : 'default'}, file: ${configPath}`);
+  }
+
+  return { configPath, devmode, configFileName };
+}
+
 // 加载并校验映射配置。
 // 参数：
 // - baseDir: 配置根目录（开发态是项目目录，打包态是 exe 所在目录）
 // - options.verbose: 是否输出详细加载信息
 // 返回：
-// - { noteMap, port }：成功
+// - { noteMap, port, devmode }：成功
 // - null：失败（如文件不存在、解析失败、结构非法）
 function loadConfig(baseDir, options = {}) {
   const { verbose = false } = options;
-  const configPath = path.join(baseDir, 'config', 'mapping.json');
+  const { configPath, devmode, configFileName } = resolveConfigMeta(baseDir, verbose);
   let rawMapping = {};
 
   // 使用 JSON5 读取配置，允许注释与更宽松的书写格式。
   try {
     rawMapping = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
-    if (verbose) console.log('Config Loaded:', rawMapping);
+    if (verbose) console.log(`Config Loaded (${configFileName}):`, rawMapping);
   } catch (err) {
-    console.error('Failed to Load Config:', err.message);
+    console.error(`Failed to Load Config (${configFileName}):`, err.message);
     return null;
   }
 
@@ -79,7 +95,7 @@ function loadConfig(baseDir, options = {}) {
   }
 
   // 返回通过校验后的干净数据结构，供主流程直接使用。
-  return { noteMap, port: parsePort(rawMapping.port) };
+  return { noteMap, port: parsePort(rawMapping.port), devmode };
 }
 
 module.exports = { loadConfig };

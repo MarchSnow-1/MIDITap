@@ -30,15 +30,16 @@ const baseDir = path.basename(process.execPath).startsWith('node')
   ? __dirname
   : path.dirname(process.execPath);
 
-// 读取并解析配置文件（mapping.json），返回：
+// 读取并解析配置文件，返回：
 // - noteMap: MIDI note -> 虚拟键码（VK）映射
-// - port: 配置文件中可选的默认端口号
+// - port: 配置文件中的默认端口号（可选）
+// - devmode: 当检测到 .dev 标记文件时为 1，否则为 0
 const configResult = loadConfig(baseDir, { verbose });
 if (!configResult) {
   pauseAndExit();
   return;
 }
-const { noteMap, port: configPort } = configResult;
+const { noteMap, port: configPort, devmode } = configResult;
 
 // 端口选择优先级：CLI --port > 配置文件 port > 默认 0
 const selectedPort = args.port !== undefined ? Number(args.port) : (configPort !== null ? configPort : 0);
@@ -125,6 +126,9 @@ input.on('message', (deltaTime, message) => {
 });
 
 console.log(`MIDITap v${version} is running, press Ctrl+C to exit.`);
+if (devmode === 1) {
+  console.log('[DEVMODE] Development mode enabled, using config/mapping-dev.json');
+}
 
 // 手动接管 Ctrl+C：
 // 在退出前主动关闭 MIDI 端口，避免设备占用状态残留。
