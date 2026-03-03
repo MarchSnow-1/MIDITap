@@ -58,28 +58,28 @@ const portIndex = selectedPort;
 const input = new midi.Input();
 const portCount = input.getPortCount();
 
-// 没有可用 MIDI 设备时直接退出。
+// 没有可用 MIDI 设备时直接退出
 if (portCount === 0) {
   console.error('MIDI Device Not Found');
   pauseAndExit();
   return;
 }
 
-// 端口号越界时给出明确范围提示。
+// 端口号越界时给出明确范围提示
 if (portIndex >= portCount) {
   console.error(`Port ${portIndex} not found, available: 0 ~ ${portCount - 1}`);
   pauseAndExit();
   return;
 }
 
-// 打印所有可用端口，便于用户确认设备和端口序号。
+// 打印所有可用端口，便于用户确认设备和端口序号
 for (let i = 0; i < portCount; i++) {
   const selected = i === portIndex ? ' <-- selected' : '';
   console.log(`Port ${i}: ${input.getPortName(i)}${selected}`);
 }
 
 // 打开目标端口并忽略 SysEx / Timing / Active Sensing 三类消息，
-// 仅保留核心 MIDI 通道消息，减少不必要事件干扰。
+// 仅保留核心 MIDI 通道消息，减少不必要事件干扰
 input.openPort(portIndex);
 input.ignoreTypes(true, true, true);
 
@@ -90,7 +90,7 @@ input.ignoreTypes(true, true, true);
 // - velocity 是力度（0~127）
 input.on('message', (deltaTime, message) => {
   // 屏蔽 MIDI 通道号，仅提取消息类型：
-  // 例如 0x91（通道2 Note On）与 0xF0 后得到 0x90。
+  // 例如 0x91（通道2 Note On）与 0xF0 后得到 0x90
   const status = message[0] & 0xF0;
   const note = message[1];
   const velocity = message[2];
@@ -101,13 +101,13 @@ input.on('message', (deltaTime, message) => {
   const isNoteOn = status === 0x90 && velocity > 0;
   const isNoteOff = status === 0x80 || (status === 0x90 && velocity === 0);
 
-  // 仅处理音符按下/抬起事件，其它 MIDI 消息直接忽略。
+  // 仅处理音符按下/抬起事件，其它 MIDI 消息直接忽略
   if (!isNoteOn && !isNoteOff) return;
 
-  // 查询当前音符是否已配置映射键位。
+  // 查询当前音符是否已配置映射键位
   const vk = noteMap.get(note);
 
-  // 详细日志默认关闭，仅在 --verbose 下输出，避免高频日志影响性能。
+  // 详细日志默认关闭，仅在 --verbose 下输出，避免高频日志影响性能
   if (verbose) {
     const keyName = vk !== undefined ? getKeyName(vk) : undefined;
     const keyInfo = keyName ? `, Key: '${keyName}'` : ' (unbound)';
@@ -118,7 +118,7 @@ input.on('message', (deltaTime, message) => {
     }
   }
 
-  // 未绑定键位时不发送键盘事件。
+  // 未绑定键位时不发送键盘事件
   if (vk === undefined) return;
 
   // Note On -> 键按下（flags=0）
@@ -132,7 +132,7 @@ if (devmode === 1) {
 }
 
 // 手动接管 Ctrl+C：
-// 在退出前主动关闭 MIDI 端口，避免设备占用状态残留。
+// 在退出前主动关闭 MIDI 端口，避免设备占用状态残留
 process.stdin.setRawMode(true);
 process.stdin.resume();
 process.stdin.on('data', (key) => {
