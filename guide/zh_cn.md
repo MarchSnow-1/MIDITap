@@ -1,182 +1,150 @@
 # MIDITap 配置教程
 
-配置文件位于 `config/mapping.json`，使用 JSON5 格式（支持注释）
+本教程覆盖完整配置流程：从基础映射到组合键，再到命令行参数与配置校验。
 
-## 基本格式
+## 1. 快速开始（最短路径）
 
-```json
+1. 启动程序并按下 MIDI 设备上的一个键。
+2. 在控制台记下对应的 MIDI 编号（例如 `Note ON: 65, Velocity: 80` 中的 `65`）。
+3. 在 `config/mapping.json` 里写入映射并重启程序。
+
+最小可用示例：
+
+```json5
 {
-  "MIDI编号": "按键名称"
+  "65": "a"
 }
 ```
 
----
+## 2. 配置文件结构
 
-## 第一步：找到 MIDI 编号
+配置文件默认路径是 `config/mapping.json`，格式为 JSON5（支持注释、尾逗号）。
 
-启动程序后触发 MIDI 设备，控制台会输出：
-
-```
-Note ON: 65, Velocity: 80 (unbound)
-```
-
-左边的数字（`65`）就是该信号的 MIDI 编号。
-
----
-
-## 第二步：选择对应的按键名称
-
-### 字母键
-直接写字母：`"a"` ~ `"z"`
-
-### 数字键
-直接写数字：`"0"` ~ `"9"`
-
-### 功能键
-`"f1"` ~ `"f12"`，以及 `"f13"` ~ `"f24"`
-
-### 常用控制键
-
-| 名称 | 按键 |
-|------|------|
-| `space` | 空格 |
-| `enter` | 回车 |
-| `backspace` | 退格 |
-| `tab` | Tab |
-| `escape` | Esc |
-| `shift` / `lshift` / `rshift` | Shift（左/右） |
-| `ctrl` / `lctrl` / `rctrl` | Ctrl（左/右） |
-| `alt` / `lalt` / `ralt` | Alt（左/右） |
-| `capslock` | 大写锁定 |
-| `pause` | 暂停键 |
-
-### 方向键
-`"up"` `"down"` `"left"` `"right"`
-
-### 导航键
-`"pageup"` `"pagedown"` `"home"` `"end"` `"insert"` `"delete"`
-
-### 小键盘
-
-| 名称 | 按键 |
-|------|------|
-| `num0` ~ `num9` | 小键盘数字 |
-| `add` | 小键盘 `+` |
-| `subtract` | 小键盘 `-` |
-| `multiply` | 小键盘 `*` |
-| `divide` | 小键盘 `/` |
-| `decimal` | 小键盘 `.` |
-| `numlock` | Num Lock |
-
-### 标点符号（美式键盘布局）
-
-| 名称 | 对应按键 |
-|------|----------|
-| `minus` | `-` |
-| `equal` | `=` |
-| `lbracket` | `[` |
-| `rbracket` | `]` |
-| `semicolon` | `;` |
-| `quote` | `'` |
-| `comma` | `,` |
-| `period` | `.` |
-| `slash` | `/` |
-| `backslash` | `\` |
-| `backquote` | `` ` `` |
-
-### 媒体键
-
-| 名称 | 功能 |
-|------|------|
-| `mute` | 静音 |
-| `volumeup` / `volumedown` | 音量 |
-| `playpause` | 播放/暂停 |
-| `nexttrack` / `prevtrack` | 切曲 |
-| `stop` | 停止 |
-
----
-
-## 指定 MIDI 端口
-
-如果你有多个 MIDI 设备，可以在配置文件中指定端口号：
-
-```json
+```json5
 {
-  // 指定端口号（从 0 开始，0 = 第一个设备，1 = 第二个设备）
-  "port": 1,
+  // 可选：默认 MIDI 端口号（从 0 开始）
+  "port": 0,
 
+  // MIDI 编号 -> 按键名
   "48": "a",
-  "50": "s"
+  "50": "enter",
+  "84": "ctrl+shift+esc"
 }
 ```
 
-启动时控制台会列出所有可用设备和当前选中的端口：
+规则：
+- MIDI 编号建议写成字符串（例如 `"48"`）
+- `port` 是可选字段
+- 其余字段会作为按键映射解析
 
+## 3. 键名规则（单键与组合键）
+
+### 3.1 单键写法
+
+不包含 `+` 的值都按单键处理，即使是多字符名称（例如 `enter`、`delete`、`escape`）。
+
+常用单键：
+- 字母键：`a` ~ `z`
+- 数字键：`0` ~ `9`
+- 功能键：`f1` ~ `f24`
+- 控制键：`enter` `space` `tab` `backspace` `shift` `ctrl` `alt`
+- 导航键：`up` `down` `left` `right` `home` `end` `pageup` `pagedown` `insert` `delete`
+- 小键盘：`num0` ~ `num9` `add` `subtract` `multiply` `divide` `decimal` `numlock`
+
+### 3.2 组合键写法
+
+包含 `+` 的值按组合键处理，按 `+` 拆分并按顺序执行。
+
+```json5
+{
+  "84": "ctrl+shift+esc",
+  "85": "alt+tab"
+}
 ```
-Port 0: Other Device
-Port 1: Digital Piano <-- selected
-```
+
+执行顺序：
+- `Note ON`：从左到右依次按下。
+- `Note OFF`：从右到左依次抬起。
+
+### 3.3 Esc 别名
+
+以下写法等价：
+- `esc`
+- `escape`
+
+例如 `ctrl+shift+esc` 与 `ctrl+shift+escape` 都可用。
+
+## 4. MIDI 端口选择规则
 
 端口优先级（从高到低）：
-1. 命令行参数 `--port`, 优先级最高，有传入参数即强制使用
-2. 配置文件中的 `port` 字段
-3. 若以上两种均未配置, 默认使用 `0`（第一个设备）
+1. 命令行 `--port <index>`
+2. 配置文件中的 `"port"`
+3. 默认 `0`
+
+示例：
 
 ```bash
-# 命令行指定端口，忽略配置文件中的 port
 MIDITap.exe --port 1
 ```
 
----
+## 5. 命令行参数（CLI）
 
-## 完整示例
+可用参数：
+- `--port <index>`：指定 MIDI 端口号
+- `--config <path>`：指定配置文件路径（支持绝对/相对路径）
+- `-config <path>`：`--config` 的兼容写法
+- `--check-config`：严格校验配置，输出 `true/false`
+- `--verbose` / `-v`：输出详细日志（devmode 下会强制开启）
+- `--help` / `-h`：显示帮助
 
-```json
-{
-  // 程序使用 JSON5 读取，可以写注释
+配置文件选择优先级：
+1. 传入 `--config/-config` 时使用指定文件
+2. 否则若程序目录存在 `.dev`，默认使用 `config/mapping-dev.json`
+3. 否则默认使用 `config/mapping.json`
 
-  // 指定端口号（从 0 开始，0 = 第一个设备，1 = 第二个设备）
-  "port": 1,
+示例：
 
-  // 映射关系配置
-  "48": "a",
-  "50": "s",
-  "52": "d",
-  "53": "f",
-  "55": "g",
-  "57": "h",
-  "59": "j",
-  "49": "lshift",
-  "51": "space",
-  "54": "lctrl",
-  "60": "f1",
-  "62": "f2",
-  "64": "f3"
-}
+```bash
+MIDITap.exe --config .\config\mapping.json
+MIDITap.exe -config .\config\mapping-dev.json
+MIDITap.exe --check-config --config .\config\mapping.json
+MIDITap.exe --help
 ```
 
----
+## 6. 配置校验模式（严格）
 
-## 注意事项
+命令：
 
-- MIDI 编号左侧必须带引号，写成字符串形式（`"48"` 而不是 `48`）
-- 同一个按键名可以映射给多个不同的 MIDI 编号
-- 启动时若按键名不在支持列表内，会显示警告并跳过该条目：
+```bash
+MIDITap.exe --check-config
+```
+
+返回行为：
+- 配置合法：输出 `true`，退出码 `0`
+- 配置非法：输出 `false`，退出码 `1`
+
+严格模式下，只要存在任意非法项即失败，例如：
+- MIDI 编号越界
+- 未知按键名
+- 组合键写法错误
+
+## 7. 注意事项
+
+- 启动时若键名无效，会提示并跳过该条映射：
   ```
-  Can't find 'xxx' in VK Code List, Skipping...
+  Can't find 'xxx' in VK Code List, skipping...
   ```
-- 支持长按：按住 MIDI 设备按键不放时，对应按键也会持续按下，松开时同步释放
-- 触发信号时控制台显示 `Note ON: <编号>, Velocity: <力度>`，释放时显示 `Note OFF: <编号>`
+- 支持长按：MIDI 按住不放时，映射按键也保持按下；松开后同步释放。
+- 修改配置后需要重启程序才会生效。
 
-## 控制台输出说明
+## 8. 控制台输出参考
 
 | 信息 | 含义 |
 |------|------|
-| `Config Loaded: {...}` | 配置文件加载成功 |
-| `note 48 -> 'a' (VK=0x41)` | 启动时显示的信号映射关系 |
-| `Note ON: 65, Velocity: 80, Key: 'r'` | 信号触发（已绑定，会显示绑定的按键） |
-| `Note ON: 65, Velocity: 80 (unbound)` | 信号触发（未绑定） |
-| `Note OFF: 65, Key: 'r'` | 信号释放（已绑定） |
-| `Note OFF: 65 (unbound)` | 信号释放（未绑定） |
-| `Can't find 'xxx' in VK Code List, Skipping...` | 配置中存在未知按键名，已跳过 |
-| `SendInput Return 0` | 输入被拦截，请尝试以管理员身份运行 |
+| `Config Loaded (...): {...}` | 配置加载成功 |
+| `note 48 -> 'a' (VK=0x41)` | 启动时显示映射关系 |
+| `Note ON: 65, Velocity: 80, Key: 'r'` | 触发已绑定映射 |
+| `Note ON: 65, Velocity: 80 (unbound)` | 触发未绑定映射 |
+| `Note OFF: 65, Key: 'r'` | 释放已绑定映射 |
+| `Note OFF: 65 (unbound)` | 释放未绑定映射 |
+| `SendInput Return 0` | 输入被拦截，建议尝试管理员权限运行 |
