@@ -61,7 +61,8 @@ jobs:
         run: |
           mkdir release
           copy dist\MIDITap-${{ github.ref_name }}.exe release\
-          xcopy config release\config\ /E /I
+          mkdir release\config
+          copy config\mapping.json release\config\
           cd release
           Compress-Archive -Path * -DestinationPath ..\MIDITap-${{ github.ref_name }}.zip
 
