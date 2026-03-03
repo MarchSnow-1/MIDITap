@@ -137,6 +137,7 @@ MIDITap.exe -check-config
   Can't find 'xxx' in VK Code List, skipping...
   ```
 - 支持长按：MIDI 按住不放时，映射按键也保持按下；松开后同步释放。
+- 程序退出（含 Ctrl+C 与异常退出）会主动释放当前仍按下的映射按键，降低“卡键”风险。
 - 修改配置后需要重启程序才会生效。
 
 ## 8. 控制台输出参考

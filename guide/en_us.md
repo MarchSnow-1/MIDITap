@@ -137,6 +137,7 @@ In strict mode, any invalid item causes failure, for example:
   Can't find 'xxx' in VK Code List, skipping...
   ```
 - Long press is supported: as long as MIDI note is held, the mapped key stays pressed.
+- On exit (including Ctrl+C and abnormal exits), MIDITap actively releases currently held mapped keys to reduce stuck-key risk.
 - Restart MIDITap after editing config files.
 
 ## 8. Console Output Reference

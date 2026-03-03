@@ -123,9 +123,21 @@ function sendKey(vkCode, flags) {
   });
 }
 
+// 同步发送键盘事件（主要用于退出清理阶段）：
+// - 退出时进程可能很快结束，异步调用存在来不及真正下发输入的风险
+// - 因此在“全量抬键”场景下优先使用同步调用，提升释放成功率
+function sendKeySync(vkCode, flags) {
+  try {
+    const ret = SendInput(1, makeKeyBuffer(vkCode, flags), 40);
+    if (ret === 0) console.error('SendInput Return 0');
+  } catch (err) {
+    console.error('SendInput Error:', err);
+  }
+}
+
 // VK 反查按键名（用于日志展示）。
 function getKeyName(vkCode) {
   return VK_NAME_BY_CODE.get(vkCode);
 }
 
-module.exports = { VK, sendKey, getKeyName };
+module.exports = { VK, sendKey, sendKeySync, getKeyName };

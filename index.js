@@ -2,7 +2,7 @@ const midi = require('midi');
 const fs = require('fs');
 const path = require('path');
 const { version } = require('./package.json');
-const { sendKey, getKeyName } = require('./libs/keyboard');
+const { sendKey, sendKeySync, getKeyName } = require('./libs/keyboard');
 const { loadConfig } = require('./libs/config');
 const minimist = require('minimist');
 
@@ -208,9 +208,84 @@ if (args['list-ports']) {
 const cliVerbose = args.verbose === true;
 const checkConfigOnly = args['check-config'] === true;
 
+// 运行期状态追踪：
+// - input: 已打开的 MIDI 输入实例（用于退出时安全关闭）
+// - activeNotes: 当前处于按下态的 MIDI 音符编号（用于防重复 Note ON）
+// - activeNoteBindings: 每个音符当前激活的键位序列（用于 Note OFF 与退出清理）
+// - activeVkCount: 每个 VK 的按下引用计数（支持不同音符共享同一按键）
+let input = null;
+const activeNotes = new Set();
+const activeNoteBindings = new Map();
+const activeVkCount = new Map();
+let hasCleanupRun = false;
+
+// 增加 VK 按下计数：
+// - Note ON 成功下发后调用
+// - 同一 VK 可被多个音符共同“持有”
+function increaseActiveVkCount(vkCodes) {
+  for (const vkCode of vkCodes) {
+    activeVkCount.set(vkCode, (activeVkCount.get(vkCode) ?? 0) + 1);
+  }
+}
+
+// 减少 VK 按下计数：
+// - Note OFF 成功下发后调用
+// - 计数归零时表示该 VK 不再被任何音符持有
+function decreaseActiveVkCount(vkCodes) {
+  for (const vkCode of vkCodes) {
+    const nextCount = (activeVkCount.get(vkCode) ?? 0) - 1;
+    if (nextCount > 0) {
+      activeVkCount.set(vkCode, nextCount);
+    } else {
+      activeVkCount.delete(vkCode);
+    }
+  }
+}
+
+// 退出前全量抬键：
+// - 使用同步 SendInput，降低进程退出过快导致 keyup 丢失的风险
+// - 仅对“当前仍处于按下态”的 VK 发送一次抬起事件
+function releaseAllPressedKeys() {
+  if (activeVkCount.size === 0) return;
+
+  const activeVkCodes = Array.from(activeVkCount.keys()).reverse();
+  for (const vkCode of activeVkCodes) {
+    sendKeySync(vkCode, 0x0002);
+  }
+
+  activeVkCount.clear();
+  activeNoteBindings.clear();
+  activeNotes.clear();
+}
+
+// 安全关闭 MIDI 输入端口：
+// - 仅在实例已创建时关闭
+// - 忽略重复关闭或底层抛错，保证退出流程不中断
+function closeInputPortSafely() {
+  if (!input) return;
+  try {
+    input.closePort();
+  } catch (err) {
+    // 忽略关闭阶段异常，避免影响最终退出。
+  } finally {
+    input = null;
+  }
+}
+
+// 统一退出清理：
+// 1) 全量抬键，防止异常退出后按键残留按下态
+// 2) 关闭 MIDI 端口，避免设备占用状态残留
+function cleanupBeforeExit() {
+  if (hasCleanupRun) return;
+  hasCleanupRun = true;
+  releaseAllPressedKeys();
+  closeInputPortSafely();
+}
+
 // 统一的退出辅助函数：
 // 遇到启动失败或配置错误时，保持窗口不立即关闭，方便用户看到报错信息。
 function pauseAndExit(code = 1) {
+  cleanupBeforeExit();
   console.log('MIDITap exited. Press any key to close...');
   process.stdin.setRawMode(true);
   process.stdin.resume();
@@ -299,7 +374,7 @@ if (!Number.isInteger(selectedPort) || selectedPort < 0) {
 const portIndex = selectedPort;
 
 // 初始化 MIDI 输入对象并查询系统中可用的 MIDI 输入端口数量。
-const input = new midi.Input();
+input = new midi.Input();
 const portCount = input.getPortCount();
 
 // 没有可用 MIDI 设备时直接退出。
@@ -326,11 +401,6 @@ for (let i = 0; i < portCount; i++) {
 // 仅保留核心 MIDI 通道消息，减少不必要事件干扰。
 input.openPort(portIndex);
 input.ignoreTypes(true, true, true);
-
-// 记录已处于“按下态”的 MIDI 音符编号，用于去重：
-// - 同一音符重复 Note ON：忽略，避免重复下发 keydown
-// - 未出现过 Note ON 的 Note OFF：忽略，避免误发 keyup
-const activeNotes = new Set();
 
 // 将键位序列格式化为可读日志字符串。
 // 例如：[0x11, 0x42] -> "ctrl+b"
@@ -414,7 +484,25 @@ input.on('message', (deltaTime, message) => {
 
   // 未绑定键位时不发送键盘事件。
   if (!binding) return;
-  sendBinding(binding, isNoteOn);
+
+  // Note ON：
+  // - 按序发送 keydown
+  // - 记录该 note 当前激活的绑定，供后续 Note OFF/退出清理使用
+  // - 增加 VK 引用计数，支持多个 note 共享同一按键
+  if (isNoteOn) {
+    sendBinding(binding, true);
+    activeNoteBindings.set(note, binding);
+    increaseActiveVkCount(binding);
+    return;
+  }
+
+  // Note OFF：
+  // - 优先使用 Note ON 时记录的绑定进行释放，避免配置变化造成释放不一致
+  // - 按逆序发送 keyup，并减少对应 VK 引用计数
+  const activeBinding = activeNoteBindings.get(note) || binding;
+  sendBinding(activeBinding, false);
+  decreaseActiveVkCount(activeBinding);
+  activeNoteBindings.delete(note);
 });
 
 console.log(`MIDITap v${version} is running, press Ctrl+C to exit.`);
@@ -422,13 +510,28 @@ if (devmode === 1) {
   console.log(`[DEVMODE] Development mode enabled, using ${activeConfigPath}`);
 }
 
+// 捕获未处理异常/Promise 拒绝：
+// - 先执行统一清理（全量抬键 + 关闭端口）
+// - 再退出进程，降低异常退出导致“卡键”的概率
+process.on('uncaughtException', (err) => {
+  console.error('Unhandled Exception:', err);
+  cleanupBeforeExit();
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+  cleanupBeforeExit();
+  process.exit(1);
+});
+
 // 手动接管 Ctrl+C：
 // 在退出前主动关闭 MIDI 端口，避免设备占用状态残留。
 process.stdin.setRawMode(true);
 process.stdin.resume();
 process.stdin.on('data', (key) => {
   if (key[0] === 0x03) {
-    input.closePort();
+    cleanupBeforeExit();
     process.exit(0);
   }
 });
