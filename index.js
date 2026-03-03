@@ -28,6 +28,7 @@ function printHelp() {
 
 参数:
   --port <index>            指定 MIDI 端口号（非负整数）
+  --list-ports              列出所有 MIDI 输入端口并退出
   --config <path>           指定配置文件路径（支持绝对/相对路径）
   -config <path>            --config 的兼容写法
   --check-config            严格校验配置并输出 true/false
@@ -49,6 +50,7 @@ function printHelp() {
   Esc 别名: esc = escape
 
 示例:
+  MIDITap.exe --list-ports
   MIDITap.exe --port 1
   MIDITap.exe --config .\\config\\mapping.json
   MIDITap.exe -config C:\\path\\to\\mapping.json
@@ -62,6 +64,7 @@ Usage:
 
 Options:
   --port <index>            Select MIDI port index (non-negative integer)
+  --list-ports              List all MIDI input ports and exit
   --config <path>           Specify config file path (absolute/relative)
   -config <path>            Compatibility form of --config
   --check-config            Strict config validation, print true/false
@@ -83,6 +86,7 @@ Key Mapping Tips:
   Esc alias: esc = escape
 
 Examples:
+  MIDITap.exe --list-ports
   MIDITap.exe --port 1
   MIDITap.exe --config .\\config\\mapping.json
   MIDITap.exe -config C:\\path\\to\\mapping.json
@@ -93,18 +97,42 @@ Examples:
 
 // 解析命令行参数：
 // - --port <number>：手动指定 MIDI 端口号（优先级高于配置文件）
+// - --list-ports：仅列出当前可用 MIDI 输入端口并退出
 // - --verbose / -v：输出详细日志（包括每条 Note ON/OFF）
 // - --check-config：仅校验配置文件并输出 true/false
 // - --config / -config：指定配置文件（支持绝对路径与相对路径）
 const args = minimist(normalizeCliArgs(process.argv.slice(2)), {
   alias: { v: 'verbose', c: 'config', h: 'help' },
-  boolean: ['verbose', 'check-config', 'help'],
+  boolean: ['verbose', 'check-config', 'help', 'list-ports'],
   string: ['config'],
 });
 
 if (args.help) {
   printHelp();
   process.exit(0);
+}
+
+// 仅列举 MIDI 输入端口：
+// - 不依赖配置文件
+// - 可用于快速确认端口序号与设备名称
+function listPortsAndExit() {
+  const listInput = new midi.Input();
+  const listPortCount = listInput.getPortCount();
+
+  if (listPortCount === 0) {
+    console.log('No MIDI input ports found.');
+    process.exit(0);
+  }
+
+  console.log(`MIDI input ports (${listPortCount}):`);
+  for (let i = 0; i < listPortCount; i++) {
+    console.log(`Port ${i}: ${listInput.getPortName(i)}`);
+  }
+  process.exit(0);
+}
+
+if (args['list-ports']) {
+  listPortsAndExit();
 }
 
 const cliVerbose = args.verbose === true;
@@ -229,6 +257,11 @@ for (let i = 0; i < portCount; i++) {
 input.openPort(portIndex);
 input.ignoreTypes(true, true, true);
 
+// 记录已处于“按下态”的 MIDI 音符编号，用于去重：
+// - 同一音符重复 Note ON：忽略，避免重复下发 keydown
+// - 未出现过 Note ON 的 Note OFF：忽略，避免误发 keyup
+const activeNotes = new Set();
+
 // 将键位序列格式化为可读日志字符串。
 // 例如：[0x11, 0x42] -> "ctrl+b"
 function formatBinding(vkCodes) {
@@ -277,15 +310,37 @@ input.on('message', (deltaTime, message) => {
   // 查询当前音符是否已配置映射键位序列。
   const binding = noteMap.get(note);
 
+  // 基于当前音符状态识别重复/异常事件：
+  // - isDuplicateNoteOn：该音符已经按下，又收到一次 Note ON
+  // - isUnexpectedNoteOff：该音符并未按下，却收到 Note OFF
+  const noteIsActive = activeNotes.has(note);
+  const isDuplicateNoteOn = isNoteOn && noteIsActive;
+  const isUnexpectedNoteOff = isNoteOff && !noteIsActive;
+
+  // 仅在“状态合法变化”时更新集合：
+  // - 首次 Note ON：加入 activeNotes
+  // - 对应 Note OFF：从 activeNotes 移除
+  if (isNoteOn && !isDuplicateNoteOn) {
+    activeNotes.add(note);
+  } else if (isNoteOff && !isUnexpectedNoteOff) {
+    activeNotes.delete(note);
+  }
+
   // 详细日志默认关闭，仅在 --verbose 或 devmode 下输出，避免高频日志影响性能。
   if (verbose) {
     const keyInfo = binding ? `, Key: '${formatBinding(binding)}'` : ' (unbound)';
+    const stateInfo = isDuplicateNoteOn
+      ? ' (duplicate Note ON ignored)'
+      : (isUnexpectedNoteOff ? ' (unexpected Note OFF ignored)' : '');
     if (isNoteOn) {
-      console.log(`Note ON: ${note}, Velocity: ${velocity}${keyInfo}`);
+      console.log(`Note ON: ${note}, Velocity: ${velocity}${keyInfo}${stateInfo}`);
     } else {
-      console.log(`Note OFF: ${note}${keyInfo}`);
+      console.log(`Note OFF: ${note}${keyInfo}${stateInfo}`);
     }
   }
+
+  // 重复/异常事件不发送键盘消息，避免重复 keydown 或错误 keyup。
+  if (isDuplicateNoteOn || isUnexpectedNoteOff) return;
 
   // 未绑定键位时不发送键盘事件。
   if (!binding) return;
