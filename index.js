@@ -1,4 +1,4 @@
-const midi = require('midi');
+﻿const midi = require('midi');
 const path = require('path');
 const { version } = require('./package.json');
 const { sendKey, getKeyName } = require('./libs/keyboard');
@@ -54,7 +54,7 @@ if (!Number.isInteger(selectedPort) || selectedPort < 0) {
 
 const portIndex = selectedPort;
 
-// 初始化 MIDI 输入对象并查询系统中可用的 MIDI 输入端口数量。
+// 初始化 MIDI 输入对象并查询系统中可用的 MIDI 输入端口数量
 const input = new midi.Input();
 const portCount = input.getPortCount();
 
