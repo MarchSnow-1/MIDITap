@@ -12,7 +12,7 @@ const args = minimist(process.argv.slice(2), {
   alias: { v: 'verbose' },
   boolean: ['verbose'],
 });
-const verbose = args.verbose === true;
+const cliVerbose = args.verbose === true;
 
 // 统一的退出辅助函数：
 // 遇到启动失败或配置错误时，保持窗口不立即关闭，方便用户看到报错信息。
@@ -34,12 +34,13 @@ const baseDir = path.basename(process.execPath).startsWith('node')
 // - noteMap: MIDI note -> 虚拟键码（VK）映射
 // - port: 配置文件中的默认端口号（可选）
 // - devmode: 当检测到 .dev 标记文件时为 1，否则为 0
-const configResult = loadConfig(baseDir, { verbose });
+const configResult = loadConfig(baseDir, { verbose: cliVerbose });
 if (!configResult) {
   pauseAndExit();
   return;
 }
 const { noteMap, port: configPort, devmode } = configResult;
+const verbose = cliVerbose || devmode === 1;
 
 // 端口选择优先级：CLI --port > 配置文件 port > 默认 0
 const selectedPort = args.port !== undefined ? Number(args.port) : (configPort !== null ? configPort : 0);
