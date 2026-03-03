@@ -7,11 +7,13 @@ const { VK } = require('./keyboard');
 // 返回约定：
 // - number：合法端口（非负整数）
 // - null：未配置或非法，主流程将回退到默认端口 0
-function parsePort(portValue) {
+function parsePort(portValue, silent = false) {
   if (portValue === undefined || portValue === null) return null;
   const port = Number(portValue);
   if (!Number.isInteger(port) || port < 0) {
-    console.warn(`Invalid config port "${portValue}", fallback to default port 0.`);
+    if (!silent) {
+      console.warn(`Invalid config port "${portValue}", fallback to default port 0.`);
+    }
     return null;
   }
   return port;
@@ -33,9 +35,11 @@ function resolveConfigMeta(baseDir) {
 // - 单键示例："a" / "enter" -> [VK_A] / [VK_ENTER]
 // - 组合键示例："ctrl+b"      -> [VK_CTRL, VK_B]
 // 规则：仅当字符串长度 > 1 且包含 '+' 时，才按组合键拆分。
-function parseBinding(keySpec, noteStr) {
+function parseBinding(keySpec, noteStr, silent = false) {
   if (typeof keySpec !== 'string' || keySpec.trim() === '') {
-    console.warn(`Invalid key name for note "${noteStr}", expected non-empty string, skipping...`);
+    if (!silent) {
+      console.warn(`Invalid key name for note "${noteStr}", expected non-empty string, skipping...`);
+    }
     return null;
   }
 
@@ -44,7 +48,9 @@ function parseBinding(keySpec, noteStr) {
   const tokens = isCombo ? normalizedSpec.split('+').map((part) => part.trim()) : [normalizedSpec];
 
   if (tokens.some((token) => token === '')) {
-    console.warn(`Invalid key combo "${keySpec}" for note "${noteStr}", skipping...`);
+    if (!silent) {
+      console.warn(`Invalid key combo "${keySpec}" for note "${noteStr}", skipping...`);
+    }
     return null;
   }
 
@@ -52,7 +58,9 @@ function parseBinding(keySpec, noteStr) {
   for (const token of tokens) {
     const vk = VK[token];
     if (vk === undefined) {
-      console.warn(`Can't find '${token}' in VK Code List, skipping note "${noteStr}"...`);
+      if (!silent) {
+        console.warn(`Can't find '${token}' in VK Code List, skipping note "${noteStr}"...`);
+      }
       return null;
     }
     vkCodes.push(vk);
@@ -72,9 +80,9 @@ function parseBinding(keySpec, noteStr) {
 // - { noteMap, port, devmode }：成功
 // - null：失败（如文件不存在、解析失败、结构非法）
 function loadConfig(baseDir, options = {}) {
-  const { verbose = false } = options;
+  const { verbose = false, silent = false } = options;
   const { configPath, devmode, configFileName } = resolveConfigMeta(baseDir);
-  const effectiveVerbose = verbose || devmode === 1;
+  const effectiveVerbose = !silent && (verbose || devmode === 1);
   let rawMapping = {};
 
   if (effectiveVerbose) {
@@ -86,13 +94,17 @@ function loadConfig(baseDir, options = {}) {
     rawMapping = JSON5.parse(fs.readFileSync(configPath, 'utf8'));
     if (effectiveVerbose) console.log(`Config Loaded (${configFileName}):`, rawMapping);
   } catch (err) {
-    console.error(`Failed to Load Config (${configFileName}):`, err.message);
+    if (!silent) {
+      console.error(`Failed to Load Config (${configFileName}):`, err.message);
+    }
     return null;
   }
 
   // 顶层必须是普通对象，防止数组/null 等非法结构进入后续逻辑。
   if (typeof rawMapping !== 'object' || rawMapping === null || Array.isArray(rawMapping)) {
-    console.error('Invalid config format: expected an object.');
+    if (!silent) {
+      console.error('Invalid config format: expected an object.');
+    }
     return null;
   }
 
@@ -105,11 +117,13 @@ function loadConfig(baseDir, options = {}) {
     // MIDI note 必须是 0~127 的整数。
     const note = Number(noteStr);
     if (!Number.isInteger(note) || note < 0 || note > 127) {
-      console.warn(`Invalid MIDI note "${noteStr}", expected integer in range 0-127, skipping...`);
+      if (!silent) {
+        console.warn(`Invalid MIDI note "${noteStr}", expected integer in range 0-127, skipping...`);
+      }
       continue;
     }
 
-    const binding = parseBinding(keyChar, noteStr);
+    const binding = parseBinding(keyChar, noteStr, silent);
     if (!binding) {
       continue;
     }
@@ -126,7 +140,7 @@ function loadConfig(baseDir, options = {}) {
   }
 
   // 返回通过校验后的干净数据结构，供主流程直接使用。
-  return { noteMap, port: parsePort(rawMapping.port), devmode };
+  return { noteMap, port: parsePort(rawMapping.port, silent), devmode };
 }
 
 module.exports = { loadConfig };

@@ -8,11 +8,13 @@ const minimist = require('minimist');
 // 解析命令行参数：
 // - --port <number>：手动指定 MIDI 端口号（优先级高于配置文件）
 // - --verbose / -v：输出详细日志（包括每条 Note ON/OFF）
+// - --check-config：仅校验配置文件并输出 true/false
 const args = minimist(process.argv.slice(2), {
   alias: { v: 'verbose' },
-  boolean: ['verbose'],
+  boolean: ['verbose', 'check-config'],
 });
 const cliVerbose = args.verbose === true;
+const checkConfigOnly = args['check-config'] === true;
 
 // 统一的退出辅助函数：
 // 遇到启动失败或配置错误时，保持窗口不立即关闭，方便用户看到报错信息。
@@ -34,6 +36,12 @@ const baseDir = path.basename(process.execPath).startsWith('node')
 // - noteMap: MIDI note -> 键位序列映射（单键是长度 1，组合键是长度 > 1）
 // - port: 配置文件中的默认端口号（可选）
 // - devmode: 当检测到 .dev 标记文件时为 1，否则为 0
+if (checkConfigOnly) {
+  const checkResult = loadConfig(baseDir, { verbose: false, silent: true });
+  console.log(checkResult ? 'true' : 'false');
+  process.exit(checkResult ? 0 : 1);
+}
+
 const configResult = loadConfig(baseDir, { verbose: cliVerbose });
 if (!configResult) {
   pauseAndExit();
