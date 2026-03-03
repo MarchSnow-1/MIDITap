@@ -19,10 +19,10 @@ function parsePort(portValue, silent = false) {
   return port;
 }
 
-// 根据运行目录是否存在 .dev 标记文件决定配置文件与 devmode：
-// - 存在 .dev：使用 mapping-dev.json，devmode=1
-// - 不存在 .dev：使用 mapping.json，devmode=0
-function resolveConfigMeta(baseDir) {
+// 根据运行目录是否存在 .dev 标记文件决定默认配置文件与 devmode：
+// - 存在 .dev：默认使用 mapping-dev.json，devmode=1
+// - 不存在 .dev：默认使用 mapping.json，devmode=0
+function resolveDefaultConfigMeta(baseDir) {
   const devMarkerPath = path.join(baseDir, '.dev');
   const devmode = fs.existsSync(devMarkerPath) ? 1 : 0;
   const configFileName = devmode === 1 ? 'mapping-dev.json' : 'mapping.json';
@@ -76,14 +76,26 @@ function parseBinding(keySpec, noteStr, silent = false) {
 // 参数：
 // - baseDir: 配置根目录（开发态是项目目录，打包态是 exe 所在目录）
 // - options.verbose: 是否输出详细加载信息
+// - options.silent: 是否静默（用于 --check-config，仅输出 true/false）
+// - options.configPath: CLI 指定配置文件路径（绝对路径）
 // 返回：
-// - { noteMap, port, devmode }：成功
+// - { noteMap, port, devmode, configPath }：成功
 // - null：失败（如文件不存在、解析失败、结构非法）
 function loadConfig(baseDir, options = {}) {
-  const { verbose = false, silent = false } = options;
-  const { configPath, devmode, configFileName } = resolveConfigMeta(baseDir);
+  const {
+    verbose = false,
+    silent = false,
+    strict = false,
+    configPath: configPathOverride = null,
+  } = options;
+
+  const defaultMeta = resolveDefaultConfigMeta(baseDir);
+  const configPath = configPathOverride || defaultMeta.configPath;
+  const configFileName = path.basename(configPath);
+  const devmode = defaultMeta.devmode;
   const effectiveVerbose = !silent && (verbose || devmode === 1);
   let rawMapping = {};
+  let hasValidationError = false;
 
   if (effectiveVerbose) {
     console.log(`Config mode: ${devmode === 1 ? 'dev' : 'default'}, file: ${configPath}`);
@@ -120,11 +132,13 @@ function loadConfig(baseDir, options = {}) {
       if (!silent) {
         console.warn(`Invalid MIDI note "${noteStr}", expected integer in range 0-127, skipping...`);
       }
+      hasValidationError = true;
       continue;
     }
 
     const binding = parseBinding(keyChar, noteStr, silent);
     if (!binding) {
+      hasValidationError = true;
       continue;
     }
 
@@ -139,8 +153,18 @@ function loadConfig(baseDir, options = {}) {
     }
   }
 
+  const parsedPort = parsePort(rawMapping.port, silent);
+  if (rawMapping.port !== undefined && rawMapping.port !== null && parsedPort === null) {
+    hasValidationError = true;
+  }
+
+  // 严格模式下，只要存在任意校验错误就判定失败。
+  if (strict && hasValidationError) {
+    return null;
+  }
+
   // 返回通过校验后的干净数据结构，供主流程直接使用。
-  return { noteMap, port: parsePort(rawMapping.port, silent), devmode };
+  return { noteMap, port: parsedPort, devmode, configPath };
 }
 
 module.exports = { loadConfig };
