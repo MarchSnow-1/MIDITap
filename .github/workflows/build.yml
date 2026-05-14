@@ -65,54 +65,6 @@ jobs:
           xcopy /E /I dist\MIDITap\extensions pkg\win_x64\extensions
           Compress-Archive -Path pkg\win_x64\* -DestinationPath MIDITap-${{ github.ref_name }}-win_x64.zip
 
-      - name: Package macOS x64
-        run: |
-          mkdir pkg\mac_x64
-          copy dist\MIDITap\MIDITap-mac_x64 pkg\mac_x64\
-          copy dist\MIDITap\resources.neu pkg\mac_x64\
-          xcopy /E /I dist\MIDITap\extensions pkg\mac_x64\extensions
-          Compress-Archive -Path pkg\mac_x64\* -DestinationPath MIDITap-${{ github.ref_name }}-mac_x64.zip
-
-      - name: Package macOS arm64
-        run: |
-          mkdir pkg\mac_arm64
-          copy dist\MIDITap\MIDITap-mac_arm64 pkg\mac_arm64\
-          copy dist\MIDITap\resources.neu pkg\mac_arm64\
-          xcopy /E /I dist\MIDITap\extensions pkg\mac_arm64\extensions
-          Compress-Archive -Path pkg\mac_arm64\* -DestinationPath MIDITap-${{ github.ref_name }}-mac_arm64.zip
-
-      - name: Package macOS universal
-        run: |
-          mkdir pkg\mac_universal
-          copy dist\MIDITap\MIDITap-mac_universal pkg\mac_universal\
-          copy dist\MIDITap\resources.neu pkg\mac_universal\
-          xcopy /E /I dist\MIDITap\extensions pkg\mac_universal\extensions
-          Compress-Archive -Path pkg\mac_universal\* -DestinationPath MIDITap-${{ github.ref_name }}-mac_universal.zip
-
-      - name: Package Linux x64
-        run: |
-          mkdir pkg\linux_x64
-          copy dist\MIDITap\MIDITap-linux_x64 pkg\linux_x64\
-          copy dist\MIDITap\resources.neu pkg\linux_x64\
-          xcopy /E /I dist\MIDITap\extensions pkg\linux_x64\extensions
-          Compress-Archive -Path pkg\linux_x64\* -DestinationPath MIDITap-${{ github.ref_name }}-linux_x64.zip
-
-      - name: Package Linux arm64
-        run: |
-          mkdir pkg\linux_arm64
-          copy dist\MIDITap\MIDITap-linux_arm64 pkg\linux_arm64\
-          copy dist\MIDITap\resources.neu pkg\linux_arm64\
-          xcopy /E /I dist\MIDITap\extensions pkg\linux_arm64\extensions
-          Compress-Archive -Path pkg\linux_arm64\* -DestinationPath MIDITap-${{ github.ref_name }}-linux_arm64.zip
-
-      - name: Package Linux armhf
-        run: |
-          mkdir pkg\linux_armhf
-          copy dist\MIDITap\MIDITap-linux_armhf pkg\linux_armhf\
-          copy dist\MIDITap\resources.neu pkg\linux_armhf\
-          xcopy /E /I dist\MIDITap\extensions pkg\linux_armhf\extensions
-          Compress-Archive -Path pkg\linux_armhf\* -DestinationPath MIDITap-${{ github.ref_name }}-linux_armhf.zip
-
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
