@@ -19,17 +19,6 @@ function parsePort(portValue, silent = false) {
   return port;
 }
 
-// 根据运行目录是否存在 .dev 标记文件决定默认配置文件与 devmode：
-// - 存在 .dev：默认使用 mapping-dev.json，devmode=1
-// - 不存在 .dev：默认使用 mapping.json，devmode=0
-function resolveDefaultConfigMeta(baseDir) {
-  const devMarkerPath = path.join(baseDir, '.dev');
-  const devmode = fs.existsSync(devMarkerPath) ? 1 : 0;
-  const configFileName = devmode === 1 ? 'mapping-dev.json' : 'mapping.json';
-  const configPath = path.join(baseDir, 'config', configFileName);
-
-  return { configPath, devmode, configFileName };
-}
 
 // 解析单条键位配置并返回 VK 序列：
 // - 单键示例："a" / "enter" -> [VK_A] / [VK_ENTER]
@@ -79,7 +68,7 @@ function parseBinding(keySpec, noteStr, silent = false) {
 // - options.silent: 是否静默（用于 --check-config，仅输出 true/false）
 // - options.configPath: CLI 指定配置文件路径（绝对路径）
 // 返回：
-// - { noteMap, port, devmode, configPath }：成功
+// - { noteMap, port, name, configPath }：成功
 // - null：失败（如文件不存在、解析失败、结构非法）
 function loadConfig(baseDir, options = {}) {
   const {
@@ -89,16 +78,14 @@ function loadConfig(baseDir, options = {}) {
     configPath: configPathOverride = null,
   } = options;
 
-  const defaultMeta = resolveDefaultConfigMeta(baseDir);
-  const configPath = configPathOverride || defaultMeta.configPath;
+  const configPath = configPathOverride || path.join(baseDir, 'config', 'mapping.json');
   const configFileName = path.basename(configPath);
-  const devmode = defaultMeta.devmode;
-  const effectiveVerbose = !silent && (verbose || devmode === 1);
+  const effectiveVerbose = !silent && verbose;
   let rawMapping = {};
   let hasValidationError = false;
 
   if (effectiveVerbose) {
-    console.log(`Config mode: ${devmode === 1 ? 'dev' : 'default'}, file: ${configPath}`);
+    console.log(`Config file: ${configPath}`);
   }
 
   // 使用 JSON5 读取配置，允许注释与更宽松的书写格式。
@@ -120,11 +107,14 @@ function loadConfig(baseDir, options = {}) {
     return null;
   }
 
+  // 提取显示名称
+  const configName = (typeof rawMapping.name === 'string' && rawMapping.name.trim()) || configFileName;
+
   // 运行时使用 Map，加快 MIDI note 到 VK 的查询速度。
   const noteMap = new Map();
   for (const [noteStr, keyChar] of Object.entries(rawMapping)) {
-    // `port` 是全局配置项，不是音符映射。
-    if (noteStr === 'port') continue;
+    // `port` 和 `name` 是全局配置项，不是音符映射。
+    if (noteStr === 'port' || noteStr === 'name') continue;
 
     // MIDI note 必须是 0~127 的整数。
     const note = Number(noteStr);
@@ -164,7 +154,93 @@ function loadConfig(baseDir, options = {}) {
   }
 
   // 返回通过校验后的干净数据结构，供主流程直接使用。
-  return { noteMap, port: parsedPort, devmode, configPath };
+  return { noteMap, port: parsedPort, name: configName, configPath };
 }
 
-module.exports = { loadConfig };
+// 扫描 config 目录下所有 .json 文件，读取 name 字段
+function listConfigFiles(baseDir) {
+  const configDir = path.join(baseDir, 'config');
+  const results = [];
+  try {
+    const entries = fs.readdirSync(configDir);
+    for (const entry of entries) {
+      if (!entry.endsWith('.json')) continue;
+      const filePath = path.join(configDir, entry);
+      try {
+        const raw = JSON5.parse(fs.readFileSync(filePath, 'utf8'));
+        const name = (typeof raw === 'object' && raw !== null && !Array.isArray(raw) && typeof raw.name === 'string')
+          ? raw.name.trim()
+          : entry;
+        results.push({ filename: entry, name, path: filePath });
+      } catch {
+        results.push({ filename: entry, name: entry, path: filePath });
+      }
+    }
+  } catch {}
+  return results;
+}
+
+// 更新配置文件的 name 字段（通过正则替换，保留注释和格式）
+function renameConfigFile(baseDir, filename, newName) {
+  const configPath = path.join(baseDir, 'config', filename);
+  if (path.basename(configPath) !== filename) return false;
+  if (!fs.existsSync(configPath)) return false;
+  try {
+    let content = fs.readFileSync(configPath, 'utf8');
+    const escapedName = newName.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const pattern = /("name"\s*:\s*)"[^"]*"/;
+    if (pattern.test(content)) {
+      content = content.replace(pattern, `$1"${escapedName}"`);
+    } else {
+      content = content.replace(/\{/, `{\n  "name": "${escapedName}",`);
+    }
+    fs.writeFileSync(configPath, content, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 确保配置目录存在，且至少有一个 .json 配置文件。
+// 若目录为空，自动生成默认 mapping.json。
+function ensureConfigDir(baseDir) {
+  const configDir = path.join(baseDir, 'config');
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true });
+  }
+  const hasJson = (() => {
+    try {
+      return fs.readdirSync(configDir).some((entry) => entry.endsWith('.json'));
+    } catch { return false; }
+  })();
+  if (!hasJson) {
+    const defaultConfig = JSON.stringify({
+      name: '默认',
+    }, null, 2);
+    fs.writeFileSync(path.join(configDir, 'mapping.json'), defaultConfig, 'utf8');
+    return path.join(configDir, 'mapping.json');
+  }
+  return null;
+}
+
+// 读取上次使用的配置文件路径（.storage/last_config）。
+// 返回 null 表示没有记录或记录的文件已不存在。
+function getLastConfigPath(baseDir) {
+  const storagePath = path.join(baseDir, '.storage', 'last_config');
+  try {
+    const content = fs.readFileSync(storagePath, 'utf8').trim();
+    if (content && fs.existsSync(content)) return content;
+    const configPath = path.join(baseDir, 'config', content);
+    if (content && fs.existsSync(configPath)) return configPath;
+  } catch { /* ignore */ }
+  return null;
+}
+
+// 保存最后使用的配置文件路径到 .storage/last_config。
+function saveLastConfigPath(baseDir, configPath) {
+  const storageDir = path.join(baseDir, '.storage');
+  if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+  fs.writeFileSync(path.join(storageDir, 'last_config'), configPath, 'utf8');
+}
+
+module.exports = { loadConfig, listConfigFiles, renameConfigFile, ensureConfigDir, getLastConfigPath, saveLastConfigPath };

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="app.title">MIDITap</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="window-frame">
+      <div id="dragRegion" class="drag-region" aria-hidden="true"></div>
+      <div class="shell">
+        <header class="hero">
+          <div class="hero-text">
+            <div class="hero-brand">
+              <img class="hero-logo" src="icons/appIcon.png" alt="" aria-hidden="true">
+              <div class="hero-copy">
+                <h1 data-i18n="app.name">MIDITap</h1>
+                <p data-i18n-html="hero.subtitle">Convert <span>MIDI</span> signal into <span>Keyboard</span> output</p>
+              </div>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <div class="runtime">
+              <div class="label-row">
+                <svg class="label-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+                  <rect height="0.01" stroke="currentColor" stroke-linejoin="round" stroke-width="3" width="0.01" x="12" y="8"/>
+                  <path d="M12 12V16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+                </svg>
+                <span class="runtime-label label-text" data-i18n="status.label">STATUS</span>
+              </div>
+              <div id="statusIndicator" class="value-row status-stopped" data-i18n="status.stopped">Stopped</div>
+            </div>
+            <div class="lang-switch" id="langSwitch">
+              <div class="label-row">
+                <svg class="label-icon" viewBox="0 0 512 512" aria-hidden="true" fill="currentColor">
+                  <path d="M478.33,433.6l-90-218a22,22,0,0,0-40.67,0l-90,218a22,22,0,1,0,40.67,16.79L316.66,406H419.33l18.33,44.39A22,22,0,0,0,458,464a22,22,0,0,0,20.32-30.4ZM334.83,362,368,281.65,401.17,362Z"/>
+                  <path d="M267.84,342.92a22,22,0,0,0-4.89-30.7c-.2-.15-15-11.13-36.49-34.73,39.65-53.68,62.11-114.75,71.27-143.49H330a22,22,0,0,0,0-44H214V70a22,22,0,0,0-44,0V90H54a22,22,0,0,0,0,44H251.25c-9.52,26.95-27.05,69.5-53.79,108.36-31.41-41.68-43.08-68.65-43.17-68.87a22,22,0,0,0-40.58,17c.58,1.38,14.55,34.23,52.86,83.93.92,1.19,1.83,2.35,2.74,3.51-39.24,44.35-77.74,71.86-93.85,80.74a22,22,0,1,0,21.07,38.63c2.16-1.18,48.6-26.89,101.63-85.59,22.52,24.08,38,35.44,38.93,36.1a22,22,0,0,0,30.75-4.9Z"/>
+                </svg>
+                <span class="lang-label label-text" data-i18n="lang.label">LANGUAGES</span>
+              </div>
+              <button id="langToggle" class="lang-toggle value-row" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span id="langValue">English (US)</span>
+                <span class="lang-toggle-meta">
+                  <span class="chevron" aria-hidden="true"></span>
+                </span>
+              </button>
+              <div id="langMenu" class="lang-menu" role="listbox" tabindex="-1">
+                <button class="lang-option" data-lang="en_US" data-display="English (US)">
+                  <span class="lang-option-label">English (US)</span>
+                </button>
+                <button class="lang-option" data-lang="zh_CN" data-display="简体中文">
+                  <span class="lang-option-label">简体中文</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="grid">
+          <section class="card control-card tab-content" data-tab="home">
+            <div class="field field-log">
+              <div class="field-label-row">
+                <span class="field-label" data-i18n="devices.port.label">MIDI Devices</span>
+                <button id="refreshPorts" type="button" class="btn-ghost" data-i18n="devices.refresh">Refresh</button>
+              </div>
+              <div class="fake-scroll devices-scroll">
+                <div id="deviceList" class="device-list scroll-surface">
+                  <span class="empty-hint" data-i18n="devices.empty">No MIDI devices found</span>
+                </div>
+                <div class="fake-scrollbar" aria-hidden="true">
+                  <div class="fake-thumb"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="buttons-row">
+              <button id="startStop" type="button" class="btn-start" data-i18n="control.start">Start</button>
+            </div>
+          </section>
+
+          <section class="card monitor-card tab-content" data-tab="home">
+            <div class="field monitor-notes-field">
+              <span class="field-label" data-i18n="monitor.notes.label">Active Notes</span>
+              <div class="fake-scroll notes-scroll">
+                <div id="activeNotes" class="active-notes scroll-surface">
+                  <span class="empty-hint" data-i18n="monitor.notes.empty">No active notes</span>
+                </div>
+                <div class="fake-scrollbar" aria-hidden="true">
+                  <div class="fake-thumb"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="field field-log">
+              <span class="field-label" data-i18n="monitor.log.label">Activity Log</span>
+              <div class="fake-scroll log-scroll">
+                <pre id="logOutput" class="log-surface scroll-surface"></pre>
+                <div class="fake-scrollbar" aria-hidden="true">
+                  <div class="fake-thumb"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card tab-content tab-full" data-tab="edit">
+            <div class="edit-topbar">
+              <div class="edit-config-select">
+                <span class="field-label" data-i18n="control.config.label">Config</span>
+                <div class="row">
+                  <div class="custom-select" id="editConfigSelectWrap">
+                    <button id="editConfigToggle" class="custom-toggle value-row" type="button" aria-haspopup="listbox" aria-expanded="false">
+                      <span id="editConfigValue">No configs found</span>
+                      <span class="custom-toggle-meta">
+                        <span class="chevron" aria-hidden="true"></span>
+                      </span>
+                    </button>
+                    <div id="editConfigMenu" class="custom-menu" role="listbox" tabindex="-1"></div>
+                  </div>
+                  <button id="editRefreshConfigs" type="button" data-i18n="control.config.refresh">Refresh</button>
+                  <button id="editPickConfig" type="button" data-i18n="control.config.browse">Browse</button>
+                </div>
+              </div>
+              <div class="edit-rename">
+                <span class="field-label" data-i18n="control.config.name">Config Name</span>
+                <div class="row">
+                  <input id="editConfigNameInput" type="text" data-i18n-placeholder="control.config.name" placeholder="Display name">
+                  <button id="editRenameConfigBtn" type="button" data-i18n="control.config.rename">Rename</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="edit-body">
+              <div class="edit-panel edit-add">
+                <div class="edit-section-title" data-i18n="edit.addMapping.title">Add Mapping</div>
+                <div class="edit-add-form">
+                  <div class="field">
+                    <span class="field-label" data-i18n="edit.addMapping.note">MIDI Note</span>
+                    <div class="row">
+                      <input id="newNoteInput" type="text" readonly placeholder="Click then play a MIDI note">
+                      <button id="clearNoteBtn" type="button" class="btn-clear" data-i18n="edit.clear">Clear</button>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <span class="field-label" data-i18n="edit.addMapping.key">Single Key</span>
+                    <div class="row">
+                      <input id="newKeyInput" type="text" readonly placeholder="Click then press a key">
+                      <button id="clearKeyBtn" type="button" class="btn-clear" data-i18n="edit.clear">Clear</button>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <span class="field-label" data-i18n="edit.addMapping.combo">Combo Key</span>
+                    <div class="row">
+                      <input id="newComboInput" type="text" readonly placeholder="Click then press keys in sequence">
+                      <button id="clearComboBtn" type="button" class="btn-clear" data-i18n="edit.clear">Clear</button>
+                    </div>
+                  </div>
+                  <button id="addMappingBtn" type="button" data-i18n="edit.addMapping.add">Add</button>
+                </div>
+              </div>
+              <div class="edit-panel edit-mappings">
+                <div class="edit-section-title" data-i18n="edit.currentMappings">Current Mappings</div>
+                <div class="fake-scroll edit-mapping-scroll">
+                  <div id="editMappingList" class="edit-mapping-list scroll-surface">
+                    <span class="empty-hint" data-i18n="edit.mappingEmpty">Mapping list is empty, add mappings on the left</span>
+                  </div>
+                  <div class="fake-scrollbar" aria-hidden="true">
+                    <div class="fake-thumb"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="tab-content tab-full log-page" data-tab="log">
+            <div class="fake-scroll log-scroll">
+              <pre id="logOutputFull" class="log-surface scroll-surface"></pre>
+              <div class="fake-scrollbar" aria-hidden="true">
+                <div class="fake-thumb"></div>
+              </div>
+            </div>
+          </section>
+
+          <nav class="tab-bar">
+            <button class="tab-btn active" data-tab="home" data-i18n="tabs.home">Home</button>
+            <button class="tab-btn" data-tab="edit" data-i18n="tabs.configs">Configs</button>
+            <button class="tab-btn" data-tab="log" data-i18n="tabs.log">Log</button>
+          </nav>
+        </main>
+      </div>
+    </div>
+
+
+    <script src="js/neutralino.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

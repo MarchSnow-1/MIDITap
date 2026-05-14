@@ -2,6 +2,8 @@
   // MIDITap 配置文件
  
   // 本配置文件为开放空间 OverField 钢琴适配的键位映射表
+
+  "name": "OverField - 钢琴",
   
   "48": "a",
   "50": "s",

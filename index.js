@@ -103,7 +103,7 @@ function printHelp() {
   -list-ports               列出所有 MIDI 输入端口并退出
   -config <path>            指定配置文件路径（支持绝对/相对路径）
   -check-config             严格校验配置并输出 true/false
-  -verbose, -v              输出详细日志（devmode 下会强制开启）
+  -verbose, -v              输出详细日志
   -help, -h                 显示帮助
 
 配置文件选择优先级:
@@ -138,7 +138,7 @@ Options:
   -list-ports               List all MIDI input ports and exit
   -config <path>            Specify config file path (absolute/relative)
   -check-config             Strict config validation, print true/false
-  -verbose, -v              Enable verbose logs (forced in devmode)
+  -verbose, -v              Enable verbose logs 
   -help, -h                 Show help
 
 Config Resolution Priority:
@@ -170,7 +170,7 @@ Examples:
 // - -list-ports：仅列出当前可用 MIDI 输入端口并退出
 // - -verbose / -v：输出详细日志（包括每条 Note ON/OFF）
 // - -check-config：仅校验配置文件并输出 true/false
-// - -config：指定配置文件（支持绝对路径与相对路径）
+// - -config：指定配置文件（支持绝对路径与相对路径），默认使用 config/mapping.json
 const args = minimist(normalizeCliArgs(process.argv.slice(2)), {
   alias: { v: 'verbose', c: 'config', h: 'help' },
   boolean: ['verbose', 'check-config', 'help', 'list-ports'],
@@ -335,7 +335,7 @@ if (configPathError) {
 // 读取并解析配置文件，返回：
 // - noteMap: MIDI note -> 键位序列映射（单键是长度 1，组合键是长度 > 1）
 // - port: 配置文件中的默认端口号（可选）
-// - devmode: 当检测到 .dev 标记文件时为 1，否则为 0
+// - name: 配置文件的显示名称
 // - configPath: 实际使用的配置文件绝对路径
 if (checkConfigOnly) {
   const checkResult = loadConfig(baseDir, {
@@ -356,10 +356,10 @@ if (!configResult) {
   pauseAndExit();
   return;
 }
-const { noteMap, port: configPort, devmode, configPath: activeConfigPath } = configResult;
+const { noteMap, port: configPort, configPath: activeConfigPath } = configResult;
 
-// devmode 为 1 时强制打开详细日志。
-const verbose = cliVerbose || devmode === 1;
+// CLI verbose flag controls detailed logging
+const verbose = cliVerbose;
 
 // 端口选择优先级：CLI -port > 配置文件 port > 默认 0
 const selectedPort = args.port !== undefined ? Number(args.port) : (configPort !== null ? configPort : 0);
@@ -506,9 +506,6 @@ input.on('message', (deltaTime, message) => {
 });
 
 console.log(`MIDITap v${version} is running, press Ctrl+C to exit.`);
-if (devmode === 1) {
-  console.log(`[DEVMODE] Development mode enabled, using ${activeConfigPath}`);
-}
 
 // 捕获未处理异常/Promise 拒绝：
 // - 先执行统一清理（全量抬键 + 关闭端口）

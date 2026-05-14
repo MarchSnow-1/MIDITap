@@ -17,3 +17,10 @@ Thumbs.db
 .env
 
 dist/
+
+# NeutralinoJS
+.storage/
+.tmp/
+neutralinojs.log
+
+.claude
