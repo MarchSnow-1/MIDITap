@@ -1,6 +1,6 @@
 {
   "name": "miditap",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "scripts": {
     "version": "auto-changelog -p && git add CHANGELOG.md"
   },
