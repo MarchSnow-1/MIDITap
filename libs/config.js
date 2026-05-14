@@ -215,7 +215,7 @@ function ensureConfigDir(baseDir) {
   })();
   if (!hasJson) {
     const defaultConfig = JSON.stringify({
-      name: '默认',
+      name: 'Default Config',
     }, null, 2);
     fs.writeFileSync(path.join(configDir, 'mapping.json'), defaultConfig, 'utf8');
     return path.join(configDir, 'mapping.json');
