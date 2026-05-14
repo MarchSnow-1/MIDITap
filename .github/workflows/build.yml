@@ -48,28 +48,75 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install @yao-pkg/pkg
-        run: npm install -g @yao-pkg/pkg
+      - name: Install @neutralinojs/neu
+        run: npm install -g @neutralinojs/neu
 
-      - name: Build EXE
-        run: pkg .
+      - name: Download NeutralinoJS runtime
+        run: neu update
 
-      - name: Rename EXE
-        run: mv dist\miditap.exe dist\MIDITap-${{ github.ref_name }}.exe
+      - name: Build
+        run: neu build
 
-      - name: Package zip
+      - name: Package Windows x64
         run: |
-          mkdir release
-          copy dist\MIDITap-${{ github.ref_name }}.exe release\
-          mkdir release\config
-          copy config\mapping.json release\config\
-          cd release
-          Compress-Archive -Path * -DestinationPath ..\MIDITap-${{ github.ref_name }}.zip
+          mkdir pkg\win_x64
+          copy dist\MIDITap\MIDITap-win_x64.exe pkg\win_x64\MIDITap.exe
+          copy dist\MIDITap\resources.neu pkg\win_x64\
+          xcopy /E /I dist\MIDITap\extensions pkg\win_x64\extensions
+          Compress-Archive -Path pkg\win_x64\* -DestinationPath MIDITap-${{ github.ref_name }}-win_x64.zip
 
-      - name: Upload Release Asset
+      - name: Package macOS x64
+        run: |
+          mkdir pkg\mac_x64
+          copy dist\MIDITap\MIDITap-mac_x64 pkg\mac_x64\
+          copy dist\MIDITap\resources.neu pkg\mac_x64\
+          xcopy /E /I dist\MIDITap\extensions pkg\mac_x64\extensions
+          Compress-Archive -Path pkg\mac_x64\* -DestinationPath MIDITap-${{ github.ref_name }}-mac_x64.zip
+
+      - name: Package macOS arm64
+        run: |
+          mkdir pkg\mac_arm64
+          copy dist\MIDITap\MIDITap-mac_arm64 pkg\mac_arm64\
+          copy dist\MIDITap\resources.neu pkg\mac_arm64\
+          xcopy /E /I dist\MIDITap\extensions pkg\mac_arm64\extensions
+          Compress-Archive -Path pkg\mac_arm64\* -DestinationPath MIDITap-${{ github.ref_name }}-mac_arm64.zip
+
+      - name: Package macOS universal
+        run: |
+          mkdir pkg\mac_universal
+          copy dist\MIDITap\MIDITap-mac_universal pkg\mac_universal\
+          copy dist\MIDITap\resources.neu pkg\mac_universal\
+          xcopy /E /I dist\MIDITap\extensions pkg\mac_universal\extensions
+          Compress-Archive -Path pkg\mac_universal\* -DestinationPath MIDITap-${{ github.ref_name }}-mac_universal.zip
+
+      - name: Package Linux x64
+        run: |
+          mkdir pkg\linux_x64
+          copy dist\MIDITap\MIDITap-linux_x64 pkg\linux_x64\
+          copy dist\MIDITap\resources.neu pkg\linux_x64\
+          xcopy /E /I dist\MIDITap\extensions pkg\linux_x64\extensions
+          Compress-Archive -Path pkg\linux_x64\* -DestinationPath MIDITap-${{ github.ref_name }}-linux_x64.zip
+
+      - name: Package Linux arm64
+        run: |
+          mkdir pkg\linux_arm64
+          copy dist\MIDITap\MIDITap-linux_arm64 pkg\linux_arm64\
+          copy dist\MIDITap\resources.neu pkg\linux_arm64\
+          xcopy /E /I dist\MIDITap\extensions pkg\linux_arm64\extensions
+          Compress-Archive -Path pkg\linux_arm64\* -DestinationPath MIDITap-${{ github.ref_name }}-linux_arm64.zip
+
+      - name: Package Linux armhf
+        run: |
+          mkdir pkg\linux_armhf
+          copy dist\MIDITap\MIDITap-linux_armhf pkg\linux_armhf\
+          copy dist\MIDITap\resources.neu pkg\linux_armhf\
+          xcopy /E /I dist\MIDITap\extensions pkg\linux_armhf\extensions
+          Compress-Archive -Path pkg\linux_armhf\* -DestinationPath MIDITap-${{ github.ref_name }}-linux_armhf.zip
+
+      - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
           body_path: CHANGELOG.md
-          files: MIDITap-${{ github.ref_name }}.zip
+          files: MIDITap-${{ github.ref_name }}-*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

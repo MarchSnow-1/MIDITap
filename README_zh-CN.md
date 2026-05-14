@@ -7,9 +7,9 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/MarchSnow-1/MIDITap?style=for-the-badge)
 [![Total Download](https://img.shields.io/github/downloads/MarchSnow-1/MIDITap/total?style=for-the-badge)](https://github.com/MarchSnow-1/MIDITap/releases)
 
-[简体中文](README.md) | [English](README_EN.md)
-
 将 MIDI 键盘输入实时映射为键盘按键的轻量级工具
+
+[简体中文](README.md) | [English](README_EN.md)
 
 </div>
 

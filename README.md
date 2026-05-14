@@ -7,10 +7,10 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/MarchSnow-1/MIDITap?style=for-the-badge)
 [![Total Download](https://img.shields.io/github/downloads/MarchSnow-1/MIDITap/total?style=for-the-badge)](https://github.com/MarchSnow-1/MIDITap/releases)
 
-[English](README.md) | [简体中文](README_zh-CN.md)
-
 Effortless MIDI Device Mapping
 A lightweight tool to map MIDI keyboard input to keystrokes in real-time.
+
+[English](README.md) | [简体中文](README_zh-CN.md)
 
 </div>
 
