@@ -886,6 +886,7 @@ if (elements.newNoteInput) {
 
 if (elements.newKeyInput) {
   elements.newKeyInput.addEventListener("focus", function () {
+    if (elements.newComboInput) elements.newComboInput.value = "";
     elements.newKeyInput.placeholder = "Press a key...";
     keyCaptureHandler = function (e) {
       e.preventDefault();
@@ -912,6 +913,7 @@ if (elements.newKeyInput) {
 // Edit tab: combo key capture — every keydown appends, no undo/finish
 if (elements.newComboInput) {
   elements.newComboInput.addEventListener("focus", function () {
+    if (elements.newKeyInput) elements.newKeyInput.value = "";
     elements.newComboInput.placeholder = "Press keys...";
     var keydownHandler = function (e) {
       e.preventDefault();

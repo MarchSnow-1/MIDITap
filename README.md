@@ -7,51 +7,162 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/MarchSnow-1/MIDITap?style=for-the-badge)
 [![Total Download](https://img.shields.io/github/downloads/MarchSnow-1/MIDITap/total?style=for-the-badge)](https://github.com/MarchSnow-1/MIDITap/releases)
 
-[简体中文](README.md) | [English](README_EN.md)
+[English](README.md) | [简体中文](README_zh-CN.md)
 
-将 MIDI 键盘输入实时映射为键盘按键的轻量级工具
+Effortless MIDI Device Mapping
+A lightweight tool to map MIDI keyboard input to keystrokes in real-time.
 
 </div>
 
-## 📖 使用须知
+## 📖 Introduction
 
-MIDITap 是一个调用 Windows 原生 API 的低延迟 MIDI → 键盘映射工具
+MIDITap is a low-latency MIDI-to-keyboard mapping tool built on native Windows APIs.
 
-如遇到问题, 欢迎至 [Issues](../../issues) 进行反馈
+If you encounter any issues, please feel free to submit feedback via [Issues](../../issues).
 
-> 💡 **提示**：配置文件支持注释, 分享你的配置文件给他人时可注明对应按键
+## ✨ Features
 
-## ✨ 功能一览
+* 🎹 **Native Mapping**: Leverages Windows APIs to convert MIDI input into keyboard events with minimal latency.
+* 🎵 **Sustain Support**: Keys remain triggered while the MIDI note is held and release instantly upon let-go for a natural feel.
+* 🔑 **Full Key Support**: Supports letters, numbers, function keys, arrow keys, Numpad, media keys, and more.
 
-- 🎹 **原生映射**：调用 Windows API 实时将 MIDI 输入转换为键盘事件
-- 🎵 **长按支持**：按住琴键时对应按键持续触发，松开即释放，手感自然
-- 🔑 **完整按键支持**：字母、数字、功能键、方向键、小键盘、媒体键……一应俱全
+## 🛠️ Requirements
 
-## 🛠️ 环境要求
+* Windows (x64)
+* A MIDI-compatible device
 
-- Windows（x64）
-- 一台 MIDI 设备
+## 🚀 Quick Start
 
-## 🚀 快速开始
+1. Download the latest version from the [Releases](../../releases) page
 
-1. 前往 [Release](../../releases) 页面下载最新版本并解压
+2. Extract the archive to any directory
 
-2. 参考 [配置教程](guide/zh_cn.md) 完成配置
+3. Double-click **MIDITap.exe** to launch, no installation required
 
-3. 配置完成后双击 **MIDITap.exe** 即可启动, 无需安装
-   - 如有多个 MIDI 设备，可通过命令行启动来指定端口：`MIDITap.exe -port 1`
-   - 启动后控制台会列出所有已连接的 MIDI 设备及其端口号
+- [Preset Configurations](/preset-configs) are available here for reference or direct use.
 
-- [此处](/preset-configs) 提供了一些预设供参考或使用, 可下载查看
+## 📚 Usage Guide
 
-*如需修改配置，请在修改后重启软件，方可生效*
+### GUI Interface
 
-> [!IMPORTANT]
-> 部分杀毒软件可能对本工具报毒, 如您不放心可选择自行审查代码并编译可执行文件
+The interface has three tabs: **Home**, **Configs**, and **Log**.
 
-## ⚠️ 免责声明
+#### Home — Device Selection & Monitoring
 
-- 本工具通过模拟键盘输入的方式工作，原理与 AutoHotkey 等工具相同
-- 本工具的设计用途是将 MIDI 设备映射为键盘输入，并非专为游戏开发
-- 目前尚无因在游戏中使用本工具导致封号的案例，但部分相对严格的反作弊系统可能对第三方输入工具较为敏感
-- **使用前请自行了解所在游戏的相关规定，下载本软件视为风险自担，开发者不承担任何责任**
+1. The left **MIDI Devices** list shows available MIDI devices. Click to select one.
+2. Click **Start** to begin monitoring. Pressing MIDI keys will trigger the mapped keyboard output.
+3. **Active Notes** on the right shows currently held notes and their key bindings.
+4. **Activity Log** records all MIDI events (note on/off, warnings, errors).
+
+#### Configs — Mapping Management
+
+- **Config**: Switch between configuration files. Click to load.
+- **Refresh**: Reload the configuration file list.
+- **Browse**: Open the folder containing configuration files.
+- **Config Name**: Edit the display name shown in the UI.
+- **Add Mapping**: Three input capture methods —
+  - **MIDI Note**: Click the input and play a MIDI key to auto-fill the note number.
+  - **Single Key**: Click the input and press a keyboard key (a / enter / f1 etc.).
+  - **Combo Key**: Click the input and press multiple keys in sequence (e.g. ctrl+shift+escape).
+  - Single Key and Combo Key are mutually exclusive; the last focused one takes effect.
+  - Click **Add** to create the mapping.
+- **Current Mappings**: Displays all mappings in the current config. Click `×` to delete.
+
+#### Log Tab
+
+Full-window view of the Activity Log, useful for debugging.
+
+## ✍️ Writing Config Files Manually
+
+Config files are stored in the `config/` directory in JSON5 format (comments and trailing commas are supported). You can create multiple `.json` files and switch between them via the dropdown in the GUI.
+
+#### Basic Steps
+
+1. Start the program, select a MIDI device on the Home tab, then click **Start**
+2. Play MIDI keys and watch the **Activity Log** for note numbers (e.g., the `65` in `Note ON: 65`)
+3. Create or edit a `.json` file in the `config/` directory with your mappings
+4. Click **Refresh** on the Configs tab, then switch to your file in the dropdown
+
+#### Config Structure
+
+```json5
+{
+  "name": "My Config",          // Required: display name shown in the GUI
+  "48": "a",                    // Single key: MIDI note → key name
+  "50": "ctrl+shift+escape",    // Combo key: join multiple keys with +
+  "60": "f1",                   // Function key
+  "62": "up"                    // Navigation key
+}
+```
+
+#### Rules
+
+- MIDI note numbers range from 0–127; using strings (e.g., `"65"`) is recommended
+- Combo keys trigger left-to-right on press and release right-to-left on release
+- After editing a config file, just reload or switch to it — no restart needed
+
+#### Supported Keys
+
+| Category | Key Names |
+|---|---|
+| Letters | `a` `b` `c` `d` `e` `f` `g` `h` `i` `j` `k` `l` `m` `n` `o` `p` `q` `r` `s` `t` `u` `v` `w` `x` `y` `z` |
+| Numbers | `0` `1` `2` `3` `4` `5` `6` `7` `8` `9` |
+| Function | `f1` `f2` `f3` `f4` `f5` `f6` `f7` `f8` `f9` `f10` `f11` `f12` `f13` `f14` `f15` `f16` `f17` `f18` `f19` `f20` `f21` `f22` `f23` `f24` |
+| Control | `enter` `space` `tab` `backspace` `shift` `ctrl` `alt` `escape` (alias `esc`) `capslock` `pause` |
+| Navigation | `up` `down` `left` `right` `home` `end` `pageup` `pagedown` `insert` `delete` |
+| Modifiers (L/R) | `lshift` `rshift` `lctrl` `rctrl` `lalt` `ralt` `lwin` `rwin` |
+| Numpad | `num0` `num1` `num2` `num3` `num4` `num5` `num6` `num7` `num8` `num9` `numlock` `add` `subtract` `multiply` `divide` `decimal` `separator` |
+| System | `printscreen` `scrolllock` `apps` |
+| Media | `mute` `volumedown` `volumeup` `nexttrack` `prevtrack` `stop` `playpause` |
+| Other | `select` `print` `execute` `help` `sleep` |
+
+#### US Keyboard Punctuation
+
+| Key | Config Name |
+|---|---|
+| `` ` `` | `backquote` |
+| `-` | `minus` |
+| `=` | `equal` |
+| `[` | `lbracket` |
+| `]` | `rbracket` |
+| `\` | `backslash` |
+| `;` | `semicolon` |
+| `'` | `quote` |
+| `,` | `comma` |
+| `.` | `period` |
+| `/` | `slash` |
+
+## Build from Source
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 22+
+- [Git](https://git-scm.com/)
+- npm (included with Node.js)
+
+### Steps
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/MarchSnow-1/MIDITap.git
+cd MIDITap
+
+# 2. Install NeutralinoJS CLI globally
+npm install -g @neutralinojs/neu
+
+# 3. Install Node.js dependencies
+npm install
+
+# 4. Download NeutralinoJS runtime binary
+neu update
+
+# 5. Start in development mode
+neu run
+```
+
+## ⚠️ Disclaimer
+
+* This tool works by simulating keyboard input, similar to utilities like AutoHotkey.
+* MIDITap is designed for general MIDI-to-keystroke mapping and is not specifically developed for gaming.
+* While there are currently no known cases of account bans resulting from using this tool in games, some strict anti-cheat systems may be sensitive to third-party input software.
+* **Please review the rules of your specific game before use. By downloading this software, you assume all risks; the developer holds no responsibility for any consequences.**

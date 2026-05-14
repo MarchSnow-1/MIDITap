@@ -3,16 +3,6 @@
   // MIDITap 配置文件
   // MIDITap Config File
 
-  // 可指定 MIDI 端口，不填则使用第一个设备（0）
-  // You can specify a MIDI port; otherwise, the first device (0) will be used
-  // "port": 1,
-
-  // 左侧为 MIDI 编号，右侧为按键名称
-  // 完整按键名称列表请参阅 https://github.com/MarchSnow-1/MIDITap/guide/zh_cn.md
-
-  // Left side: MIDI Note Number | Right side: Key Name
-  // For a full list of supported key names, please refer to https://github.com/MarchSnow-1/MIDITap/guide/en_us.md
-
   // Example:
   // "48": "a",
   // "50": "s"

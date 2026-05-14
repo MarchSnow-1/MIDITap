@@ -27,6 +27,7 @@ const NL_EXTID = processInput.nlExtensionId;
 let input = null;
 const activeNotes = new Set();
 const activeNoteBindings = new Map();
+const activeVkCount = new Map();
 let noteMap = new Map();
 let currentConfigName = "mapping.json";
 let ws = null;
@@ -82,11 +83,12 @@ function closeInputPortSafely() {
 }
 
 function sendAllKeysUp() {
-  for (const [, binding] of activeNoteBindings.entries()) {
-    for (let i = binding.length - 1; i >= 0; i--) {
-      sendKey(binding[i], 0x0002);
+  for (const [vkCode, count] of activeVkCount.entries()) {
+    if (count > 0) {
+      sendKey(vkCode, 0x0002);
     }
   }
+  activeVkCount.clear();
   activeNoteBindings.clear();
   activeNotes.clear();
 }
@@ -141,7 +143,11 @@ function handleMidiMessage(deltaTime, message) {
 
   if (isNoteOn) {
     for (const vkCode of binding) {
-      sendKey(vkCode, 0);
+      const count = activeVkCount.get(vkCode) || 0;
+      if (count === 0) {
+        sendKey(vkCode, 0);
+      }
+      activeVkCount.set(vkCode, count + 1);
     }
     activeNoteBindings.set(note, binding);
     const keyLabel = binding
@@ -151,7 +157,17 @@ function handleMidiMessage(deltaTime, message) {
   } else {
     const activeBinding = activeNoteBindings.get(note) || binding;
     for (let i = activeBinding.length - 1; i >= 0; i--) {
-      sendKey(activeBinding[i], 0x0002);
+      const vkCode = activeBinding[i];
+      const count = activeVkCount.get(vkCode) || 0;
+      if (count > 0) {
+        const newCount = count - 1;
+        if (newCount === 0) {
+          sendKey(vkCode, 0x0002);
+          activeVkCount.delete(vkCode);
+        } else {
+          activeVkCount.set(vkCode, newCount);
+        }
+      }
     }
     activeNoteBindings.delete(note);
     broadcast("midiNoteOff", { note });

@@ -21,6 +21,6 @@ dist/
 # NeutralinoJS
 .storage/
 .tmp/
-neutralinojs.log
+bin/
 
 .claude
