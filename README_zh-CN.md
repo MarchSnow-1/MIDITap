@@ -1,15 +1,23 @@
 <div align="center">
+  <h1 align="center">
+    <img src="resources/icons/appIcon.png" width="128" alt="icon"/>
+    <br/>
+    MIDITap
+  </h1> 
+  
+  <p>
+    使用 <a href="https://nodejs.org">Node.js</a> 开发，将 MIDI 键盘输入实时映射为键盘按键的轻量级工具
+  </p>
 
-# MIDITap
+<!-- Badges -->
 
+![Platform](https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge)
 ![GitHub Release](https://img.shields.io/github/v/release/MarchSnow-1/MIDITap?style=for-the-badge)
-![GitHub Last Commit](https://img.shields.io/github/last-commit/MarchSnow-1/MIDITap?style=for-the-badge)
 ![GitHub Repo stars](https://img.shields.io/github/stars/MarchSnow-1/MIDITap?style=for-the-badge)
+![GitHub Last Commit](https://img.shields.io/github/last-commit/MarchSnow-1/MIDITap?style=for-the-badge)
 [![Total Download](https://img.shields.io/github/downloads/MarchSnow-1/MIDITap/total?style=for-the-badge)](https://github.com/MarchSnow-1/MIDITap/releases)
 
-将 MIDI 键盘输入实时映射为键盘按键的轻量级工具
-
-[简体中文](README.md) | [English](README_EN.md)
+[English](README.md) | [简体中文](README_zh-CN.md)
 
 </div>
 

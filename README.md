@@ -1,14 +1,21 @@
 <div align="center">
+  <h1 align="center">
+    <img src="resources/icons/appIcon.png" width="128" alt="icon"/>
+    <br/>
+    MIDITap
+  </h1> 
+  
+  <p>
+    A lightweight tool to map MIDI keyboard input to keystrokes in real-time, developed in <a href="https://nodejs.org">Node.js</a>
+  </p>
 
-# MIDITap
+<!-- Badges -->
 
+![Platform](https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge)
 ![GitHub Release](https://img.shields.io/github/v/release/MarchSnow-1/MIDITap?style=for-the-badge)
-![GitHub Last Commit](https://img.shields.io/github/last-commit/MarchSnow-1/MIDITap?style=for-the-badge)
 ![GitHub Repo stars](https://img.shields.io/github/stars/MarchSnow-1/MIDITap?style=for-the-badge)
+![GitHub Last Commit](https://img.shields.io/github/last-commit/MarchSnow-1/MIDITap?style=for-the-badge)
 [![Total Download](https://img.shields.io/github/downloads/MarchSnow-1/MIDITap/total?style=for-the-badge)](https://github.com/MarchSnow-1/MIDITap/releases)
-
-Effortless MIDI Device Mapping
-A lightweight tool to map MIDI keyboard input to keystrokes in real-time.
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 
