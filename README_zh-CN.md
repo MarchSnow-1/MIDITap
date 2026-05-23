@@ -118,7 +118,7 @@ MIDITap 是一个调用 Windows 原生 API 的低延迟 MIDI → 键盘映射工
 | 功能 | `f1` `f2` `f3` `f4` `f5` `f6` `f7` `f8` `f9` `f10` `f11` `f12` `f13` `f14` `f15` `f16` `f17` `f18` `f19` `f20` `f21` `f22` `f23` `f24` |
 | 控制 | `enter` `space` `tab` `backspace` `shift` `ctrl` `alt` `escape` (别名 `esc`) `capslock` `pause` |
 | 导航 | `up` `down` `left` `right` `home` `end` `pageup` `pagedown` `insert` `delete` |
-| 修饰键（左右） | `lshift` `rshift` `lctrl` `rctrl` `lalt` `ralt` `lwin` `rwin` |
+| 修饰键（左右） | `lshift` `rshift` `lctrl` `rctrl` `lalt` `ralt` `lwin` `rwin` `win` (等同于 `lwin`) |
 | 小键盘 | `num0` `num1` `num2` `num3` `num4` `num5` `num6` `num7` `num8` `num9` `numlock` `add` `subtract` `multiply` `divide` `decimal` `separator` |
 | 系统 | `printscreen` `scrolllock` `apps` |
 | 媒体 | `mute` `volumedown` `volumeup` `nexttrack` `prevtrack` `stop` `playpause` |

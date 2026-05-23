@@ -117,7 +117,7 @@ Config files are stored in the `config/` directory in JSON5 format (comments and
 | Function | `f1` `f2` `f3` `f4` `f5` `f6` `f7` `f8` `f9` `f10` `f11` `f12` `f13` `f14` `f15` `f16` `f17` `f18` `f19` `f20` `f21` `f22` `f23` `f24` |
 | Control | `enter` `space` `tab` `backspace` `shift` `ctrl` `alt` `escape` (alias `esc`) `capslock` `pause` |
 | Navigation | `up` `down` `left` `right` `home` `end` `pageup` `pagedown` `insert` `delete` |
-| Modifiers (L/R) | `lshift` `rshift` `lctrl` `rctrl` `lalt` `ralt` `lwin` `rwin` |
+| Modifiers (L/R) | `lshift` `rshift` `lctrl` `rctrl` `lalt` `ralt` `lwin` `rwin` `win` (same as `lwin`) |
 | Numpad | `num0` `num1` `num2` `num3` `num4` `num5` `num6` `num7` `num8` `num9` `numlock` `add` `subtract` `multiply` `divide` `decimal` `separator` |
 | System | `printscreen` `scrolllock` `apps` |
 | Media | `mute` `volumedown` `volumeup` `nexttrack` `prevtrack` `stop` `playpause` |
