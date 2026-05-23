@@ -884,8 +884,57 @@ button:hover {
   width: 100%;
 }
 
-.edit-add-form button {
-  align-self: flex-start;
+.key-mode-wrap {
+  background: rgba(16, 22, 30, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.key-mode-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.key-mode-tab {
+  flex: 1;
+  border-radius: 7px;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.key-mode-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: none;
+}
+
+.key-mode-tab.active {
+  background: rgba(56, 214, 208, 0.15);
+  color: var(--accent);
+  border-color: rgba(56, 214, 208, 0.3);
+  font-weight: 600;
+}
+
+.btn-add-mapping {
+  width: 100%;
+  background: rgba(56, 214, 208, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(56, 214, 208, 0.22);
+  margin-top: 2px;
+}
+
+.btn-add-mapping:hover {
+  background: rgba(56, 214, 208, 0.18);
+  transform: none;
 }
 
 .edit-mapping-scroll {

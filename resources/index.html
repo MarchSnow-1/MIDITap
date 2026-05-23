@@ -143,20 +143,20 @@
                     </div>
                   </div>
                   <div class="field">
-                    <span class="field-label" data-i18n="edit.addMapping.key">Single Key</span>
-                    <div class="row">
-                      <input id="newKeyInput" type="text" readonly placeholder="Click then press a key">
-                      <button id="clearKeyBtn" type="button" class="btn-clear" data-i18n="edit.clear">Clear</button>
+                    <span class="field-label" data-i18n="edit.addMapping.outputKey">Output Key</span>
+                    <div class="key-mode-wrap">
+                      <div class="key-mode-tabs">
+                        <button id="keyModeTabSingle" type="button" class="key-mode-tab active" data-i18n="edit.addMapping.key">Single Key</button>
+                        <button id="keyModeTabCombo" type="button" class="key-mode-tab" data-i18n="edit.addMapping.combo">Combo Key</button>
+                      </div>
+                      <div class="row">
+                        <input id="newKeyInput" type="text" readonly placeholder="Click then press a key">
+                        <input id="newComboInput" type="text" readonly placeholder="Click then press keys in sequence" style="display:none">
+                        <button id="clearKeyBtn" type="button" class="btn-clear" data-i18n="edit.clear">Clear</button>
+                      </div>
                     </div>
                   </div>
-                  <div class="field">
-                    <span class="field-label" data-i18n="edit.addMapping.combo">Combo Key</span>
-                    <div class="row">
-                      <input id="newComboInput" type="text" readonly placeholder="Click then press keys in sequence">
-                      <button id="clearComboBtn" type="button" class="btn-clear" data-i18n="edit.clear">Clear</button>
-                    </div>
-                  </div>
-                  <button id="addMappingBtn" type="button" data-i18n="edit.addMapping.add">Add</button>
+                  <button id="addMappingBtn" type="button" class="btn-add-mapping" data-i18n="edit.addMapping.add">Add</button>
                 </div>
               </div>
               <div class="edit-panel edit-mappings">
