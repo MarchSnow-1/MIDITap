@@ -67,11 +67,11 @@ The interface has three tabs: **Home**, **Configs**, and **Log**.
 - **Refresh**: Reload the configuration file list.
 - **Browse**: Open the folder containing configuration files.
 - **Config Name**: Edit the display name shown in the UI.
-- **Add Mapping**: Three input capture methods —
-  - **MIDI Note**: Click the input and play a MIDI key to auto-fill the note number.
-  - **Single Key**: Click the input and press a keyboard key (a / enter / f1 etc.).
-  - **Combo Key**: Click the input and press multiple keys in sequence (e.g. ctrl+shift+escape).
-  - Single Key and Combo Key are mutually exclusive; the last focused one takes effect.
+- **Add Mapping**:
+  - **MIDI Note**: Click the input and play a MIDI key to auto-fill the note number. (Requires a MIDI device selected)
+  - **Output Key**: Use the tab switcher to choose capture mode
+    - **Single Key**: Click the input and press a single key (a / enter / f1 etc.) to auto-fill.
+    - **Combo Key**: Click the input and press each key in sequence (e.g. ctrl, shift, escape) to build a combo.
   - Click **Add** to create the mapping.
 - **Current Mappings**: Displays all mappings in the current config. Click `×` to delete.
 
