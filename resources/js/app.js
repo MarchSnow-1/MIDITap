@@ -827,6 +827,11 @@ function registerEvents() {
   Neutralino.events.on("midiLog", function (evt) {
     addLog(evt.detail.message, "log-info", "[CLI]");
   });
+
+  Neutralino.events.on("updateAvailable", function (evt) {
+    var data = evt.detail;
+    showUpdateNotification(data);
+  });
 }
 
 // Custom select toggle / close logic
@@ -1091,6 +1096,38 @@ function initTabs() {
 
   switchTab("home");
   syncTabWidths();
+}
+
+// Update notification
+function showUpdateNotification(data) {
+  // Prevent duplicate notifications
+  if (document.getElementById("updateBanner")) return;
+
+  var banner = document.createElement("div");
+  banner.id = "updateBanner";
+  banner.className = "update-banner";
+  banner.innerHTML =
+    '<div class="update-banner-content">' +
+    '<svg class="update-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">' +
+    '<circle cx="12" cy="12" r="10"/>' +
+    '<path d="M12 16v-4M12 8h.01"/>' +
+    '</svg>' +
+    '<span class="update-text">' +
+    esc(t("update.available", { latest: data.latest, current: data.current })) +
+    '<br>' + esc(t("update.action")) +
+    '<br><a href="' + esc(data.url) + '" class="update-link" target="_blank">GitHub Releases</a>' +
+    '</span>' +
+    '<button class="update-dismiss" id="updateDismissBtn" title="' + esc(t("update.dismiss")) + '">' +
+    '<img src="icons/cross.svg" alt="" width="16" height="16" draggable="false">' +
+    '</button>' +
+    '</div>';
+  document.body.appendChild(banner);
+
+  document.getElementById("updateDismissBtn").addEventListener("click", function () {
+    banner.remove();
+  });
+
+  addLog(t("update.available", { latest: data.latest, current: data.current }), "log-warn", "[UPD]");
 }
 
 // Init

@@ -57,5 +57,8 @@
     "log.fileDialogUnavailable": "File dialog not available: {message}",
     "log.apiUnavailable": "NeutralinoJS API not available",
     "log.backendReady": "MIDITap backend ready. Node.js {version}",
+    "update.available": "New version {latest} is available! (current: {current})",
+    "update.action": "Please manually download and update from GitHub",
+    "update.dismiss": "Dismiss",
     "dialog.pickConfig": "Select Config File"
 }
