@@ -6,7 +6,7 @@ const { exec } = require("child_process");
 const WebSocket = require("ws");
 const midi = require("midi");
 const path = require("path");
-const { loadConfig, listConfigFiles, renameConfigFile, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
+const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
 const { sendKey, getKeyName } = require("../../libs/keyboard");
 
 // Read connection parameters from stdin (official NeutralinoJS extension protocol)
@@ -353,6 +353,121 @@ function handleOpenConfigDir() {
   openDirectory(path.join(baseDir, "config"));
 }
 
+let captureInput = null;
+let captureResolve = null;
+
+function handleCaptureNote(data) {
+  const portIndex = typeof data.port === "number" ? data.port : 0;
+  const configPath = data.configPath || null;
+
+  // If already monitoring, just use that — tell frontend to listen
+  if (input) {
+    broadcast("midiCaptureReady", {});
+    return;
+  }
+
+  // If we already have a capture input, close it first
+  if (captureInput) {
+    try { captureInput.closePort(); } catch {}
+    captureInput = null;
+    captureResolve = null;
+  }
+
+  try {
+    captureInput = new midi.Input();
+  } catch (err) {
+    broadcast("midiError", { message: "Capture error: " + err.message });
+    captureInput = null;
+    return;
+  }
+
+  const portCount = captureInput.getPortCount();
+  if (portCount === 0) {
+    broadcast("midiError", { message: "No MIDI devices found" });
+    captureInput = null;
+    return;
+  }
+
+  if (portIndex >= portCount) {
+    broadcast("midiError", { message: "Port " + portIndex + " not found" });
+    captureInput = null;
+    return;
+  }
+
+  try {
+    captureInput.openPort(portIndex);
+    captureInput.ignoreTypes(true, true, true);
+    captureInput.on("message", function (deltaTime, message) {
+      const status = message[0] & 0xf0;
+      const note = message[1];
+      if (status === 0x90 && message[2] > 0) {
+        broadcast("midiNoteCaptured", { note });
+        // Close after capture
+        try { captureInput.closePort(); } catch {}
+        captureInput = null;
+        captureResolve = null;
+      }
+    });
+    broadcast("midiCaptureReady", {});
+  } catch (err) {
+    broadcast("midiError", { message: "Failed to open port for capture: " + err.message });
+    captureInput = null;
+  }
+}
+
+function handleStopCapture() {
+  if (captureInput) {
+    try { captureInput.closePort(); } catch {}
+    captureInput = null;
+    captureResolve = null;
+  }
+}
+
+function handleAddMapping(data) {
+  const baseDir = path.join(__dirname, "..", "..");
+  const note = String(data.note || "0");
+  const key = String(data.key || "");
+  if (!note || !key) {
+    broadcast("midiError", { message: "addMapping requires note and key" });
+    return;
+  }
+
+  // Determine which config file to write to
+  let configFilename = data.filename || "mapping.json";
+  if (!configFilename.endsWith(".json")) configFilename += ".json";
+  const configPath = data.configPath || path.join(baseDir, "config", configFilename);
+
+  const ok = addMappingToConfig(baseDir, configPath, note, key);
+  if (ok) {
+    // Reload config into memory
+    const configResult = loadConfig(baseDir, {
+      verbose: false,
+      silent: true,
+      configPath,
+    });
+    if (configResult) {
+      noteMap = configResult.noteMap;
+      currentConfigName = configResult.name;
+      const mapping = {};
+      noteMap.forEach(function (vkCodes, n) {
+        mapping[n] = vkCodes
+          .map(function (vk) { return getKeyName(vk) || "0x" + vk.toString(16).toUpperCase(); })
+          .join("+");
+      });
+      broadcast("configLoaded", {
+        path: configResult.configPath,
+        filename: path.basename(configResult.configPath),
+        name: configResult.name,
+        noteCount: noteMap.size,
+        mapping,
+      });
+    }
+    broadcast("midiLog", { message: "Mapping added: note " + note + " → " + key });
+  } else {
+    broadcast("midiError", { message: "Failed to save mapping to config file" });
+  }
+}
+
 // Process events from frontend
 function handleEvent(event, data) {
   switch (event) {
@@ -376,6 +491,15 @@ function handleEvent(event, data) {
       break;
     case "openConfigDir":
       handleOpenConfigDir();
+      break;
+    case "addMapping":
+      handleAddMapping(data || {});
+      break;
+    case "captureNote":
+      handleCaptureNote(data || {});
+      break;
+    case "stopCapture":
+      handleStopCapture();
       break;
     case "getStatus":
       broadcast("midiLog", {
