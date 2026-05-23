@@ -8,6 +8,14 @@ const midi = require("midi");
 const path = require("path");
 const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
 const { sendKey, getKeyName } = require("../../libs/keyboard");
+const { checkForUpdates } = require("../../libs/updater");
+
+const APP_VERSION = (() => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8"));
+    return pkg.version || "0.0.0";
+  } catch { return "0.0.0"; }
+})();
 
 // Read connection parameters from stdin (official NeutralinoJS extension protocol)
 let processInput;
@@ -22,6 +30,9 @@ const NL_PORT = processInput.nlPort;
 const NL_TOKEN = processInput.nlToken;
 const NL_CTOKEN = processInput.nlConnectToken;
 const NL_EXTID = processInput.nlExtensionId;
+
+console.log("[" + NL_EXTID + "]: Starting MIDITap backend v" + APP_VERSION + " (Node.js " + process.version + ", " + process.platform + " " + process.arch + ")");
+console.log("[" + NL_EXTID + "]: Extension config loaded — nlPort=" + NL_PORT + " nlExtensionId=" + NL_EXTID);
 
 // State
 let input = null;
@@ -176,6 +187,7 @@ function handleMidiMessage(deltaTime, message) {
 
 // Command handlers
 function handleListPorts() {
+  console.log("[" + NL_EXTID + "]: Handling listPorts command");
   try {
     const listInput = new midi.Input();
     const portCount = listInput.getPortCount();
@@ -183,16 +195,19 @@ function handleListPorts() {
     for (let i = 0; i < portCount; i++) {
       ports.push({ index: i, name: listInput.getPortName(i) });
     }
+    console.log("[" + NL_EXTID + "]: Found " + portCount + " MIDI port(s)");
     broadcast("midiPorts", { ports });
   } catch (err) {
+    console.error("[" + NL_EXTID + "]: listPorts error: " + err.message);
     broadcast("midiError", { message: "MIDI error: " + err.message });
     broadcast("midiPorts", { ports: [] });
   }
 }
 
 function handleStart(data) {
-  stopMonitoring();
   const portIndex = typeof data.port === "number" ? data.port : 0;
+  console.log("[" + NL_EXTID + "]: Handling start command — port=" + portIndex + " configPath=" + (data.configPath || "(none)"));
+  stopMonitoring();
 
   // Load config if provided
   if (data.configPath) {
@@ -201,6 +216,7 @@ function handleStart(data) {
     if (!path.isAbsolute(resolvedPath)) {
       resolvedPath = path.resolve(baseDir, resolvedPath);
     }
+    console.log("[" + NL_EXTID + "]: Loading config from path: " + resolvedPath);
     const configResult = loadConfig(baseDir, {
       verbose: false,
       silent: true,
@@ -210,6 +226,7 @@ function handleStart(data) {
       saveLastConfigPath(baseDir, configResult.configPath);
       noteMap = configResult.noteMap;
       currentConfigName = configResult.name;
+      console.log("[" + NL_EXTID + "]: Config loaded — name=" + configResult.name + " mappings=" + noteMap.size);
       const mapping = {};
       noteMap.forEach((vkCodes, note) => {
         mapping[note] = vkCodes
@@ -229,6 +246,7 @@ function handleStart(data) {
   try {
     input = new midi.Input();
   } catch (err) {
+    console.error("[" + NL_EXTID + "]: Failed to create MIDI input: " + err.message);
     broadcast("midiError", { message: "MIDI error: " + err.message });
     input = null;
     return;
@@ -236,12 +254,14 @@ function handleStart(data) {
 
   const portCount = input.getPortCount();
   if (portCount === 0) {
+    console.warn("[" + NL_EXTID + "]: No MIDI devices found");
     broadcast("midiError", { message: "No MIDI devices found" });
     input = null;
     return;
   }
 
   if (portIndex >= portCount) {
+    console.warn("[" + NL_EXTID + "]: Port " + portIndex + " not found (available: 0-" + (portCount - 1) + ")");
     broadcast("midiError", {
       message: "Port " + portIndex + " not found (available: 0-" + (portCount - 1) + ")",
     });
@@ -253,28 +273,36 @@ function handleStart(data) {
     input.openPort(portIndex);
     input.ignoreTypes(true, true, true);
     input.on("message", handleMidiMessage);
+    const portName = input.getPortName(portIndex);
+    console.log("[" + NL_EXTID + "]: MIDI monitoring started — port=" + portIndex + " name=" + portName + " mappings=" + noteMap.size);
     broadcast("midiStarted", {
       port: portIndex,
-      portName: input.getPortName(portIndex),
+      portName: portName,
     });
   } catch (err) {
+    console.error("[" + NL_EXTID + "]: Failed to open port " + portIndex + ": " + err.message);
     broadcast("midiError", { message: "Failed to open port: " + err.message });
     input = null;
   }
 }
 
 function handleStop() {
+  console.log("[" + NL_EXTID + "]: Handling stop command");
   stopMonitoring();
   broadcast("midiStopped", {});
 }
 
 function handleLoadConfig(data) {
+  console.log("[" + NL_EXTID + "]: Handling loadConfig command — requested path=" + (data.path || "(none)"));
   const baseDir = path.join(__dirname, "..", "..");
   let resolvedPath = data.path || null;
 
   // 未指定路径时，优先恢复上次使用的配置文件
   if (!resolvedPath) {
     resolvedPath = getLastConfigPath(baseDir);
+    if (resolvedPath) {
+      console.log("[" + NL_EXTID + "]: Restoring last config: " + resolvedPath);
+    }
   }
   if (resolvedPath && !path.isAbsolute(resolvedPath)) {
     resolvedPath = path.resolve(baseDir, resolvedPath);
@@ -287,6 +315,7 @@ function handleLoadConfig(data) {
   });
 
   if (!configResult) {
+    console.warn("[" + NL_EXTID + "]: Failed to load config: " + (data.path || "default"));
     broadcast("midiError", {
       message: "Failed to load config: " + (data.path || "default"),
     });
@@ -297,6 +326,7 @@ function handleLoadConfig(data) {
 
   noteMap = configResult.noteMap;
   currentConfigName = configResult.name;
+  console.log("[" + NL_EXTID + "]: Config loaded — name=" + configResult.name + " file=" + path.basename(configResult.configPath) + " mappings=" + noteMap.size);
   const mapping = {};
   noteMap.forEach((vkCodes, note) => {
     mapping[note] = vkCodes
@@ -428,6 +458,7 @@ function handleAddMapping(data) {
   const note = String(data.note || "0");
   const key = String(data.key || "");
   if (!note || !key) {
+    console.warn("[" + NL_EXTID + "]: addMapping missing fields — note=" + note + " key=" + key);
     broadcast("midiError", { message: "addMapping requires note and key" });
     return;
   }
@@ -437,6 +468,7 @@ function handleAddMapping(data) {
   if (!configFilename.endsWith(".json")) configFilename += ".json";
   const configPath = data.configPath || path.join(baseDir, "config", configFilename);
 
+  console.log("[" + NL_EXTID + "]: addMapping — note=" + note + " key=" + key + " config=" + path.basename(configPath));
   const ok = addMappingToConfig(baseDir, configPath, note, key);
   if (ok) {
     // Reload config into memory
@@ -502,6 +534,7 @@ function handleEvent(event, data) {
       handleStopCapture();
       break;
     case "getStatus":
+      console.log("[" + NL_EXTID + "]: Received getStatus — backend ready");
       broadcast("midiLog", {
         message: "MIDITap backend ready. Node.js " + process.version,
       });
@@ -521,7 +554,20 @@ function connect() {
   ws.on("open", () => {
     const baseDir = path.join(__dirname, "..", "..");
     ensureConfigDir(baseDir);
-    console.log("[" + NL_EXTID + "]: Connected to NeutralinoJS server");
+    console.log("[" + NL_EXTID + "]: Connected to NeutralinoJS server at ws://127.0.0.1:" + NL_PORT);
+
+    // Check for updates (non-blocking)
+    checkForUpdates(APP_VERSION).then((updateInfo) => {
+      if (updateInfo) {
+        console.log("[" + NL_EXTID + "]: Update available — latest=" + updateInfo.latest + " current=" + APP_VERSION);
+        broadcast("updateAvailable", updateInfo);
+      } else {
+        console.log("[" + NL_EXTID + "]: No updates available (current=" + APP_VERSION + ")");
+      }
+    }).catch((err) => {
+      console.warn("[" + NL_EXTID + "]: Update check failed: " + err.message);
+    });
+
     broadcast("midiLog", {
       message: "MIDITap backend ready. Node.js " + process.version,
     });
@@ -540,12 +586,14 @@ function connect() {
   });
 
   ws.on("close", () => {
+    console.log("[" + NL_EXTID + "]: WebSocket closed, shutting down");
     stopMonitoring();
     broadcast("midiLog", { message: "Backend disconnected" });
     process.exit(0);
   });
 
   ws.on("error", (err) => {
+    console.error("[" + NL_EXTID + "]: WebSocket error: " + err.message);
     stopMonitoring();
     broadcast("midiError", { message: "Connection error: " + err.message });
     process.exit(1);
@@ -554,11 +602,13 @@ function connect() {
 
 // Handle shutdown
 process.on("SIGINT", () => {
+  console.log("[" + NL_EXTID + "]: Received SIGINT, shutting down");
   stopMonitoring();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
+  console.log("[" + NL_EXTID + "]: Received SIGTERM, shutting down");
   stopMonitoring();
   process.exit(0);
 });
