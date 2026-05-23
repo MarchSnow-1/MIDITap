@@ -62,6 +62,7 @@ jobs:
           mkdir pkg\win_x64
           copy dist\MIDITap\MIDITap-win_x64.exe pkg\win_x64\MIDITap.exe
           copy dist\MIDITap\resources.neu pkg\win_x64\
+          copy package.json pkg\win_x64\
           xcopy /E /I dist\MIDITap\extensions pkg\win_x64\extensions
           xcopy /E /I libs pkg\win_x64\libs
           xcopy /E /I node_modules pkg\win_x64\node_modules

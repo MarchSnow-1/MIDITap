@@ -63,6 +63,7 @@
   },
   "applicationIcon": "resources/icons/appIcon.png",
   "cli": {
+    "copyItems": ["/package.json"],
     "binaryName": "MIDITap",
     "resourcesPath": "/resources/",
     "extensionsPath": "/extensions/",
