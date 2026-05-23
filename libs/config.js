@@ -243,4 +243,47 @@ function saveLastConfigPath(baseDir, configPath) {
   fs.writeFileSync(path.join(storageDir, 'last_config'), configPath, 'utf8');
 }
 
-module.exports = { loadConfig, listConfigFiles, renameConfigFile, ensureConfigDir, getLastConfigPath, saveLastConfigPath };
+// 向配置文件中添加或更新一个映射条目，保留原有注释和格式
+function addMappingToConfig(baseDir, configPath, note, key) {
+  const resolvedPath = path.isAbsolute(configPath)
+    ? configPath
+    : path.join(baseDir, 'config', configPath);
+  if (!fs.existsSync(resolvedPath)) return false;
+  try {
+    let content = fs.readFileSync(resolvedPath, 'utf8');
+    const escapedKey = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const noteStr = String(note);
+    const noteEntryPattern = new RegExp(
+      '("' + noteStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"\\s*:\\s*)"[^"]*"',
+      'g'
+    );
+
+    // If note already exists, replace its value in-place
+    if (noteEntryPattern.test(content)) {
+      content = content.replace(noteEntryPattern, '$1"' + escapedKey + '"');
+      fs.writeFileSync(resolvedPath, content, 'utf8');
+      return true;
+    }
+
+    // Append new mapping before the closing }
+    const insertion = '"' + noteStr + '": "' + escapedKey + '"';
+    const lastBrace = content.lastIndexOf('}');
+    const beforeBrace = content.slice(0, lastBrace);
+    const trimmed = beforeBrace.trimEnd();
+    const needsComma = trimmed.length > 0 && !trimmed.endsWith(',') && trimmed[trimmed.length - 1] !== '{';
+    const indentMatch = content.match(/\n(\s*)\}\s*$/);
+    const indent = indentMatch ? '\n' + indentMatch[1] : '\n  ';
+    const comma = needsComma ? ',' : '';
+    content = content.slice(0, lastBrace).trimEnd() + comma + indent + insertion + '\n' + (indentMatch ? indentMatch[1] || '  ' : '  ') + '}';
+    if (indentMatch) {
+      content += '\n';
+    }
+
+    fs.writeFileSync(resolvedPath, content, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath };
