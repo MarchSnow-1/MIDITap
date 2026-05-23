@@ -777,6 +777,16 @@ function registerEvents() {
     clearActiveNotes();
   });
 
+  Neutralino.events.on("midiNoteCaptured", function (evt) {
+    var data = evt.detail;
+    if (captureActive && elements.newNoteInput) {
+      elements.newNoteInput.value = String(data.note);
+      elements.newNoteInput.placeholder = "0–127";
+      captureActive = false;
+      elements.newNoteInput.blur();
+    }
+  });
+
   Neutralino.events.on("midiNoteOn", function (evt) {
     var data = evt.detail;
     activeNotesMap.set(data.note, data.key || "unbound");
@@ -852,6 +862,13 @@ elements.startStop.addEventListener("click", toggleStartStop);
 if (elements.editRefreshConfigs) {
   elements.editRefreshConfigs.addEventListener("click", function () {
     sendCommand("listConfigs");
+    if (currentConfigFilename && elements.editConfigMenu) {
+      var btn = elements.editConfigMenu.querySelector(".custom-option[data-filename=\"" + currentConfigFilename + "\"]");
+      var configPath = btn ? btn.dataset.path : null;
+      if (configPath) {
+        sendCommand("loadConfig", { path: configPath });
+      }
+    }
   });
 }
 if (elements.editPickConfig) {
@@ -871,15 +888,27 @@ if (elements.editRenameConfigBtn) {
 
 // Edit tab: add mapping — capture next key press
 var listeningForNote = false;
+var captureActive = false;
 var keyCaptureHandler = null;
 
 if (elements.newNoteInput) {
   elements.newNoteInput.addEventListener("focus", function () {
-    listeningForNote = true;
-    elements.newNoteInput.placeholder = "Play a MIDI note...";
+    if (isRunning) {
+      listeningForNote = true;
+      elements.newNoteInput.placeholder = "Play a MIDI note...";
+    } else {
+      captureActive = true;
+      elements.newNoteInput.placeholder = "Play a MIDI note...";
+      var capPort = selectedPortIndex >= 0 ? selectedPortIndex : 0;
+      sendCommand("captureNote", { port: capPort });
+    }
   });
   elements.newNoteInput.addEventListener("blur", function () {
     listeningForNote = false;
+    if (captureActive) {
+      captureActive = false;
+      sendCommand("stopCapture");
+    }
     elements.newNoteInput.placeholder = "0–127";
   });
 }
@@ -979,7 +1008,17 @@ if (elements.addMappingBtn) {
       addLog("MIDI Note must be 0–127", "log-warn");
       return;
     }
-    sendCommand("addMapping", { note: String(noteNum), key: keyValue });
+    var configPath = null;
+    if (currentConfigFilename && elements.editConfigMenu) {
+      var btn = elements.editConfigMenu.querySelector(".custom-option[data-filename=\"" + currentConfigFilename + "\"]");
+      configPath = btn ? btn.dataset.path : null;
+    }
+    sendCommand("addMapping", {
+      note: String(noteNum),
+      key: keyValue,
+      filename: currentConfigFilename,
+      configPath: configPath
+    });
     currentMapping.set(String(noteNum), keyValue);
     renderEditMappingList();
     elements.newNoteInput.value = "";
