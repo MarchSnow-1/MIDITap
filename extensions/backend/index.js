@@ -384,7 +384,6 @@ function handleOpenConfigDir() {
 }
 
 let captureInput = null;
-let captureResolve = null;
 
 function handleCaptureNote(data) {
   const portIndex = typeof data.port === "number" ? data.port : 0;
@@ -400,7 +399,6 @@ function handleCaptureNote(data) {
   if (captureInput) {
     try { captureInput.closePort(); } catch {}
     captureInput = null;
-    captureResolve = null;
   }
 
   try {
@@ -435,7 +433,6 @@ function handleCaptureNote(data) {
         // Close after capture
         try { captureInput.closePort(); } catch {}
         captureInput = null;
-        captureResolve = null;
       }
     });
     broadcast("midiCaptureReady", {});
@@ -449,7 +446,6 @@ function handleStopCapture() {
   if (captureInput) {
     try { captureInput.closePort(); } catch {}
     captureInput = null;
-    captureResolve = null;
   }
 }
 
@@ -535,9 +531,7 @@ function handleEvent(event, data) {
       break;
     case "getStatus":
       console.log("[" + NL_EXTID + "]: Received getStatus — backend ready");
-      broadcast("midiLog", {
-        message: "MIDITap backend ready. Node.js " + process.version,
-      });
+      broadcast("backendReady", { version: process.version });
       break;
     default:
       // Internal NeutralinoJS events (appClientConnect, windowBlur, etc.) — silently ignore
@@ -568,9 +562,7 @@ function connect() {
       console.warn("[" + NL_EXTID + "]: Update check failed: " + err.message);
     });
 
-    broadcast("midiLog", {
-      message: "MIDITap backend ready. Node.js " + process.version,
-    });
+    broadcast("backendReady", { version: process.version });
   });
 
   ws.on("message", (raw) => {

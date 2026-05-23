@@ -25,9 +25,10 @@ const elements = {
   newNoteInput: document.getElementById("newNoteInput"),
   clearNoteBtn: document.getElementById("clearNoteBtn"),
   newKeyInput: document.getElementById("newKeyInput"),
-  clearKeyBtn: document.getElementById("clearKeyBtn"),
   newComboInput: document.getElementById("newComboInput"),
-  clearComboBtn: document.getElementById("clearComboBtn"),
+  clearKeyBtn: document.getElementById("clearKeyBtn"),
+  keyModeTabSingle: document.getElementById("keyModeTabSingle"),
+  keyModeTabCombo: document.getElementById("keyModeTabCombo"),
   addMappingBtn: document.getElementById("addMappingBtn"),
   editMappingList: document.getElementById("editMappingList")
 };
@@ -719,6 +720,10 @@ function toggleStartStop() {
 
 // Register all event listeners from extension
 function registerEvents() {
+  Neutralino.events.on("backendReady", function (evt) {
+    addLog(t("log.backendReady", { version: evt.detail.version }), "log-system");
+  });
+
   Neutralino.events.on("midiPorts", function (evt) {
     var data = evt.detail;
     updatePortList(data.ports);
@@ -781,7 +786,7 @@ function registerEvents() {
     var data = evt.detail;
     if (captureActive && elements.newNoteInput) {
       elements.newNoteInput.value = String(data.note);
-      elements.newNoteInput.placeholder = "0–127";
+      elements.newNoteInput.placeholder = "Click then play a MIDI note";
       captureActive = false;
       elements.newNoteInput.blur();
     }
@@ -799,7 +804,7 @@ function registerEvents() {
     // Capture for edit tab "Add Mapping" note input
     if (listeningForNote && elements.newNoteInput) {
       elements.newNoteInput.value = String(data.note);
-      elements.newNoteInput.placeholder = "0–127";
+      elements.newNoteInput.placeholder = "Click then play a MIDI note";
       listeningForNote = false;
       elements.newNoteInput.blur();
     }
@@ -914,13 +919,43 @@ if (elements.newNoteInput) {
       captureActive = false;
       sendCommand("stopCapture");
     }
-    elements.newNoteInput.placeholder = "0–127";
+    elements.newNoteInput.placeholder = "Click then play a MIDI note";
   });
+}
+
+// Edit tab: key mode tab switcher
+var keyMode = "single"; // "single" | "combo"
+
+function setKeyModeTab(mode) {
+  keyMode = mode;
+  var isSingle = mode === "single";
+  elements.keyModeTabSingle.classList.toggle("active", isSingle);
+  elements.keyModeTabCombo.classList.toggle("active", !isSingle);
+  elements.newKeyInput.style.display = isSingle ? "" : "none";
+  elements.newComboInput.style.display = isSingle ? "none" : "";
+  // Clear both inputs on switch
+  elements.newKeyInput.value = "";
+  elements.newComboInput.value = "";
+  // Clean up any dangling capture handlers
+  if (keyCaptureHandler) {
+    document.removeEventListener("keydown", keyCaptureHandler, true);
+    keyCaptureHandler = null;
+  }
+  if (elements.newComboInput._cleanup) {
+    elements.newComboInput._cleanup();
+    elements.newComboInput._cleanup = null;
+  }
+}
+
+if (elements.keyModeTabSingle) {
+  elements.keyModeTabSingle.addEventListener("click", function () { setKeyModeTab("single"); });
+}
+if (elements.keyModeTabCombo) {
+  elements.keyModeTabCombo.addEventListener("click", function () { setKeyModeTab("combo"); });
 }
 
 if (elements.newKeyInput) {
   elements.newKeyInput.addEventListener("focus", function () {
-    if (elements.newComboInput) elements.newComboInput.value = "";
     elements.newKeyInput.placeholder = "Press a key...";
     keyCaptureHandler = function (e) {
       e.preventDefault();
@@ -936,7 +971,7 @@ if (elements.newKeyInput) {
     document.addEventListener("keydown", keyCaptureHandler, true);
   });
   elements.newKeyInput.addEventListener("blur", function () {
-    elements.newKeyInput.placeholder = "a–z, 0–9, F1–F12...";
+    elements.newKeyInput.placeholder = "Click then press a key";
     if (keyCaptureHandler) {
       document.removeEventListener("keydown", keyCaptureHandler, true);
       keyCaptureHandler = null;
@@ -944,16 +979,13 @@ if (elements.newKeyInput) {
   });
 }
 
-// Edit tab: combo key capture — every keydown appends, no undo/finish
 if (elements.newComboInput) {
   elements.newComboInput.addEventListener("focus", function () {
-    if (elements.newKeyInput) elements.newKeyInput.value = "";
     elements.newComboInput.placeholder = "Press keys...";
     var keydownHandler = function (e) {
       e.preventDefault();
       e.stopPropagation();
       var key = e.key;
-      // Normalize key name
       if (key === " ") key = "Space";
       else if (key === "Control") key = "ctrl";
       else if (key === "Shift") key = "shift";
@@ -982,14 +1014,10 @@ if (elements.newComboInput) {
   });
 }
 
-if (elements.clearComboBtn) {
-  elements.clearComboBtn.addEventListener("click", function () {
-    elements.newComboInput.value = "";
-  });
-}
 if (elements.clearKeyBtn) {
   elements.clearKeyBtn.addEventListener("click", function () {
     elements.newKeyInput.value = "";
+    elements.newComboInput.value = "";
   });
 }
 if (elements.clearNoteBtn) {
@@ -1001,9 +1029,9 @@ if (elements.clearNoteBtn) {
 if (elements.addMappingBtn) {
   elements.addMappingBtn.addEventListener("click", function () {
     var note = elements.newNoteInput.value.trim();
-    var key = elements.newKeyInput.value.trim();
-    var combo = elements.newComboInput ? elements.newComboInput.value.trim() : "";
-    var keyValue = combo || key;
+    var keyValue = keyMode === "combo"
+      ? (elements.newComboInput ? elements.newComboInput.value.trim() : "")
+      : elements.newKeyInput.value.trim();
     if (!note || !keyValue) {
       addLog("Please capture MIDI Note and a Key (single or combo)", "log-warn");
       return;
