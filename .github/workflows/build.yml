@@ -26,7 +26,7 @@ jobs:
           path: CHANGELOG.md
 
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: changelog
 
     steps:
