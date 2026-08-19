@@ -3,6 +3,169 @@ const path = require('path');
 const JSON5 = require('json5');
 const { VK } = require('./keyboard');
 
+function findRootObject(content) {
+  let quote = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+  let depth = 0;
+  let opening = -1;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    const next = content[i + 1];
+
+    if (lineComment) {
+      if (char === '\n' || char === '\r') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      lineComment = true;
+      i++;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      blockComment = true;
+      i++;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '{') {
+      if (depth === 0) opening = i;
+      depth++;
+    } else if (char === '}' && depth > 0 && --depth === 0) {
+      return { opening, closing: i };
+    }
+  }
+  return null;
+}
+
+function readStringEnd(content, start) {
+  const quote = content[start];
+  let escaped = false;
+  for (let i = start + 1; i < content.length; i++) {
+    if (escaped) {
+      escaped = false;
+    } else if (content[i] === '\\') {
+      escaped = true;
+    } else if (content[i] === quote) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function skipTrivia(content, start, limit) {
+  let i = start;
+  while (i < limit) {
+    if (/\s/.test(content[i])) {
+      i++;
+    } else if (content[i] === '/' && content[i + 1] === '/') {
+      const newline = content.indexOf('\n', i + 2);
+      i = newline === -1 ? limit : newline + 1;
+    } else if (content[i] === '/' && content[i + 1] === '*') {
+      const end = content.indexOf('*/', i + 2);
+      i = end === -1 ? limit : end + 2;
+    } else {
+      break;
+    }
+  }
+  return i;
+}
+
+function findTopLevelStringValue(content, propertyName, root) {
+  let objectDepth = 1;
+  let arrayDepth = 0;
+  for (let i = root.opening + 1; i < root.closing; i++) {
+    const char = content[i];
+    const next = content[i + 1];
+    if (char === '/' && next === '/') {
+      const newline = content.indexOf('\n', i + 2);
+      if (newline === -1) break;
+      i = newline;
+    } else if (char === '/' && next === '*') {
+      const end = content.indexOf('*/', i + 2);
+      if (end === -1) break;
+      i = end + 1;
+    } else if (char === '"' || char === "'") {
+      const stringEnd = readStringEnd(content, i);
+      if (stringEnd === -1) return null;
+      if (objectDepth === 1 && arrayDepth === 0) {
+        const colon = skipTrivia(content, stringEnd + 1, root.closing);
+        if (content[colon] === ':') {
+          let key;
+          try { key = JSON5.parse(content.slice(i, stringEnd + 1)); } catch { return null; }
+          const valueStart = skipTrivia(content, colon + 1, root.closing);
+          if (key === propertyName && (content[valueStart] === '"' || content[valueStart] === "'")) {
+            const valueEnd = readStringEnd(content, valueStart);
+            return valueEnd === -1 ? null : { start: valueStart, end: valueEnd + 1 };
+          }
+        }
+      }
+      i = stringEnd;
+    } else if (char === '{') {
+      objectDepth++;
+    } else if (char === '}') {
+      objectDepth--;
+    } else if (char === '[') {
+      arrayDepth++;
+    } else if (char === ']') {
+      arrayDepth--;
+    }
+  }
+  return null;
+}
+
+function insertRootProperty(content, root, propertyName, serializedValue) {
+  const lineBreak = content.includes('\r\n') ? '\r\n' : '\n';
+  const firstLineBreak = content.slice(root.opening + 1).match(/^(\r\n|\n|\r)/);
+  if (firstLineBreak) {
+    const insertAt = root.opening + 1 + firstLineBreak[0].length;
+    const indent = content.slice(insertAt).match(/^[\t ]*/)[0] || '  ';
+    return content.slice(0, insertAt) + indent + JSON.stringify(propertyName) + ': ' + serializedValue + ',' + lineBreak + content.slice(insertAt);
+  }
+  return content.slice(0, root.opening + 1) + lineBreak + '  ' + JSON.stringify(propertyName) + ': ' + serializedValue + ',' + lineBreak + content.slice(root.opening + 1);
+}
+
+function writeConfigFile(filePath, content) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, content, 'utf8');
+    fs.renameSync(tempPath, filePath);
+    return true;
+  } catch {
+    try { fs.unlinkSync(tempPath); } catch {}
+    return false;
+  }
+}
+
+function parseConfigObject(content) {
+  try {
+    const parsed = JSON5.parse(content);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function isPathInside(parentPath, targetPath) {
   const relative = path.relative(parentPath, targetPath);
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
@@ -211,15 +374,14 @@ function renameConfigFile(baseDir, filename, newName) {
   if (!configPath) return false;
   try {
     let content = fs.readFileSync(configPath, 'utf8');
-    const escapedName = newName.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const pattern = /("name"\s*:\s*)"[^"]*"/;
-    if (pattern.test(content)) {
-      content = content.replace(pattern, `$1"${escapedName}"`);
-    } else {
-      content = content.replace(/\{/, `{\n  "name": "${escapedName}",`);
-    }
-    fs.writeFileSync(configPath, content, 'utf8');
-    return true;
+    const root = findRootObject(content);
+    if (!parseConfigObject(content) || !root) return false;
+    const serializedName = JSON.stringify(String(newName));
+    const nameRange = findTopLevelStringValue(content, 'name', root);
+    content = nameRange
+      ? content.slice(0, nameRange.start) + serializedName + content.slice(nameRange.end)
+      : insertRootProperty(content, root, 'name', serializedName);
+    return writeConfigFile(configPath, content);
   } catch {
     return false;
   }
@@ -275,36 +437,15 @@ function addMappingToConfig(baseDir, configPath, note, key) {
   if (!resolvedPath) return false;
   try {
     let content = fs.readFileSync(resolvedPath, 'utf8');
-    const escapedKey = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const root = findRootObject(content);
+    if (!parseConfigObject(content) || !root) return false;
     const noteStr = String(note);
-    const noteEntryPattern = new RegExp(
-      '("' + noteStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"\\s*:\\s*)"[^"]*"',
-      'g'
-    );
-
-    // If note already exists, replace its value in-place
-    if (noteEntryPattern.test(content)) {
-      content = content.replace(noteEntryPattern, '$1"' + escapedKey + '"');
-      fs.writeFileSync(resolvedPath, content, 'utf8');
-      return true;
-    }
-
-    // Append new mapping before the closing }
-    const insertion = '"' + noteStr + '": "' + escapedKey + '"';
-    const lastBrace = content.lastIndexOf('}');
-    const beforeBrace = content.slice(0, lastBrace);
-    const trimmed = beforeBrace.trimEnd();
-    const needsComma = trimmed.length > 0 && !trimmed.endsWith(',') && trimmed[trimmed.length - 1] !== '{';
-    const indentMatch = content.match(/\n(\s*)\}\s*$/);
-    const indent = indentMatch ? '\n' + indentMatch[1] : '\n  ';
-    const comma = needsComma ? ',' : '';
-    content = content.slice(0, lastBrace).trimEnd() + comma + indent + insertion + '\n' + (indentMatch ? indentMatch[1] || '  ' : '  ') + '}';
-    if (indentMatch) {
-      content += '\n';
-    }
-
-    fs.writeFileSync(resolvedPath, content, 'utf8');
-    return true;
+    const serializedKey = JSON.stringify(String(key));
+    const valueRange = findTopLevelStringValue(content, noteStr, root);
+    content = valueRange
+      ? content.slice(0, valueRange.start) + serializedKey + content.slice(valueRange.end)
+      : insertRootProperty(content, root, noteStr, serializedKey);
+    return writeConfigFile(resolvedPath, content);
   } catch {
     return false;
   }
