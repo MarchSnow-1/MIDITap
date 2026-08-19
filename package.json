@@ -15,7 +15,7 @@
     "midi": "^2.0.0",
     "minimist": "^1.2.8",
     "semver": "^7.7.4",
-    "ws": "^8.20.0"
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "auto-changelog": "^2.5.0",

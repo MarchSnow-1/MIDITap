@@ -52,7 +52,7 @@ function connect(ctx, APP_VERSION, { handleEvent, stopMonitoring }) {
   const url =
     "ws://127.0.0.1:" + ctx.NL_PORT + "?extensionId=" + ctx.NL_EXTID + "&connectToken=" + ctx.NL_CTOKEN;
 
-  ctx.ws = new WebSocket(url);
+  ctx.ws = new WebSocket(url, { maxPayload: 10 * 1024 * 1024 });
 
   ctx.ws.on("open", () => {
     ensureConfigDir(ctx.baseDir);
