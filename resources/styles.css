@@ -1109,9 +1109,14 @@ button:hover {
 .update-link {
   display: inline-block;
   margin-top: 4px;
+  padding: 0;
+  background: none;
+  border: none;
   color: var(--accent);
   text-decoration: underline;
   word-break: break-all;
+  cursor: pointer;
+  font-size: inherit;
 }
 
 .update-link:hover { opacity: 0.8; }

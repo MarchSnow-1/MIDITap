@@ -1141,13 +1141,25 @@ function showUpdateNotification(data) {
     '<span class="update-text">' +
     esc(t("update.available", { latest: data.latest, current: data.current })) +
     '<br>' + esc(t("update.action")) +
-    '<br><a href="' + esc(data.url) + '" class="update-link" target="_blank">GitHub Releases</a>' +
+    '<br><button class="update-link" id="updateOpenBtn">GitHub Releases</button>' +
     '</span>' +
     '<button class="update-dismiss" id="updateDismissBtn" title="' + esc(t("update.dismiss")) + '">' +
     '<img src="icons/cross.svg" alt="" width="16" height="16" draggable="false">' +
     '</button>' +
     '</div>';
   document.body.appendChild(banner);
+
+  var releaseUrl = (typeof data.url === "string" && /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases/.test(data.url))
+    ? data.url : null;
+
+  document.getElementById("updateOpenBtn").addEventListener("click", function () {
+    if (!releaseUrl) return;
+    if (typeof Neutralino !== "undefined" && Neutralino.os && Neutralino.os.open) {
+      Neutralino.os.open(releaseUrl).catch(function () {
+        addLog(t("log.error", { message: "Failed to open browser" }), "log-error");
+      });
+    }
+  });
 
   document.getElementById("updateDismissBtn").addEventListener("click", function () {
     banner.remove();
