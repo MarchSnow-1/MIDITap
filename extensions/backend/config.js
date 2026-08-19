@@ -1,6 +1,6 @@
 // Config file handlers — load, list, rename, add mappings
 
-const { exec } = require("child_process");
+const { execFile } = require("child_process");
 const path = require("path");
 const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
 const { getKeyName } = require("../../libs/keyboard");
@@ -78,12 +78,12 @@ function handleRenameConfig(ctx, data) {
 function handleOpenConfigDir(ctx) {
   ensureConfigDir(ctx.baseDir);
   const dirPath = path.join(ctx.baseDir, "config");
-  const cmd = process.platform === 'win32'
-    ? 'start "" "' + dirPath + '"'
+  const command = process.platform === 'win32'
+    ? { file: 'explorer.exe', args: [dirPath] }
     : process.platform === 'darwin'
-      ? 'open "' + dirPath + '"'
-      : 'xdg-open "' + dirPath + '"';
-  exec(cmd, (err) => {
+      ? { file: 'open', args: [dirPath] }
+      : { file: 'xdg-open', args: [dirPath] };
+  execFile(command.file, command.args, (err) => {
     if (err) ctx.broadcast("midiError", { message: "Failed to open config dir: " + err.message });
   });
 }

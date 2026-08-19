@@ -3,6 +3,28 @@ const path = require('path');
 const JSON5 = require('json5');
 const { VK } = require('./keyboard');
 
+function isPathInside(parentPath, targetPath) {
+  const relative = path.relative(parentPath, targetPath);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function resolveConfigPath(baseDir, configPath) {
+  const configDir = path.resolve(baseDir, 'config');
+  const candidate = path.isAbsolute(configPath)
+    ? path.normalize(configPath)
+    : path.resolve(configDir, configPath);
+
+  try {
+    const realConfigDir = fs.realpathSync(configDir);
+    const realCandidate = fs.realpathSync(candidate);
+    return isPathInside(realConfigDir, realCandidate) && path.extname(realCandidate).toLowerCase() === '.json'
+      ? realCandidate
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 // 解析并校验配置中的 port 字段。
 // 返回约定：
 // - number：合法端口（非负整数）
@@ -78,7 +100,10 @@ function loadConfig(baseDir, options = {}) {
     configPath: configPathOverride = null,
   } = options;
 
-  const configPath = configPathOverride || path.join(baseDir, 'config', 'mapping.json');
+  const configPath = configPathOverride
+    ? resolveConfigPath(baseDir, configPathOverride)
+    : resolveConfigPath(baseDir, path.join(baseDir, 'config', 'mapping.json'));
+  if (!configPath) return null;
   const configFileName = path.basename(configPath);
   const effectiveVerbose = !silent && verbose;
   let rawMapping = {};
@@ -182,9 +207,8 @@ function listConfigFiles(baseDir) {
 
 // 更新配置文件的 name 字段（通过正则替换，保留注释和格式）
 function renameConfigFile(baseDir, filename, newName) {
-  const configPath = path.join(baseDir, 'config', filename);
-  if (path.basename(configPath) !== filename) return false;
-  if (!fs.existsSync(configPath)) return false;
+  const configPath = resolveConfigPath(baseDir, filename);
+  if (!configPath) return false;
   try {
     let content = fs.readFileSync(configPath, 'utf8');
     const escapedName = newName.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -229,26 +253,26 @@ function getLastConfigPath(baseDir) {
   const storagePath = path.join(baseDir, '.storage', 'last_config');
   try {
     const content = fs.readFileSync(storagePath, 'utf8').trim();
-    if (content && fs.existsSync(content)) return content;
-    const configPath = path.join(baseDir, 'config', content);
-    if (content && fs.existsSync(configPath)) return configPath;
+    if (!content) return null;
+    return resolveConfigPath(baseDir, content);
   } catch { /* ignore */ }
   return null;
 }
 
 // 保存最后使用的配置文件路径到 .storage/last_config。
 function saveLastConfigPath(baseDir, configPath) {
+  const resolvedPath = resolveConfigPath(baseDir, configPath);
+  if (!resolvedPath) return false;
   const storageDir = path.join(baseDir, '.storage');
   if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
-  fs.writeFileSync(path.join(storageDir, 'last_config'), configPath, 'utf8');
+  fs.writeFileSync(path.join(storageDir, 'last_config'), resolvedPath, 'utf8');
+  return true;
 }
 
 // 向配置文件中添加或更新一个映射条目，保留原有注释和格式
 function addMappingToConfig(baseDir, configPath, note, key) {
-  const resolvedPath = path.isAbsolute(configPath)
-    ? configPath
-    : path.join(baseDir, 'config', configPath);
-  if (!fs.existsSync(resolvedPath)) return false;
+  const resolvedPath = resolveConfigPath(baseDir, configPath);
+  if (!resolvedPath) return false;
   try {
     let content = fs.readFileSync(resolvedPath, 'utf8');
     const escapedKey = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -286,4 +310,4 @@ function addMappingToConfig(baseDir, configPath, note, key) {
   }
 }
 
-module.exports = { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath };
+module.exports = { resolveConfigPath, loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath };
