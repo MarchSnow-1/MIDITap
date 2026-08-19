@@ -1,39 +1,8 @@
 // Update checker — queries GitHub Releases API for latest version
 const https = require("https");
+const semver = require("semver");
 
 const GITHUB_API_URL = "https://api.github.com/repos/marchsnow-1/miditap/releases/latest";
-
-// Normalize version string: strip leading 'v', trim whitespace
-function normalizeVersion(ver) {
-  if (!ver) return null;
-  let v = String(ver).trim();
-  if (v.length > 1 && (v[0] === "v" || v[0] === "V") && v[1] >= "0" && v[1] <= "9") {
-    v = v.slice(1);
-  }
-  return v;
-}
-
-// Compare two semver strings. Returns:
-//  -1 if a < b
-//   1 if a > b
-//   0 if equal
-function compareVersions(a, b) {
-  const an = normalizeVersion(a);
-  const bn = normalizeVersion(b);
-  if (!an || !bn) return 0;
-
-  const aParts = an.split(".").map(Number);
-  const bParts = bn.split(".").map(Number);
-  const len = Math.max(aParts.length, bParts.length);
-
-  for (let i = 0; i < len; i++) {
-    const av = aParts[i] || 0;
-    const bv = bParts[i] || 0;
-    if (av > bv) return 1;
-    if (av < bv) return -1;
-  }
-  return 0;
-}
 
 // Fetch latest release from GitHub API
 function fetchLatestRelease() {
@@ -84,10 +53,11 @@ function fetchLatestRelease() {
 async function checkForUpdates(currentVersion) {
   try {
     const release = await fetchLatestRelease();
-    const latestVersion = normalizeVersion(release.tag_name);
-    if (!latestVersion) return null;
+    const latestVersion = semver.valid(release.tag_name);
+    const current = semver.valid(currentVersion);
+    if (!latestVersion || !current) return null;
 
-    if (compareVersions(latestVersion, currentVersion) > 0) {
+    if (semver.gt(latestVersion, current)) {
       return {
         latest: release.tag_name,
         current: currentVersion,
@@ -100,4 +70,4 @@ async function checkForUpdates(currentVersion) {
   }
 }
 
-module.exports = { checkForUpdates, compareVersions };
+module.exports = { checkForUpdates };
