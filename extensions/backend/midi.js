@@ -2,7 +2,7 @@
 
 const midi = require("midi");
 const path = require("path");
-const { sendKey, getKeyName } = require("../../libs/keyboard");
+const { sendKey, sendKeySync, getKeyName } = require("../../libs/keyboard");
 const { loadConfig, saveLastConfigPath } = require("../../libs/config");
 
 // --- Internal helpers (no ctx needed) ---
@@ -18,10 +18,10 @@ function closeInputPortSafely(ctx) {
   }
 }
 
-function sendAllKeysUp(ctx) {
+function sendAllKeysUpSync(ctx) {
   for (const [vkCode, count] of ctx.activeVkCount.entries()) {
     if (count > 0) {
-      sendKey(vkCode, 0x0002);
+      sendKeySync(vkCode, 0x0002);
     }
   }
   ctx.activeVkCount.clear();
@@ -34,7 +34,11 @@ function stopMonitoring(ctx) {
     ctx.input.removeAllListeners("message");
     closeInputPortSafely(ctx);
   }
-  sendAllKeysUp(ctx);
+  if (ctx.captureInput) {
+    try { ctx.captureInput.closePort(); } catch {}
+    ctx.captureInput = null;
+  }
+  sendAllKeysUpSync(ctx);
 }
 
 // --- MIDI message handler ---
