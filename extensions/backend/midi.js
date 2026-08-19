@@ -152,6 +152,7 @@ function handleStart(ctx, data) {
       saveLastConfigPath(ctx.baseDir, configResult.configPath);
       ctx.noteMap = configResult.noteMap;
       ctx.currentConfigName = configResult.name;
+      ctx.currentConfigPath = configResult.configPath;
       ctx.log("Config loaded — name=" + configResult.name + " mappings=" + ctx.noteMap.size);
       const mapping = {};
       ctx.noteMap.forEach((vkCodes, note) => {

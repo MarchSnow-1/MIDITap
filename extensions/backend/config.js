@@ -2,8 +2,37 @@
 
 const { execFile } = require("child_process");
 const path = require("path");
-const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
+const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, deleteMappingFromConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
 const { getKeyName } = require("../../libs/keyboard");
+
+// Load a config into ctx and broadcast the authoritative configLoaded event.
+// Returns the config result, or null on failure.
+function applyConfig(ctx, configPath, options) {
+  options = options || {};
+  const configResult = loadConfig(ctx.baseDir, { verbose: false, silent: true, configPath });
+  if (!configResult) return null;
+
+  if (options.persist) saveLastConfigPath(ctx.baseDir, configResult.configPath);
+  ctx.noteMap = configResult.noteMap;
+  ctx.currentConfigName = configResult.name;
+  ctx.currentConfigPath = configResult.configPath;
+
+  const mapping = {};
+  ctx.noteMap.forEach((vkCodes, note) => {
+    mapping[note] = vkCodes
+      .map((vk) => getKeyName(vk) || "0x" + vk.toString(16).toUpperCase())
+      .join("+");
+  });
+
+  ctx.broadcast("configLoaded", {
+    path: configResult.configPath,
+    filename: path.basename(configResult.configPath),
+    name: configResult.name,
+    noteCount: ctx.noteMap.size,
+    mapping,
+  });
+  return configResult;
+}
 
 function handleLoadConfig(ctx, data) {
   ctx.log("Handling loadConfig command — requested path=" + (data.path || "(none)"));
@@ -19,12 +48,7 @@ function handleLoadConfig(ctx, data) {
     resolvedPath = path.resolve(ctx.baseDir, resolvedPath);
   }
 
-  const configResult = loadConfig(ctx.baseDir, {
-    verbose: false,
-    silent: true,
-    configPath: resolvedPath,
-  });
-
+  const configResult = applyConfig(ctx, resolvedPath, { persist: true });
   if (!configResult) {
     ctx.warn("Failed to load config: " + (data.path || "default"));
     ctx.broadcast("midiError", {
@@ -32,26 +56,7 @@ function handleLoadConfig(ctx, data) {
     });
     return;
   }
-
-  saveLastConfigPath(ctx.baseDir, configResult.configPath);
-
-  ctx.noteMap = configResult.noteMap;
-  ctx.currentConfigName = configResult.name;
   ctx.log("Config loaded — name=" + configResult.name + " file=" + path.basename(configResult.configPath) + " mappings=" + ctx.noteMap.size);
-  const mapping = {};
-  ctx.noteMap.forEach((vkCodes, note) => {
-    mapping[note] = vkCodes
-      .map((vk) => getKeyName(vk) || "0x" + vk.toString(16).toUpperCase())
-      .join("+");
-  });
-
-  ctx.broadcast("configLoaded", {
-    path: configResult.configPath,
-    filename: path.basename(configResult.configPath),
-    name: configResult.name,
-    noteCount: ctx.noteMap.size,
-    mapping,
-  });
 }
 
 function handleListConfigs(ctx) {
@@ -105,32 +110,28 @@ function handleAddMapping(ctx, data) {
   ctx.log("addMapping — note=" + note + " key=" + key + " config=" + path.basename(configPath));
   const ok = addMappingToConfig(ctx.baseDir, configPath, note, key);
   if (ok) {
-    // Reload config into memory
-    const configResult = loadConfig(ctx.baseDir, {
-      verbose: false,
-      silent: true,
-      configPath,
-    });
-    if (configResult) {
-      ctx.noteMap = configResult.noteMap;
-      ctx.currentConfigName = configResult.name;
-      const mapping = {};
-      ctx.noteMap.forEach(function (vkCodes, n) {
-        mapping[n] = vkCodes
-          .map(function (vk) { return getKeyName(vk) || "0x" + vk.toString(16).toUpperCase(); })
-          .join("+");
-      });
-      ctx.broadcast("configLoaded", {
-        path: configResult.configPath,
-        filename: path.basename(configResult.configPath),
-        name: configResult.name,
-        noteCount: ctx.noteMap.size,
-        mapping,
-      });
-    }
+    applyConfig(ctx, configPath);
     ctx.broadcast("midiLog", { message: "Mapping added: note " + note + " → " + key });
   } else {
     ctx.broadcast("midiError", { message: "Failed to save mapping to config file" });
+  }
+}
+
+function handleDeleteMapping(ctx, data) {
+  const note = String(data.note || "");
+  const configPath = ctx.currentConfigPath;
+  if (!note || !configPath) {
+    ctx.broadcast("midiError", { message: "deleteMapping requires an active config and note" });
+    return;
+  }
+
+  ctx.log("deleteMapping — note=" + note + " config=" + path.basename(configPath));
+  const ok = deleteMappingFromConfig(ctx.baseDir, configPath, note);
+  if (ok) {
+    applyConfig(ctx, configPath);
+    ctx.broadcast("midiLog", { message: "Mapping deleted: note " + note });
+  } else {
+    ctx.broadcast("midiError", { message: "Failed to delete mapping from config file" });
   }
 }
 
@@ -140,4 +141,5 @@ module.exports = {
   handleRenameConfig,
   handleOpenConfigDir,
   handleAddMapping,
+  handleDeleteMapping,
 };

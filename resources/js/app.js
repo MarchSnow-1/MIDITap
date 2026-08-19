@@ -549,8 +549,6 @@ function renderEditMappingList() {
       '<button class="map-del" title="' + t("edit.delete") + '">×</button>';
     row.querySelector(".map-del").addEventListener("click", function () {
       sendCommand("deleteMapping", { note: String(note) });
-      currentMapping.delete(String(note));
-      renderEditMappingList();
     });
     elements.editMappingList.appendChild(row);
   });

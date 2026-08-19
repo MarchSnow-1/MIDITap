@@ -27,6 +27,9 @@ function createEventHandler(ctx, midiHandlers, configHandlers) {
       case "addMapping":
         configHandlers.handleAddMapping(ctx, data || {});
         break;
+      case "deleteMapping":
+        configHandlers.handleDeleteMapping(ctx, data || {});
+        break;
       case "captureNote":
         midiHandlers.handleCaptureNote(ctx, data || {});
         break;

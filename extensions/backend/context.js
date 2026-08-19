@@ -22,6 +22,7 @@ function createContext({ nlPort, nlToken, nlConnectToken, nlExtensionId, baseDir
     activeVkCount: new Map(),
     noteMap: new Map(),
     currentConfigName: "mapping.json",
+    currentConfigPath: null,
 
     // Log helpers — prefix all output with extension ID
     log(msg) {

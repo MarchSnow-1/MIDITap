@@ -134,6 +134,54 @@ function findTopLevelStringValue(content, propertyName, root) {
   return null;
 }
 
+function findTopLevelEntryRange(content, propertyName, root) {
+  let objectDepth = 1;
+  let arrayDepth = 0;
+  for (let i = root.opening + 1; i < root.closing; i++) {
+    const char = content[i];
+    const next = content[i + 1];
+    if (char === '/' && next === '/') {
+      const newline = content.indexOf('\n', i + 2);
+      if (newline === -1) break;
+      i = newline;
+    } else if (char === '/' && next === '*') {
+      const end = content.indexOf('*/', i + 2);
+      if (end === -1) break;
+      i = end + 1;
+    } else if (char === '"' || char === "'") {
+      const stringEnd = readStringEnd(content, i);
+      if (stringEnd === -1) return null;
+      if (objectDepth === 1 && arrayDepth === 0) {
+        const colon = skipTrivia(content, stringEnd + 1, root.closing);
+        if (content[colon] === ':') {
+          let key;
+          try { key = JSON5.parse(content.slice(i, stringEnd + 1)); } catch { return null; }
+          const valueStart = skipTrivia(content, colon + 1, root.closing);
+          if (content[valueStart] !== '"' && content[valueStart] !== "'") return null;
+          const valueEnd = readStringEnd(content, valueStart);
+          if (valueEnd === -1) return null;
+          if (key === propertyName) {
+            const afterValue = skipTrivia(content, valueEnd + 1, root.closing);
+            return { start: i, end: content[afterValue] === ',' ? afterValue + 1 : valueEnd + 1 };
+          }
+          i = valueEnd;
+          continue;
+        }
+      }
+      i = stringEnd;
+    } else if (char === '{') {
+      objectDepth++;
+    } else if (char === '}') {
+      objectDepth--;
+    } else if (char === '[') {
+      arrayDepth++;
+    } else if (char === ']') {
+      arrayDepth--;
+    }
+  }
+  return null;
+}
+
 function insertRootProperty(content, root, propertyName, serializedValue) {
   const lineBreak = content.includes('\r\n') ? '\r\n' : '\n';
   const firstLineBreak = content.slice(root.opening + 1).match(/^(\r\n|\n|\r)/);
@@ -451,4 +499,23 @@ function addMappingToConfig(baseDir, configPath, note, key) {
   }
 }
 
-module.exports = { resolveConfigPath, loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath };
+// 从配置文件中删除一个映射条目，保留原有注释和格式
+function deleteMappingFromConfig(baseDir, configPath, note) {
+  const resolvedPath = resolveConfigPath(baseDir, configPath);
+  if (!resolvedPath) return false;
+  const noteNum = Number(note);
+  if (!Number.isInteger(noteNum) || noteNum < 0 || noteNum > 127) return false;
+  try {
+    let content = fs.readFileSync(resolvedPath, 'utf8');
+    const root = findRootObject(content);
+    if (!parseConfigObject(content) || !root) return false;
+    const entryRange = findTopLevelEntryRange(content, String(noteNum), root);
+    if (!entryRange) return true;
+    content = content.slice(0, entryRange.start) + content.slice(entryRange.end);
+    return writeConfigFile(resolvedPath, content);
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { resolveConfigPath, loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, deleteMappingFromConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath };

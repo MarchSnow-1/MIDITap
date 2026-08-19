@@ -7,6 +7,7 @@ const JSON5 = require('json5');
 
 const {
   addMappingToConfig,
+  deleteMappingFromConfig,
   loadConfig,
   renameConfigFile,
   resolveConfigPath,
@@ -105,5 +106,50 @@ test('writers leave malformed configuration files untouched', () => {
     assert.equal(renameConfigFile(baseDir, 'mapping.json', 'changed'), false);
     assert.equal(addMappingToConfig(baseDir, configPath, '48', 'a'), false);
     assert.equal(fs.readFileSync(configPath, 'utf8'), malformed);
+  });
+});
+
+test('deleting a mapping removes the entry and preserves comments', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, [
+      '{',
+      '  // keep this comment',
+      '  "name": "test",',
+      '  "48": "a",',
+      '  "50": "b",',
+      '}',
+      '',
+    ].join('\n'));
+
+    assert.equal(deleteMappingFromConfig(baseDir, configPath, '48'), true);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON5.parse(content);
+    assert.equal(Object.prototype.hasOwnProperty.call(parsed, '48'), false);
+    assert.equal(parsed['50'], 'b');
+    assert.match(content, /keep this comment/);
+
+    const loaded = loadConfig(baseDir, { configPath, silent: true });
+    assert.equal(loaded.noteMap.size, 1);
+  });
+});
+
+test('deleting a non-existent mapping returns true without changing the file', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    const original = '{\n  "name": "test",\n  "48": "a"\n}\n';
+    fs.writeFileSync(configPath, original);
+
+    assert.equal(deleteMappingFromConfig(baseDir, configPath, '50'), true);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), original);
+  });
+});
+
+test('deleting an out-of-range note returns false', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, '{"48": "a"}');
+    assert.equal(deleteMappingFromConfig(baseDir, configPath, '200'), false);
   });
 });
