@@ -2,7 +2,7 @@
 
 const { execFile } = require("child_process");
 const path = require("path");
-const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, deleteMappingFromConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
+const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, deleteMappingFromConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath, parseBinding } = require("../../libs/config");
 const { getKeyName, sendKeySync } = require("../../libs/keyboard");
 
 // 抬起当前所有按下的按键并清空音符跟踪状态。在配置被（重新）应用时调用：
@@ -130,17 +130,34 @@ function handleAddMapping(ctx, data) {
     ctx.broadcast("midiError", { message: "addMapping requires note and key" });
     return;
   }
+  // 后端 IPC 端点独立校验：note 必须是 0~127 整数，key 必须能被 VK 表解析。
+  // 不能只依赖前端校验——被篡改/绕过的调用方可能写入覆盖全局配置的保留键
+  // 或永远不生效的无效映射。
+  // Validate at the IPC boundary: note must be an integer 0-127 and key must
+  // resolve against the VK table. Never trust the frontend alone — a tampered
+  // caller could otherwise write reserved keys or mappings that never fire.
+  const noteNum = Number(note);
+  if (!Number.isInteger(noteNum) || noteNum < 0 || noteNum > 127) {
+    ctx.warn("addMapping invalid note — note=" + note);
+    ctx.broadcast("midiError", { message: "MIDI note must be 0-127" });
+    return;
+  }
+  if (!parseBinding(key, note)) {
+    ctx.warn("addMapping invalid key — key=" + key);
+    ctx.broadcast("midiError", { message: "Invalid key name: " + key });
+    return;
+  }
 
   // Determine which config file to write to
   let configFilename = data.filename || "mapping.json";
   if (!configFilename.endsWith(".json")) configFilename += ".json";
   const configPath = data.configPath || path.join(ctx.baseDir, "config", configFilename);
 
-  ctx.log("addMapping — note=" + note + " key=" + key + " config=" + path.basename(configPath));
-  const ok = addMappingToConfig(ctx.baseDir, configPath, note, key);
+  ctx.log("addMapping — note=" + noteNum + " key=" + key + " config=" + path.basename(configPath));
+  const ok = addMappingToConfig(ctx.baseDir, configPath, String(noteNum), key);
   if (ok) {
     applyConfig(ctx, configPath);
-    ctx.broadcast("midiLog", { message: "Mapping added: note " + note + " → " + key });
+    ctx.broadcast("midiLog", { message: "Mapping added: note " + noteNum + " → " + key });
   } else {
     ctx.broadcast("midiError", { message: "Failed to save mapping to config file" });
   }

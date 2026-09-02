@@ -9,6 +9,7 @@ const {
   addMappingToConfig,
   deleteMappingFromConfig,
   loadConfig,
+  parseBinding,
   renameConfigFile,
   resolveConfigPath,
 } = require('../libs/config');
@@ -220,4 +221,35 @@ test('renaming updates an unquoted JSON5 IdentifierName name key in place', () =
     assert.equal(nameOccurrences, 1, content);
     assert.equal(parsed['48'], 'a');
   });
+});
+
+test('adding a mapping validates the note range like deletion does', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, '{\n  "name": "t",\n  "port": 0\n}\n');
+
+    // Out-of-range and reserved-key-style notes are rejected and never written.
+    assert.equal(addMappingToConfig(baseDir, configPath, '200', 'a'), false);
+    assert.equal(addMappingToConfig(baseDir, configPath, 'port', 'a'), false);
+    assert.equal(addMappingToConfig(baseDir, configPath, 'name', 'a'), false);
+    assert.equal(addMappingToConfig(baseDir, configPath, '-1', 'a'), false);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON5.parse(content);
+    assert.equal(parsed.port, 0);
+    assert.equal(parsed.name, 't');
+    assert.equal(Object.keys(parsed).length, 2, content);
+
+    // Valid note + key still works.
+    assert.equal(addMappingToConfig(baseDir, configPath, '60', 'ctrl+b'), true);
+    assert.equal(JSON5.parse(fs.readFileSync(configPath, 'utf8'))['60'], 'ctrl+b');
+  });
+});
+
+test('parseBinding accepts single keys, combos and rejects unknown names', () => {
+  assert.equal(parseBinding('a', '48').vkCodes.length, 1);
+  assert.equal(parseBinding('ctrl+b', '50').vkCodes.length, 2);
+  assert.equal(parseBinding('ArrowUp', '60'), null); // not a VK name
+  assert.equal(parseBinding('', '60'), null);
+  assert.equal(parseBinding('ctrl++', '60'), null);
 });

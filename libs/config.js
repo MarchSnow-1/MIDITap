@@ -542,11 +542,18 @@ function saveLastConfigPath(baseDir, configPath) {
 function addMappingToConfig(baseDir, configPath, note, key) {
   const resolvedPath = resolveConfigPath(baseDir, configPath);
   if (!resolvedPath) return false;
+  // 与 deleteMappingFromConfig 保持对称：note 必须是 0~127 的整数。
+  // 这同时排除了 'name'/'port' 等保留键被误写入覆盖全局配置。
+  // Mirrors deleteMappingFromConfig: note must be an integer in 0-127.
+  // This also stops reserved keys such as 'name'/'port' from being
+  // overwritten by an out-of-range note.
+  const noteNum = Number(note);
+  if (!Number.isInteger(noteNum) || noteNum < 0 || noteNum > 127) return false;
   try {
     let content = fs.readFileSync(resolvedPath, 'utf8');
     const root = findRootObject(content);
     if (!parseConfigObject(content) || !root) return false;
-    const noteStr = String(note);
+    const noteStr = String(noteNum);
     const serializedKey = JSON.stringify(String(key));
     const valueRange = findTopLevelStringValue(content, noteStr, root);
     content = valueRange
@@ -577,4 +584,4 @@ function deleteMappingFromConfig(baseDir, configPath, note) {
   }
 }
 
-module.exports = { resolveConfigPath, loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, deleteMappingFromConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath };
+module.exports = { resolveConfigPath, loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, deleteMappingFromConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath, parseBinding };
