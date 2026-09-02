@@ -146,12 +146,25 @@ function handleListPorts(ctx) {
   }
 }
 
+// Fail a start attempt with a user-visible error. If a previous session was
+// running (e.g. the user switched devices), also broadcast midiStopped so the
+// GUI never stays in a fake "Running" state after the backend stopped.
+function failStart(ctx, wasRunning, message) {
+  if (wasRunning) {
+    ctx.broadcast("midiStopped", {});
+  }
+  ctx.error(message);
+  ctx.broadcast("midiError", { message });
+}
+
 function handleStart(ctx, data) {
   const portIndex = typeof data.port === "number" ? data.port : 0;
+  const wasRunning = !!ctx.input;
   ctx.log("Handling start command — port=" + portIndex + " configPath=" + (data.configPath || "(none)"));
   stopMonitoring(ctx);
 
-  // Load config if provided
+  // Load config if provided. A failed load must abort the start instead of
+  // silently monitoring with a stale/empty mapping.
   if (data.configPath) {
     let resolvedPath = data.configPath;
     if (!path.isAbsolute(resolvedPath)) {
@@ -163,70 +176,66 @@ function handleStart(ctx, data) {
       silent: true,
       configPath: resolvedPath,
     });
-    if (configResult) {
-      saveLastConfigPath(ctx.baseDir, configResult.configPath);
-      ctx.noteMap = configResult.noteMap;
-      ctx.currentConfigName = configResult.name;
-      ctx.currentConfigPath = configResult.configPath;
-      ctx.log("Config loaded — name=" + configResult.name + " mappings=" + ctx.noteMap.size);
-      const mapping = {};
-      ctx.noteMap.forEach((vkCodes, note) => {
-        mapping[note] = vkCodes
-          .map((vk) => getKeyName(vk) || "0x" + vk.toString(16).toUpperCase())
-          .join("+");
-      });
-      ctx.broadcast("configLoaded", {
-        path: configResult.configPath,
-        filename: path.basename(configResult.configPath),
-        name: configResult.name,
-        noteCount: ctx.noteMap.size,
-        mapping,
-      });
+    if (!configResult) {
+      failStart(ctx, wasRunning, "Failed to load config: " + data.configPath);
+      return;
     }
+    saveLastConfigPath(ctx.baseDir, configResult.configPath);
+    ctx.noteMap = configResult.noteMap;
+    ctx.currentConfigName = configResult.name;
+    ctx.currentConfigPath = configResult.configPath;
+    ctx.log("Config loaded — name=" + configResult.name + " mappings=" + ctx.noteMap.size);
+    const mapping = {};
+    ctx.noteMap.forEach((vkCodes, note) => {
+      mapping[note] = vkCodes
+        .map((vk) => getKeyName(vk) || "0x" + vk.toString(16).toUpperCase())
+        .join("+");
+    });
+    ctx.broadcast("configLoaded", {
+      path: configResult.configPath,
+      filename: path.basename(configResult.configPath),
+      name: configResult.name,
+      noteCount: ctx.noteMap.size,
+      mapping,
+    });
   }
 
+  let input;
   try {
-    ctx.input = new midi.Input();
+    input = new midi.Input();
   } catch (err) {
-    ctx.error("Failed to create MIDI input: " + err.message);
-    ctx.broadcast("midiError", { message: "MIDI error: " + err.message });
-    ctx.input = null;
+    failStart(ctx, wasRunning, "MIDI error: " + err.message);
     return;
   }
 
-  const portCount = ctx.input.getPortCount();
+  const portCount = input.getPortCount();
   if (portCount === 0) {
-    ctx.warn("No MIDI devices found");
-    ctx.broadcast("midiError", { message: "No MIDI devices found" });
-    ctx.input = null;
+    failStart(ctx, wasRunning, "No MIDI devices found");
     return;
   }
 
   if (portIndex >= portCount) {
-    ctx.warn("Port " + portIndex + " not found (available: 0-" + (portCount - 1) + ")");
-    ctx.broadcast("midiError", {
-      message: "Port " + portIndex + " not found (available: 0-" + (portCount - 1) + ")",
-    });
-    ctx.input = null;
+    failStart(ctx, wasRunning, "Port " + portIndex + " not found (available: 0-" + (portCount - 1) + ")");
     return;
   }
 
   try {
-    ctx.input.openPort(portIndex);
-    ctx.input.ignoreTypes(true, true, true);
-    ctx.input.on("message", function (deltaTime, message) {
+    input.openPort(portIndex);
+    input.ignoreTypes(true, true, true);
+    input.on("message", function (deltaTime, message) {
       handleMidiMessage(ctx, deltaTime, message);
     });
-    const portName = ctx.input.getPortName(portIndex);
+    ctx.input = input;
+    const portName = input.getPortName(portIndex);
     ctx.log("MIDI monitoring started — port=" + portIndex + " name=" + portName + " mappings=" + ctx.noteMap.size);
     ctx.broadcast("midiStarted", {
       port: portIndex,
       portName: portName,
     });
   } catch (err) {
-    ctx.error("Failed to open port " + portIndex + ": " + err.message);
-    ctx.broadcast("midiError", { message: "Failed to open port: " + err.message });
-    ctx.input = null;
+    // A port that opened part-way must be released, not leaked.
+    try { input.closePort(); } catch (ignore) {}
+    failStart(ctx, wasRunning, "Failed to open port: " + err.message);
   }
 }
 

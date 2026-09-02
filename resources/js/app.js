@@ -436,6 +436,11 @@ function updatePortList(ports) {
       });
       item.classList.add("selected");
       if (isRunning && p.index !== prevIndex) {
+        // Switching devices restarts monitoring on the backend, which releases
+        // every held key. Clear the stale note display from the old device so
+        // no ghost notes linger; a failed start resets the running state via
+        // the backend's midiStopped broadcast.
+        clearActiveNotes();
         var configPath = null;
         if (currentConfigFilename && elements.editConfigMenu) {
           var btn = elements.editConfigMenu.querySelector(".custom-option[data-filename=\"" + currentConfigFilename + "\"]");
