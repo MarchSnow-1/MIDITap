@@ -3,7 +3,7 @@
   "version": "1.7.0",
   "scripts": {
     "version": "auto-changelog -p && node scripts/sync-neutralino-version.js && git add CHANGELOG.md neutralino.config.json",
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "description": "Convert MIDI signal in to Keyboard out",
   "keywords": [],
