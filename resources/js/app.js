@@ -616,17 +616,29 @@ function renderMapping() {
 // 日志
 var MAX_LOG_LINES = 1000;
 
+// 向 <pre> 日志容器追加一行。<pre> 的合法内容模型是 phrasing content，
+// 因此用 <span> 而非 <div>，并用 '\n' 文本节点实现逐行换行。
+// Append one line to a <pre> log container. <pre> only accepts phrasing
+// content, so rows are <span> elements separated by '\n' text nodes.
 function appendLogLine(container, fullText, className) {
-  var line = document.createElement("div");
+  var line = document.createElement("span");
   line.textContent = fullText;
   line.className = className || "";
   container.appendChild(line);
+  container.appendChild(document.createTextNode("\n"));
   // 限制 DOM 体量：超过上限后移除最旧的行，避免长时间监听导致内存/渲染
-  // 成本无限增长。
-  // Keep the DOM bounded: drop the oldest lines once the cap is exceeded so a
+  // 成本无限增长。移除 span 时同步移除其后的换行文本节点。
+  // Keep the DOM bounded: drop the oldest rows once the cap is exceeded so a
   // long monitoring session cannot grow memory/render cost without limit.
-  while (container.childNodes.length > MAX_LOG_LINES) {
-    container.removeChild(container.firstChild);
+  // Remove the row span together with its trailing newline text node.
+  while (container.querySelectorAll("span").length > MAX_LOG_LINES) {
+    var oldest = container.querySelector("span");
+    if (!oldest) break;
+    oldest.remove();
+    var next = container.firstChild;
+    if (next && next.nodeType === Node.TEXT_NODE && next.nodeValue === "\n") {
+      container.removeChild(next);
+    }
   }
   container.scrollTop = container.scrollHeight;
 }
