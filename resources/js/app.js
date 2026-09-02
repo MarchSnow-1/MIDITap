@@ -564,21 +564,28 @@ function renderMapping() {
 }
 
 // Log
-function addLog(text, className, source) {
-  var prefix = source || "[GUI]";
-  var fullText = prefix + " " + text;
+var MAX_LOG_LINES = 1000;
+
+function appendLogLine(container, fullText, className) {
   var line = document.createElement("div");
   line.textContent = fullText;
   line.className = className || "";
-  elements.logOutput.appendChild(line);
-  elements.logOutput.scrollTop = elements.logOutput.scrollHeight;
+  container.appendChild(line);
+  // Keep the DOM bounded: drop the oldest lines once the cap is exceeded so a
+  // long monitoring session cannot grow memory/render cost without limit.
+  while (container.childNodes.length > MAX_LOG_LINES) {
+    container.removeChild(container.firstChild);
+  }
+  container.scrollTop = container.scrollHeight;
+}
+
+function addLog(text, className, source) {
+  var prefix = source || "[GUI]";
+  var fullText = prefix + " " + text;
+  appendLogLine(elements.logOutput, fullText, className);
 
   if (elements.logOutputFull) {
-    var line2 = document.createElement("div");
-    line2.textContent = fullText;
-    line2.className = className || "";
-    elements.logOutputFull.appendChild(line2);
-    elements.logOutputFull.scrollTop = elements.logOutputFull.scrollHeight;
+    appendLogLine(elements.logOutputFull, fullText, className);
   }
 }
 
