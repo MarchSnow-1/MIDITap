@@ -92,9 +92,15 @@ function clearPendingNativeCalls() {
 }
 
 // Broadcast event to frontend
+// 向前端广播事件。socket 不在 OPEN 状态时（已关闭/正在连接/出错）直接丢弃：
+// 对已关闭的 socket send 没有意义，还可能触发 error 处理器导致二次退出。
+// Broadcast an event to the frontend. If the socket is not OPEN (closed,
+// connecting, errored) the broadcast is dropped: sending on a closed socket is
+// pointless and can re-trigger the error handler.
 function createBroadcast(ctx) {
   const callNative = createCallNative(ctx);
   return function broadcast(event, data) {
+    if (!ctx.ws || ctx.ws.readyState !== ctx.ws.OPEN) return;
     callNative("app.broadcast", { event, data }).catch(() => {});
   };
 }
@@ -137,17 +143,24 @@ function connect(ctx, APP_VERSION, { handleEvent, stopMonitoring }) {
     }
   });
 
+  // 连接断开/出错：清理未决调用与输入状态后退出，让 Neutralino 服务端以全新
+  // 的一次性 connectToken 重新拉起扩展（tokenSecurity=one-time，同一 token 不能
+  // 复用，因此同进程内无法自行重连）。这里不再向已关闭的 socket 广播。
+  // On close/error: clear pending calls and input state, then exit so the
+  // Neutralino server respawns the extension with a fresh one-time connectToken
+  // (tokenSecurity=one-time means the token cannot be reused, so the process
+  // cannot reconnect by itself). No broadcast is attempted on the dead socket.
   ctx.ws.on("close", () => {
     ctx.log("WebSocket closed, shutting down");
+    clearPendingNativeCalls();
     stopMonitoring();
-    ctx.broadcast("midiLog", { message: "Backend disconnected" });
     process.exit(0);
   });
 
   ctx.ws.on("error", (err) => {
     ctx.error("WebSocket error: " + err.message);
+    clearPendingNativeCalls();
     stopMonitoring();
-    ctx.broadcast("midiError", { message: "Connection error: " + err.message });
     process.exit(1);
   });
 }
