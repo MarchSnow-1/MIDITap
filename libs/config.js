@@ -91,6 +91,23 @@ function skipTrivia(content, start, limit) {
   return i;
 }
 
+function isIdentifierStart(ch) {
+  return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || ch === '$' || ch.charCodeAt(0) > 127;
+}
+
+function isIdentifierPart(ch) {
+  return isIdentifierStart(ch) || (ch >= '0' && ch <= '9');
+}
+
+// Read a JSON5 unquoted IdentifierName starting at `start`. Returns the index
+// just past the identifier, or -1 when `start` is not an identifier start.
+function readIdentifierEnd(content, start, limit) {
+  if (start >= limit || !isIdentifierStart(content[start])) return -1;
+  let i = start + 1;
+  while (i < limit && isIdentifierPart(content[i])) i++;
+  return i;
+}
+
 function findTopLevelStringValue(content, propertyName, root) {
   let objectDepth = 1;
   let arrayDepth = 0;
@@ -118,9 +135,39 @@ function findTopLevelStringValue(content, propertyName, root) {
             const valueEnd = readStringEnd(content, valueStart);
             return valueEnd === -1 ? null : { start: valueStart, end: valueEnd + 1 };
           }
+          if (content[valueStart] === '"' || content[valueStart] === "'") {
+            const valueEnd = readStringEnd(content, valueStart);
+            if (valueEnd === -1) return null;
+            i = valueEnd;
+            continue;
+          }
         }
       }
       i = stringEnd;
+    } else if (objectDepth === 1 && arrayDepth === 0 && isIdentifierStart(char)) {
+      // JSON5 permits unquoted IdentifierName keys (e.g. `name: "x"`).
+      const identEnd = readIdentifierEnd(content, i, root.closing);
+      if (identEnd !== -1) {
+        const colon = skipTrivia(content, identEnd, root.closing);
+        if (content[colon] === ':') {
+          const keyText = content.slice(i, identEnd);
+          const valueStart = skipTrivia(content, colon + 1, root.closing);
+          if (keyText === propertyName && (content[valueStart] === '"' || content[valueStart] === "'")) {
+            const valueEnd = readStringEnd(content, valueStart);
+            return valueEnd === -1 ? null : { start: valueStart, end: valueEnd + 1 };
+          }
+          if (content[valueStart] === '"' || content[valueStart] === "'") {
+            const valueEnd = readStringEnd(content, valueStart);
+            if (valueEnd === -1) return null;
+            i = valueEnd;
+          } else {
+            i = identEnd - 1;
+          }
+          continue;
+        }
+        // Not a property key (e.g. a bare true/false/null value): skip the token.
+        i = identEnd - 1;
+      }
     } else if (char === '{') {
       objectDepth++;
     } else if (char === '}') {

@@ -198,3 +198,26 @@ test('deleting a mapping still works when a nested-object value precedes it', ()
     assert.equal(parsed.meta.note, '60'); // nested lookalike untouched
   });
 });
+
+test('renaming updates an unquoted JSON5 IdentifierName name key in place', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, [
+      '{',
+      '  name: "old",', // JSON5 unquoted key is valid
+      '  "48": "a",',
+      '}',
+      '',
+    ].join('\n'));
+
+    assert.equal(renameConfigFile(baseDir, 'mapping.json', 'new'), true);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON5.parse(content);
+    assert.equal(parsed.name, 'new');
+    // exactly one name property must remain (no duplicate inserted at the top)
+    const nameOccurrences = (content.match(/(?:^|,)\s*"?name"?\s*:/gm) || []).length;
+    assert.equal(nameOccurrences, 1, content);
+    assert.equal(parsed['48'], 'a');
+  });
+});
