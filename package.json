@@ -1,6 +1,6 @@
 {
   "name": "miditap",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "scripts": {
     "version": "auto-changelog -p && node scripts/sync-neutralino-version.js && git add CHANGELOG.md neutralino.config.json",
     "test": "node --test test/"
@@ -22,4 +22,3 @@
     "auto-changelog-plus": "^1.2.3"
   }
 }
-
