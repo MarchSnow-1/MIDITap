@@ -292,15 +292,13 @@ function handleCaptureNote(ctx, data) {
 
   const portCount = captureInput.getPortCount();
   if (portCount === 0) {
-    // 打开失败/无设备时同样要关闭已创建的实例，避免泄漏底层句柄。
-    // Close the freshly created instance on failure paths to avoid leaks.
-    try { captureInput.closePort(); } catch {}
+    // 尚未 openPort，无需 close；直接丢弃局部实例即可。
+    // The instance was never opened, so there is nothing to close.
     ctx.broadcast("midiError", { message: "No MIDI devices found" });
     return;
   }
 
   if (portIndex >= portCount) {
-    try { captureInput.closePort(); } catch {}
     ctx.broadcast("midiError", { message: "Port " + portIndex + " not found" });
     return;
   }

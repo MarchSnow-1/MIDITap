@@ -1105,8 +1105,6 @@ var CAPTURED_CHAR_TO_VK = {
   '^': '6', '&': '7', '*': '8', '(': '9', ')': '0'
 };
 
-var CAPTURED_MODIFIERS = { 'shift': true, 'ctrl': true, 'alt': true, 'win': true };
-
 function normalizeCapturedKey(keyEvent) {
   var key = typeof keyEvent.key === 'string' ? keyEvent.key : '';
   var mapped = CAPTURED_KEY_TO_VK[key];
