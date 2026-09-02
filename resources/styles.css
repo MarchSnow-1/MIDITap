@@ -187,7 +187,6 @@ h1 {
 
 .status-stopped { color: var(--muted); }
 .status-running { color: var(--success); }
-.status-error { color: var(--danger); }
 
 /* Language switcher */
 .lang-switch {
@@ -434,8 +433,6 @@ h1 {
   flex-shrink: 0;
 }
 
-#configValue,
-#portValue,
 #editConfigValue {
   min-width: 0;
   overflow: hidden;

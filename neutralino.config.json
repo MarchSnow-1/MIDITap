@@ -17,8 +17,9 @@
   },
   "nativeAllowList": [
     "app.*",
-    "os.*",
-    "filesystem.*",
+    "os.open",
+    "filesystem.readDirectory",
+    "filesystem.readFile",
     "storage.*",
     "window.*",
     "events.*",
