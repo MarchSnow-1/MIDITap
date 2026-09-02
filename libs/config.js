@@ -496,22 +496,30 @@ function renameConfigFile(baseDir, filename, newName) {
 
 // 确保配置目录存在，且至少有一个 .json 配置文件。
 // 若目录为空，自动生成默认 mapping.json。
+// 目录只读/受限（如解压进 Program Files）时不应让扩展崩溃：失败仅告警。
+// Ensure the config directory exists with at least one .json file, creating a
+// default mapping.json when empty. If the directory is read-only or restricted
+// (e.g. the app sits in Program Files) this must not crash the extension.
 function ensureConfigDir(baseDir) {
   const configDir = path.join(baseDir, 'config');
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-  const hasJson = (() => {
-    try {
-      return fs.readdirSync(configDir).some((entry) => entry.endsWith('.json'));
-    } catch { return false; }
-  })();
-  if (!hasJson) {
-    const defaultConfig = JSON.stringify({
-      name: 'Default Config',
-    }, null, 2);
-    fs.writeFileSync(path.join(configDir, 'mapping.json'), defaultConfig, 'utf8');
-    return path.join(configDir, 'mapping.json');
+  try {
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+    const hasJson = (() => {
+      try {
+        return fs.readdirSync(configDir).some((entry) => entry.endsWith('.json'));
+      } catch { return false; }
+    })();
+    if (!hasJson) {
+      const defaultConfig = JSON.stringify({
+        name: 'Default Config',
+      }, null, 2);
+      fs.writeFileSync(path.join(configDir, 'mapping.json'), defaultConfig, 'utf8');
+      return path.join(configDir, 'mapping.json');
+    }
+  } catch (err) {
+    console.warn("[miditap.config]: ensureConfigDir failed: " + (err && err.message));
   }
   return null;
 }
@@ -529,13 +537,22 @@ function getLastConfigPath(baseDir) {
 }
 
 // 保存最后使用的配置文件路径到 .storage/last_config。
+// 落盘失败只返回 false 并告警，不向调用链抛异常（可能在 ws 事件回调中执行）。
+// Persist the last-used config path to .storage/last_config. Failures return
+// false with a warning instead of throwing up into the caller (which may be a
+// WebSocket event callback).
 function saveLastConfigPath(baseDir, configPath) {
   const resolvedPath = resolveConfigPath(baseDir, configPath);
   if (!resolvedPath) return false;
-  const storageDir = path.join(baseDir, '.storage');
-  if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
-  fs.writeFileSync(path.join(storageDir, 'last_config'), resolvedPath, 'utf8');
-  return true;
+  try {
+    const storageDir = path.join(baseDir, '.storage');
+    if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+    fs.writeFileSync(path.join(storageDir, 'last_config'), resolvedPath, 'utf8');
+    return true;
+  } catch (err) {
+    console.warn("[miditap.config]: saveLastConfigPath failed: " + (err && err.message));
+    return false;
+  }
 }
 
 // 向配置文件中添加或更新一个映射条目，保留原有注释和格式
