@@ -425,6 +425,27 @@ function selectHTML(name, filename) {
   return '<span class="select-text"><span class="select-name">' + esc(name) + '</span></span>';
 }
 
+// 按文件名在配置下拉菜单里查找按钮并返回其 path。
+// 用 dataset 遍历代替字符串拼接的 CSS 属性选择器：文件名来自磁盘，可能含
+// 引号/反斜杠等会破坏 querySelector 语法、抛异常的字符。
+// Find the config menu button for a filename and return its path. Iterate the
+// buttons and compare dataset.filename instead of building a CSS attribute
+// selector string, since disk filenames may contain quotes/backslashes that
+// would make querySelector throw.
+function findConfigButtonByFilename(filename) {
+  if (!elements.editConfigMenu || !filename) return null;
+  var buttons = elements.editConfigMenu.querySelectorAll(".custom-option");
+  for (var i = 0; i < buttons.length; i++) {
+    if (buttons[i].dataset.filename === filename) return buttons[i];
+  }
+  return null;
+}
+
+function currentConfigPath() {
+  var btn = findConfigButtonByFilename(currentConfigFilename);
+  return btn ? btn.dataset.path : null;
+}
+
 // Device list (Home tab)
 function updatePortList(ports) {
   if (!elements.deviceList) return;
@@ -459,8 +480,7 @@ function updatePortList(ports) {
         clearActiveNotes();
         var configPath = null;
         if (currentConfigFilename && elements.editConfigMenu) {
-          var btn = elements.editConfigMenu.querySelector(".custom-option[data-filename=\"" + currentConfigFilename + "\"]");
-          configPath = btn ? btn.dataset.path : null;
+          configPath = currentConfigPath();
         }
         sendCommand("start", { port: selectedPortIndex, configPath: configPath });
       }
@@ -752,8 +772,7 @@ function toggleStartStop() {
     }
     var configPath = null;
     if (currentConfigFilename && elements.editConfigMenu) {
-      var btn = elements.editConfigMenu.querySelector(".custom-option[data-filename=\"" + currentConfigFilename + "\"]");
-      configPath = btn ? btn.dataset.path : null;
+      configPath = currentConfigPath();
     }
     sendCommand("start", { port: selectedPortIndex, configPath: configPath });
   }
@@ -914,8 +933,7 @@ if (elements.editRefreshConfigs) {
   elements.editRefreshConfigs.addEventListener("click", function () {
     sendCommand("listConfigs");
     if (currentConfigFilename && elements.editConfigMenu) {
-      var btn = elements.editConfigMenu.querySelector(".custom-option[data-filename=\"" + currentConfigFilename + "\"]");
-      var configPath = btn ? btn.dataset.path : null;
+      var configPath = currentConfigPath();
       if (configPath) {
         sendCommand("loadConfig", { path: configPath });
       }
@@ -1173,8 +1191,7 @@ if (elements.addMappingBtn) {
     }
     var configPath = null;
     if (currentConfigFilename && elements.editConfigMenu) {
-      var btn = elements.editConfigMenu.querySelector(".custom-option[data-filename=\"" + currentConfigFilename + "\"]");
-      configPath = btn ? btn.dataset.path : null;
+      configPath = currentConfigPath();
     }
     sendCommand("addMapping", {
       note: String(noteNum),
