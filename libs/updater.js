@@ -47,9 +47,12 @@ function fetchLatestRelease() {
 }
 
 // Check if an update is available.
+// 检查是否有可用更新。
 // Returns:
 //   { latest, current, url } — when an update is available
-//   null — when current >= latest or the check fails
+//   null — when current >= latest, or the check fails (network error, etc.)
+// 调用方无需 try/catch：任何失败（网络错误、非 200、解析失败）都会在此吞掉
+// 并返回 null，避免未处理的 Promise rejection。
 async function checkForUpdates(currentVersion) {
   try {
     const release = await fetchLatestRelease();
@@ -66,7 +69,11 @@ async function checkForUpdates(currentVersion) {
     }
     return null;
   } catch (err) {
-    throw err;
+    // 吞掉并返回 null（与文档契约一致），但保留一条日志便于排查网络/API 问题。
+    // Swallow failures and return null per the documented contract, logging a
+    // warning so network/API problems remain diagnosable.
+    console.warn("[miditap.updater]: Update check failed: " + (err && err.message));
+    return null;
   }
 }
 
