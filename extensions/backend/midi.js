@@ -56,10 +56,12 @@ function handleMidiMessage(ctx, deltaTime, message) {
   if (!isNoteOn && !isNoteOff) return;
 
   const binding = ctx.noteMap.get(note);
+  // 当前按住该音号的所有 MIDI 通道集合。
   // Channels that currently hold this note number.
   const holding = ctx.activeNoteChannels.get(note) || new Set();
 
   if (isNoteOn) {
+    // 同一通道重复触发已按住的音，才是真正的重复事件。
     // Same channel re-triggering an already-held note is a real duplicate.
     if (holding.has(channel)) {
       ctx.broadcast("midiDuplicateOn", { note });
@@ -68,6 +70,8 @@ function handleMidiMessage(ctx, deltaTime, message) {
     holding.add(channel);
     ctx.activeNoteChannels.set(note, holding);
 
+    // 只有该音号的第一次物理按下才触发映射按键；其他通道的分层叠加音色
+    // 不应再次触发它。
     // Only the first physical press of this note presses the mapped key; a
     // layered voice on another channel must not re-trigger it.
     if (holding.size === 1 && binding) {
@@ -98,10 +102,14 @@ function handleMidiMessage(ctx, deltaTime, message) {
   if (holding.size === 0) {
     ctx.activeNoteChannels.delete(note);
   } else {
+    // 仍被其他通道按住——保持按键按下不放。
     // Still held by another channel — keep the key down.
     return;
   }
 
+  // 全部通道都已抬起。使用按下时记录的绑定来释放按键，而不是当前的
+  // 配置绑定——若在按住期间切换或删除了映射，按当前 noteMap 释放会让
+  // 物理按键一直卡住，直到用户手动点击停止。
   // Fully released. Release keys using the binding recorded at press time,
   // NOT the current config binding — if the mapping was switched or deleted
   // while the note was held, releasing against the current noteMap would leave
@@ -146,6 +154,9 @@ function handleListPorts(ctx) {
   }
 }
 
+// 让一次启动失败以用户可见错误告终。若此前有会话正在运行（例如用户正在
+// 切换设备），同时广播 midiStopped，避免 GUI 在后端已停止后仍停留在假的
+// "Running" 状态。
 // Fail a start attempt with a user-visible error. If a previous session was
 // running (e.g. the user switched devices), also broadcast midiStopped so the
 // GUI never stays in a fake "Running" state after the backend stopped.
@@ -163,6 +174,8 @@ function handleStart(ctx, data) {
   ctx.log("Handling start command — port=" + portIndex + " configPath=" + (data.configPath || "(none)"));
   stopMonitoring(ctx);
 
+  // 若提供了配置，则加载它。加载失败必须中止启动，而不是静默地用陈旧/
+  // 空映射继续监听。
   // Load config if provided. A failed load must abort the start instead of
   // silently monitoring with a stale/empty mapping.
   if (data.configPath) {

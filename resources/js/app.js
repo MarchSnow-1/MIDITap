@@ -328,6 +328,9 @@ function applyTranslations() {
   document.documentElement.lang = currentLocale;
 
   renderLangValue();
+  // data-i18n 批量覆盖后再重新应用运行态文案：开始/停止按钮带有
+  // data-i18n="control.start"，若缺此步，运行中切换语言会把 "Stop/停止"
+  // 错误覆盖为 "Start/启动"。
   // Re-apply the running-state labels AFTER the data-i18n pass. The Start/Stop
   // button carries data-i18n="control.start", so without this a language switch
   // while monitoring would overwrite "Stop" with "Start" even though the app is
@@ -440,6 +443,9 @@ function updatePortList(ports) {
       });
       item.classList.add("selected");
       if (isRunning && p.index !== prevIndex) {
+        // 切换设备会让后端重启监听并抬起所有已按下的键；先清掉旧设备遗留的
+        // 音符显示，避免出现“幽灵音符”。若重启失败，后端会广播 midiStopped
+        // 来复位运行状态。
         // Switching devices restarts monitoring on the backend, which releases
         // every held key. Clear the stale note display from the old device so
         // no ghost notes linger; a failed start resets the running state via
@@ -568,6 +574,7 @@ function renderMapping() {
 }
 
 // Log
+// 日志
 var MAX_LOG_LINES = 1000;
 
 function appendLogLine(container, fullText, className) {
@@ -575,6 +582,8 @@ function appendLogLine(container, fullText, className) {
   line.textContent = fullText;
   line.className = className || "";
   container.appendChild(line);
+  // 限制 DOM 体量：超过上限后移除最旧的行，避免长时间监听导致内存/渲染
+  // 成本无限增长。
   // Keep the DOM bounded: drop the oldest lines once the cap is exceeded so a
   // long monitoring session cannot grow memory/render cost without limit.
   while (container.childNodes.length > MAX_LOG_LINES) {
@@ -633,6 +642,9 @@ function initFakeScrollbars() {
       window.requestAnimationFrame(update);
     };
 
+    // 每个容器只绑定一次监听器。initFakeScrollbars() 会在每次切换标签时被
+    // 调用；若每次都重新添加 scroll/resize/pointer 监听，会导致监听器与闭包
+    // 无限累积、事件处理重复执行。
     // Bind listeners only once per container. initFakeScrollbars() is invoked
     // on every tab switch; re-adding scroll/resize/pointer listeners each time
     // would leak handlers and duplicate work without bound.
@@ -696,6 +708,7 @@ function initFakeScrollbars() {
       });
     }
 
+    // 每次调用都重新计算一次：切标签可能刚让该容器变为可见，或内容刚变化。
     // Always recompute: a tab switch may have just made this container visible
     // or its content may have changed since the last call.
     schedule();
@@ -976,7 +989,11 @@ if (elements.keyModeTabCombo) {
   elements.keyModeTabCombo.addEventListener("click", function () { setKeyModeTab("combo"); });
 }
 
-// --- Captured key normalization -------------------------------------------
+// --- 捕获键名归一化 Captured key normalization ------------------------------
+// 后端 VK 表（libs/keyboard.js）只认识规范名（'up'、'ctrl'、'win'、
+// 'semicolon' 等），而浏览器 KeyboardEvent.key 返回的是另一套拼写
+// （'ArrowUp'、'Control'、'Meta'、';' 等）。因此捕获到的键在持久化前
+// 必须翻译成 VK 词汇表——否则映射会在下次重载时被静默丢弃。
 // The backend VK table (libs/keyboard.js) only understands its canonical
 // names ('up', 'ctrl', 'win', 'semicolon', ...). Browser KeyboardEvent.key
 // returns different spellings ('ArrowUp', 'Control', 'Meta', ';', ...), so
@@ -1020,6 +1037,7 @@ var CAPTURED_KEY_TO_VK = {
   'AudioVolumeUp': 'volumeup'
 };
 
+// 美式布局物理键产生的可打印标点（含其 Shift 变体）映射回该物理键的 VK 名。
 // Printable punctuation produced by a US-layout physical key (including its
 // Shift variant) maps back to that physical key's VK name.
 var CAPTURED_CHAR_TO_VK = {
@@ -1058,6 +1076,7 @@ function isCapturedModifier(keyEvent) {
   return key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta';
 }
 
+// 向组合键累加器追加一个 token，避免重复项。
 // Add a token to the combo accumulator without duplicating entries.
 function pushComboToken(input, token) {
   var parts = input.value ? input.value.split('+').filter(Boolean) : [];
@@ -1072,6 +1091,7 @@ if (elements.newKeyInput) {
     elements.newKeyInput.placeholder = "Press a key...";
     keyCaptureHandler = function (e) {
       e.preventDefault();
+      // 忽略孤立的修饰键按下，继续等待真正的按键（Shift+A → 'a'）。
       // Ignore bare modifier key-downs: wait for the actual key (Shift+A → 'a').
       if (isCapturedModifier(e)) return;
       var normalized = normalizeCapturedKey(e);

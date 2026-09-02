@@ -17,6 +17,9 @@ function createContext({ nlPort, nlToken, nlConnectToken, nlExtensionId, baseDir
     // MIDI state
     input: null,
     captureInput: null,
+    // 音号 -> 当前按住该音的所有 MIDI 通道集合。只有当持有该音的全部通道
+    // 都发送了 note-off 后该音才算完全抬起，因此不同通道上的分层叠加音色
+    // 不会过早释放按键。
     // note number -> Set of MIDI channels currently holding that note. A note
     // is fully released only when every channel holding it has sent note-off,
     // so layered voices on different channels do not prematurely lift a key.

@@ -5,6 +5,9 @@ const path = require("path");
 const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, deleteMappingFromConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
 const { getKeyName, sendKeySync } = require("../../libs/keyboard");
 
+// 抬起当前所有按下的按键并清空音符跟踪状态。在配置被（重新）应用时调用：
+// 若被按住音符的映射在新配置中消失，其 note-off 将找不到可释放的绑定，
+// 导致物理按键卡住直到用户点击停止。
 // Release every key that is currently held down and clear the note-tracking
 // state. Used when a config is (re)applied: if the mapping for a held note
 // disappears from the new config, its note-off would otherwise find no binding
@@ -31,6 +34,7 @@ function applyConfig(ctx, configPath, options) {
   const configResult = loadConfig(ctx.baseDir, { verbose: false, silent: true, configPath });
   if (!configResult) return null;
 
+  // 当前按下的映射将被新配置替换；在替换表前先释放它们，避免音符卡住。
   // Any mappings that are currently pressed will be replaced by the new
   // config; release them before swapping the table so notes never get stuck.
   if (ctx.activeVkCount && ctx.activeVkCount.size > 0) {
