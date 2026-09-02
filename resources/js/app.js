@@ -300,7 +300,13 @@ function t(key, vars) {
   var text = i18nDict[key] || key;
   if (vars) {
     Object.entries(vars).forEach(function (entry) {
-      text = text.replace(new RegExp("\\{" + entry[0] + "\\}", "g"), String(entry[1]));
+      // 使用函数形式的替换串，避免变量值中的 '$&'/'$1' 等被当成替换模式
+      // 二次解释（String.replace 会把字符串替换串里的 $ 序列特殊处理）。
+      // Use a replacer function so values containing '$&'/'$1' are inserted
+      // literally instead of being interpreted as replacement patterns.
+      text = text.replace(new RegExp("\\{" + entry[0] + "\\}", "g"), function () {
+        return String(entry[1]);
+      });
     });
   }
   return text;
