@@ -2,7 +2,8 @@
   "name": "miditap",
   "version": "1.6.2",
   "scripts": {
-    "version": "auto-changelog -p && git add CHANGELOG.md"
+    "version": "auto-changelog -p && git add CHANGELOG.md",
+    "test": "node --test test/"
   },
   "description": "Convert MIDI signal in to Keyboard out",
   "keywords": [],
