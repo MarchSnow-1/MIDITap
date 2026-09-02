@@ -55,34 +55,17 @@ function handleMidiMessage(ctx, deltaTime, message) {
 
   const binding = ctx.noteMap.get(note);
   const noteIsActive = ctx.activeNotes.has(note);
-  const isDuplicateNoteOn = isNoteOn && noteIsActive;
-  const isUnexpectedNoteOff = isNoteOff && !noteIsActive;
-
-  if (isNoteOn && !isDuplicateNoteOn) {
-    ctx.activeNotes.add(note);
-  } else if (isNoteOff && !isUnexpectedNoteOff) {
-    ctx.activeNotes.delete(note);
-  }
-
-  if (isDuplicateNoteOn) {
-    ctx.broadcast("midiDuplicateOn", { note });
-    return;
-  }
-  if (isUnexpectedNoteOff) {
-    ctx.broadcast("midiUnexpectedOff", { note });
-    return;
-  }
-
-  if (!binding) {
-    if (isNoteOn) {
-      ctx.broadcast("midiNoteOn", { note, velocity, key: null });
-    } else {
-      ctx.broadcast("midiNoteOff", { note });
-    }
-    return;
-  }
 
   if (isNoteOn) {
+    if (noteIsActive) {
+      ctx.broadcast("midiDuplicateOn", { note });
+      return;
+    }
+    ctx.activeNotes.add(note);
+    if (!binding) {
+      ctx.broadcast("midiNoteOn", { note, velocity, key: null });
+      return;
+    }
     for (const vkCode of binding) {
       const count = ctx.activeVkCount.get(vkCode) || 0;
       if (count === 0) {
@@ -95,10 +78,27 @@ function handleMidiMessage(ctx, deltaTime, message) {
       .map((vk) => getKeyName(vk) || "0x" + vk.toString(16).toUpperCase())
       .join("+");
     ctx.broadcast("midiNoteOn", { note, velocity, key: keyLabel });
-  } else {
-    const activeBinding = ctx.activeNoteBindings.get(note) || binding;
-    for (let i = activeBinding.length - 1; i >= 0; i--) {
-      const vkCode = activeBinding[i];
+    return;
+  }
+
+  // Note-off.
+  if (!noteIsActive) {
+    ctx.broadcast("midiUnexpectedOff", { note });
+    return;
+  }
+
+  // Release keys using the binding that was recorded when the note was
+  // pressed, NOT the current config binding. If the mapping was switched or
+  // deleted while the note was held, the current noteMap no longer contains
+  // this note — releasing based on it would leave the physical key stuck
+  // down until the user manually hits Stop.
+  const pressBinding = ctx.activeNoteBindings.get(note) || binding;
+  ctx.activeNoteBindings.delete(note);
+  ctx.activeNotes.delete(note);
+
+  if (pressBinding) {
+    for (let i = pressBinding.length - 1; i >= 0; i--) {
+      const vkCode = pressBinding[i];
       const count = ctx.activeVkCount.get(vkCode) || 0;
       if (count > 0) {
         const newCount = count - 1;
@@ -110,9 +110,8 @@ function handleMidiMessage(ctx, deltaTime, message) {
         }
       }
     }
-    ctx.activeNoteBindings.delete(note);
-    ctx.broadcast("midiNoteOff", { note });
   }
+  ctx.broadcast("midiNoteOff", { note });
 }
 
 // --- Command handlers ---

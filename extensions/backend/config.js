@@ -3,7 +3,26 @@
 const { execFile } = require("child_process");
 const path = require("path");
 const { loadConfig, listConfigFiles, renameConfigFile, addMappingToConfig, deleteMappingFromConfig, ensureConfigDir, getLastConfigPath, saveLastConfigPath } = require("../../libs/config");
-const { getKeyName } = require("../../libs/keyboard");
+const { getKeyName, sendKeySync } = require("../../libs/keyboard");
+
+// Release every key that is currently held down and clear the note-tracking
+// state. Used when a config is (re)applied: if the mapping for a held note
+// disappears from the new config, its note-off would otherwise find no binding
+// to release against, leaving the physical key stuck until Stop.
+function releaseHeldKeys(ctx) {
+  for (const [vkCode, count] of ctx.activeVkCount.entries()) {
+    if (count > 0) {
+      try {
+        sendKeySync(vkCode, 0x0002);
+      } catch (err) {
+        ctx.error("Failed to release key 0x" + vkCode.toString(16) + ": " + err.message);
+      }
+    }
+  }
+  ctx.activeVkCount.clear();
+  ctx.activeNoteBindings.clear();
+  ctx.activeNotes.clear();
+}
 
 // Load a config into ctx and broadcast the authoritative configLoaded event.
 // Returns the config result, or null on failure.
@@ -11,6 +30,12 @@ function applyConfig(ctx, configPath, options) {
   options = options || {};
   const configResult = loadConfig(ctx.baseDir, { verbose: false, silent: true, configPath });
   if (!configResult) return null;
+
+  // Any mappings that are currently pressed will be replaced by the new
+  // config; release them before swapping the table so notes never get stuck.
+  if (ctx.activeVkCount && ctx.activeVkCount.size > 0) {
+    releaseHeldKeys(ctx);
+  }
 
   if (options.persist) saveLastConfigPath(ctx.baseDir, configResult.configPath);
   ctx.noteMap = configResult.noteMap;
