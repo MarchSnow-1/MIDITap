@@ -26,7 +26,7 @@ function sendAllKeysUpSync(ctx) {
   }
   ctx.activeVkCount.clear();
   ctx.activeNoteBindings.clear();
-  ctx.activeNotes.clear();
+  ctx.activeNoteChannels.clear();
 }
 
 function stopMonitoring(ctx) {
@@ -44,7 +44,9 @@ function stopMonitoring(ctx) {
 // --- MIDI message handler ---
 
 function handleMidiMessage(ctx, deltaTime, message) {
-  const status = message[0] & 0xf0;
+  const statusByte = message[0];
+  const status = statusByte & 0xf0;
+  const channel = statusByte & 0x0f;
   const note = message[1];
   const velocity = message[2];
 
@@ -54,48 +56,58 @@ function handleMidiMessage(ctx, deltaTime, message) {
   if (!isNoteOn && !isNoteOff) return;
 
   const binding = ctx.noteMap.get(note);
-  const noteIsActive = ctx.activeNotes.has(note);
+  // Channels that currently hold this note number.
+  const holding = ctx.activeNoteChannels.get(note) || new Set();
 
   if (isNoteOn) {
-    if (noteIsActive) {
+    // Same channel re-triggering an already-held note is a real duplicate.
+    if (holding.has(channel)) {
       ctx.broadcast("midiDuplicateOn", { note });
       return;
     }
-    ctx.activeNotes.add(note);
-    if (!binding) {
-      ctx.broadcast("midiNoteOn", { note, velocity, key: null });
-      return;
-    }
-    for (const vkCode of binding) {
-      const count = ctx.activeVkCount.get(vkCode) || 0;
-      if (count === 0) {
-        sendKey(vkCode, 0);
+    holding.add(channel);
+    ctx.activeNoteChannels.set(note, holding);
+
+    // Only the first physical press of this note presses the mapped key; a
+    // layered voice on another channel must not re-trigger it.
+    if (holding.size === 1 && binding) {
+      for (const vkCode of binding) {
+        const count = ctx.activeVkCount.get(vkCode) || 0;
+        if (count === 0) {
+          sendKey(vkCode, 0);
+        }
+        ctx.activeVkCount.set(vkCode, count + 1);
       }
-      ctx.activeVkCount.set(vkCode, count + 1);
+      ctx.activeNoteBindings.set(note, binding);
     }
-    ctx.activeNoteBindings.set(note, binding);
     const keyLabel = binding
-      .map((vk) => getKeyName(vk) || "0x" + vk.toString(16).toUpperCase())
-      .join("+");
+      ? binding
+          .map((vk) => getKeyName(vk) || "0x" + vk.toString(16).toUpperCase())
+          .join("+")
+      : null;
     ctx.broadcast("midiNoteOn", { note, velocity, key: keyLabel });
     return;
   }
 
   // Note-off.
-  if (!noteIsActive) {
+  if (!holding.has(channel)) {
     ctx.broadcast("midiUnexpectedOff", { note });
     return;
   }
+  holding.delete(channel);
+  if (holding.size === 0) {
+    ctx.activeNoteChannels.delete(note);
+  } else {
+    // Still held by another channel — keep the key down.
+    return;
+  }
 
-  // Release keys using the binding that was recorded when the note was
-  // pressed, NOT the current config binding. If the mapping was switched or
-  // deleted while the note was held, the current noteMap no longer contains
-  // this note — releasing based on it would leave the physical key stuck
-  // down until the user manually hits Stop.
+  // Fully released. Release keys using the binding recorded at press time,
+  // NOT the current config binding — if the mapping was switched or deleted
+  // while the note was held, releasing against the current noteMap would leave
+  // the physical key stuck until the user manually hits Stop.
   const pressBinding = ctx.activeNoteBindings.get(note) || binding;
   ctx.activeNoteBindings.delete(note);
-  ctx.activeNotes.delete(note);
-
   if (pressBinding) {
     for (let i = pressBinding.length - 1; i >= 0; i--) {
       const vkCode = pressBinding[i];

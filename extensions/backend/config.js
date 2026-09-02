@@ -21,7 +21,7 @@ function releaseHeldKeys(ctx) {
   }
   ctx.activeVkCount.clear();
   ctx.activeNoteBindings.clear();
-  ctx.activeNotes.clear();
+  ctx.activeNoteChannels.clear();
 }
 
 // Load a config into ctx and broadcast the authoritative configLoaded event.

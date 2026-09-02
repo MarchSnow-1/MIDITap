@@ -17,7 +17,10 @@ function createContext({ nlPort, nlToken, nlConnectToken, nlExtensionId, baseDir
     // MIDI state
     input: null,
     captureInput: null,
-    activeNotes: new Set(),
+    // note number -> Set of MIDI channels currently holding that note. A note
+    // is fully released only when every channel holding it has sent note-off,
+    // so layered voices on different channels do not prematurely lift a key.
+    activeNoteChannels: new Map(),
     activeNoteBindings: new Map(),
     activeVkCount: new Map(),
     noteMap: new Map(),
