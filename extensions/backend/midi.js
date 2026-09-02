@@ -138,8 +138,9 @@ function handleMidiMessage(ctx, deltaTime, message) {
 
 function handleListPorts(ctx) {
   ctx.log("Handling listPorts command");
+  let listInput = null;
   try {
-    const listInput = new midi.Input();
+    listInput = new midi.Input();
     const portCount = listInput.getPortCount();
     const ports = [];
     for (let i = 0; i < portCount; i++) {
@@ -151,6 +152,14 @@ function handleListPorts(ctx) {
     ctx.error("listPorts error: " + err.message);
     ctx.broadcast("midiError", { message: "MIDI error: " + err.message });
     ctx.broadcast("midiPorts", { ports: [] });
+  } finally {
+    // 枚举用实例用完即关，避免每次刷新（new midi.Input()）都累积一个底层
+    // RtMidi 客户端句柄。
+    // Close the enumeration instance so repeated refreshes do not accumulate
+    // underlying RtMidi client handles.
+    if (listInput) {
+      try { listInput.closePort(); } catch (ignore) {}
+    }
   }
 }
 
@@ -273,44 +282,52 @@ function handleCaptureNote(ctx, data) {
     ctx.captureInput = null;
   }
 
+  let captureInput;
   try {
-    ctx.captureInput = new midi.Input();
+    captureInput = new midi.Input();
   } catch (err) {
     ctx.broadcast("midiError", { message: "Capture error: " + err.message });
-    ctx.captureInput = null;
     return;
   }
 
-  const portCount = ctx.captureInput.getPortCount();
+  const portCount = captureInput.getPortCount();
   if (portCount === 0) {
+    // 打开失败/无设备时同样要关闭已创建的实例，避免泄漏底层句柄。
+    // Close the freshly created instance on failure paths to avoid leaks.
+    try { captureInput.closePort(); } catch {}
     ctx.broadcast("midiError", { message: "No MIDI devices found" });
-    ctx.captureInput = null;
     return;
   }
 
   if (portIndex >= portCount) {
+    try { captureInput.closePort(); } catch {}
     ctx.broadcast("midiError", { message: "Port " + portIndex + " not found" });
-    ctx.captureInput = null;
     return;
   }
 
   try {
-    ctx.captureInput.openPort(portIndex);
-    ctx.captureInput.ignoreTypes(true, true, true);
+    captureInput.openPort(portIndex);
+    captureInput.ignoreTypes(true, true, true);
+    ctx.captureInput = captureInput;
     ctx.captureInput.on("message", function (deltaTime, message) {
       const status = message[0] & 0xf0;
       const note = message[1];
       if (status === 0x90 && message[2] > 0) {
         ctx.broadcast("midiNoteCaptured", { note });
         // Close after capture
-        try { ctx.captureInput.closePort(); } catch {}
-        ctx.captureInput = null;
+        if (ctx.captureInput) {
+          try { ctx.captureInput.closePort(); } catch {}
+          ctx.captureInput = null;
+        }
       }
     });
     ctx.broadcast("midiCaptureReady", {});
   } catch (err) {
+    if (ctx.captureInput) {
+      try { ctx.captureInput.closePort(); } catch {}
+      ctx.captureInput = null;
+    }
     ctx.broadcast("midiError", { message: "Failed to open port for capture: " + err.message });
-    ctx.captureInput = null;
   }
 }
 
