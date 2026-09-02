@@ -212,7 +212,12 @@ async function loadAvailableLocales() {
   };
 
   if (window.Neutralino && Neutralino.filesystem?.readDirectory) {
-    var candidates = ["resources/i18n", "/resources/i18n"];
+    // Neutralino 的 filesystem API 以 resources 目录为根，因此打包后实际路径
+    // 通常是 "i18n" 而非 "resources/i18n"。依次尝试常见候选。
+    // Neutralino's filesystem API is rooted at the resources directory, so the
+    // packaged path is usually "i18n" rather than "resources/i18n". Try the
+    // plausible candidates in order.
+    var candidates = ["i18n", "resources/i18n", "/resources/i18n"];
     for (var c = 0; c < candidates.length; c++) {
       if (await tryReadDirectory(candidates[c])) break;
     }
