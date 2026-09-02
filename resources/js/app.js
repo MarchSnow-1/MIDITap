@@ -621,64 +621,72 @@ function initFakeScrollbars() {
     var schedule = function () {
       window.requestAnimationFrame(update);
     };
-    surface.addEventListener("scroll", schedule);
-    window.addEventListener("resize", schedule);
-    schedule();
 
-    thumb.addEventListener("pointerdown", function (event) {
-      if (thumb.offsetHeight === 0) return;
-      isDragging = true;
-      dragStartY = event.clientY;
-      dragStartScroll = surface.scrollTop;
-      container.classList.add("dragging");
-      if (thumb.setPointerCapture) thumb.setPointerCapture(event.pointerId);
-      event.preventDefault();
-    });
+    // Bind listeners only once per container. initFakeScrollbars() is invoked
+    // on every tab switch; re-adding scroll/resize/pointer listeners each time
+    // would leak handlers and duplicate work without bound.
+    if (!container._fakeScrollInit) {
+      container._fakeScrollInit = true;
+      surface.addEventListener("scroll", schedule);
+      window.addEventListener("resize", schedule);
 
-    var onPointerMove = function (event) {
-      if (!isDragging) return;
-      var scrollHeight = surface.scrollHeight;
-      var clientHeight = surface.clientHeight;
-      var trackHeight = track.clientHeight;
-      var thumbHeight = thumb.offsetHeight || minThumb;
-      var maxScroll = Math.max(1, scrollHeight - clientHeight);
-      var maxThumbTop = Math.max(1, trackHeight - thumbHeight);
-      var delta = event.clientY - dragStartY;
-      var nextScroll =
-        dragStartScroll + (delta * maxScroll) / maxThumbTop;
-      surface.scrollTop = Math.max(0, Math.min(maxScroll, nextScroll));
-    };
+      thumb.addEventListener("pointerdown", function (event) {
+        if (thumb.offsetHeight === 0) return;
+        isDragging = true;
+        dragStartY = event.clientY;
+        dragStartScroll = surface.scrollTop;
+        container.classList.add("dragging");
+        if (thumb.setPointerCapture) thumb.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
 
-    var stopDragging = function (event) {
-      if (!isDragging) return;
-      isDragging = false;
-      container.classList.remove("dragging");
-      if (thumb.releasePointerCapture)
-        thumb.releasePointerCapture(event.pointerId);
-    };
+      var onPointerMove = function (event) {
+        if (!isDragging) return;
+        var scrollHeight = surface.scrollHeight;
+        var clientHeight = surface.clientHeight;
+        var trackHeight = track.clientHeight;
+        var thumbHeight = thumb.offsetHeight || minThumb;
+        var maxScroll = Math.max(1, scrollHeight - clientHeight);
+        var maxThumbTop = Math.max(1, trackHeight - thumbHeight);
+        var delta = event.clientY - dragStartY;
+        var nextScroll =
+          dragStartScroll + (delta * maxScroll) / maxThumbTop;
+        surface.scrollTop = Math.max(0, Math.min(maxScroll, nextScroll));
+      };
 
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", stopDragging);
-    window.addEventListener("pointercancel", stopDragging);
+      var stopDragging = function (event) {
+        if (!isDragging) return;
+        isDragging = false;
+        container.classList.remove("dragging");
+        if (thumb.releasePointerCapture)
+          thumb.releasePointerCapture(event.pointerId);
+      };
 
-    track.addEventListener("pointerdown", function (event) {
-      if (event.target === thumb) return;
-      var rect = track.getBoundingClientRect();
-      var clickY = event.clientY - rect.top;
-      var scrollHeight = surface.scrollHeight;
-      var clientHeight = surface.clientHeight;
-      var trackHeight = rect.height;
-      var thumbHeight = thumb.offsetHeight || minThumb;
-      var maxScroll = Math.max(1, scrollHeight - clientHeight);
-      var maxThumbTop = Math.max(1, trackHeight - thumbHeight);
-      var thumbTop = Math.min(
-        Math.max(0, clickY - thumbHeight / 2),
-        maxThumbTop
-      );
-      surface.scrollTop = (thumbTop / maxThumbTop) * maxScroll;
-      schedule();
-    });
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", stopDragging);
+      window.addEventListener("pointercancel", stopDragging);
 
+      track.addEventListener("pointerdown", function (event) {
+        if (event.target === thumb) return;
+        var rect = track.getBoundingClientRect();
+        var clickY = event.clientY - rect.top;
+        var scrollHeight = surface.scrollHeight;
+        var clientHeight = surface.clientHeight;
+        var trackHeight = rect.height;
+        var thumbHeight = thumb.offsetHeight || minThumb;
+        var maxScroll = Math.max(1, scrollHeight - clientHeight);
+        var maxThumbTop = Math.max(1, trackHeight - thumbHeight);
+        var thumbTop = Math.min(
+          Math.max(0, clickY - thumbHeight / 2),
+          maxThumbTop
+        );
+        surface.scrollTop = (thumbTop / maxThumbTop) * maxScroll;
+        schedule();
+      });
+    }
+
+    // Always recompute: a tab switch may have just made this container visible
+    // or its content may have changed since the last call.
     schedule();
   });
 }
