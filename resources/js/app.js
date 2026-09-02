@@ -328,7 +328,11 @@ function applyTranslations() {
   document.documentElement.lang = currentLocale;
 
   renderLangValue();
-  renderStatus();
+  // Re-apply the running-state labels AFTER the data-i18n pass. The Start/Stop
+  // button carries data-i18n="control.start", so without this a language switch
+  // while monitoring would overwrite "Stop" with "Start" even though the app is
+  // still running.
+  setRunningState(isRunning);
   renderActiveNotes();
   renderMapping();
 }
