@@ -488,6 +488,14 @@ function updatePortList(ports) {
     elements.deviceList.appendChild(item);
   });
 
+  // 若当前选中的端口已不在新列表里（设备被拔出），重置选择；否则保留。
+  // If the selected port is no longer present (device unplugged), reset the
+  // selection so a stale index is never sent to Start.
+  if (selectedPortIndex >= 0 && ports.length > 0 &&
+      !ports.some(function (p) { return p.index === selectedPortIndex; })) {
+    selectedPortIndex = -1;
+  }
+
   // Auto-select first device if none selected
   if (selectedPortIndex < 0 && ports.length > 0) {
     selectedPortIndex = ports[0].index;
