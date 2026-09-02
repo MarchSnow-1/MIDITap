@@ -153,3 +153,48 @@ test('deleting an out-of-range note returns false', () => {
     assert.equal(deleteMappingFromConfig(baseDir, configPath, '200'), false);
   });
 });
+
+test('deleting a mapping still works when a non-string top-level value precedes it', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, [
+      '{',
+      '  "name": "test",',
+      '  "port": 0,', // numeric global field before the target note
+      '  "48": "a",',
+      '  "60": "b",',
+      '}',
+      '',
+    ].join('\n'));
+
+    assert.equal(deleteMappingFromConfig(baseDir, configPath, '60'), true);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON5.parse(content);
+    assert.equal(Object.prototype.hasOwnProperty.call(parsed, '60'), false);
+    assert.equal(parsed['48'], 'a');
+    assert.equal(parsed.port, 0);
+    assert.equal(parsed.name, 'test');
+  });
+});
+
+test('deleting a mapping still works when a nested-object value precedes it', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, [
+      '{',
+      '  "name": "test",',
+      '  "meta": { "note": "60" },', // nested object with a lookalike key
+      '  "48": "a",',
+      '}',
+      '',
+    ].join('\n'));
+
+    assert.equal(deleteMappingFromConfig(baseDir, configPath, '48'), true);
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON5.parse(content);
+    assert.equal(Object.prototype.hasOwnProperty.call(parsed, '48'), false);
+    assert.equal(parsed.meta.note, '60'); // nested lookalike untouched
+  });
+});

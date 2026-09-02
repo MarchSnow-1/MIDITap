@@ -157,15 +157,27 @@ function findTopLevelEntryRange(content, propertyName, root) {
           let key;
           try { key = JSON5.parse(content.slice(i, stringEnd + 1)); } catch { return null; }
           const valueStart = skipTrivia(content, colon + 1, root.closing);
-          if (content[valueStart] !== '"' && content[valueStart] !== "'") return null;
-          const valueEnd = readStringEnd(content, valueStart);
-          if (valueEnd === -1) return null;
           if (key === propertyName) {
+            // Found the target property. Deletion only applies to string
+            // (key-spec) values; a non-string value here is not a removable
+            // mapping entry.
+            if (valueStart >= root.closing || (content[valueStart] !== '"' && content[valueStart] !== "'")) return null;
+            const valueEnd = readStringEnd(content, valueStart);
+            if (valueEnd === -1) return null;
             const afterValue = skipTrivia(content, valueEnd + 1, root.closing);
             return { start: i, end: content[afterValue] === ',' ? afterValue + 1 : valueEnd + 1 };
           }
-          i = valueEnd;
-          continue;
+          // Not the target property. If its value is a string, skip past it so
+          // the outer loop never misreads string content as structure. Non-string
+          // values (numbers, booleans, nested objects/arrays, e.g. "port": 0)
+          // are traversed safely by the loop's brace/bracket tracking, so we
+          // keep scanning for the target instead of aborting.
+          if (content[valueStart] === '"' || content[valueStart] === "'") {
+            const valueEnd = readStringEnd(content, valueStart);
+            if (valueEnd === -1) return null;
+            i = valueEnd;
+            continue;
+          }
         }
       }
       i = stringEnd;
