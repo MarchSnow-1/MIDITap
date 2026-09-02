@@ -351,7 +351,7 @@ async function setLang(locale, options) {
   await saveLocale(resolved);
   applyTranslations();
   if (fallbackUsed && notifyFallback) {
-    addLog("Language pack \"" + requested + "\" not found. Fallback to " + getFallbackLocale() + ".", "log-warn");
+    addLog(t("log.langFallback", { requested: requested, fallback: getFallbackLocale() }), "log-warn");
   }
 }
 
@@ -498,7 +498,7 @@ function updateConfigList(configs) {
   populate(elements.editConfigMenu);
 
   if (!configs || configs.length === 0) {
-    if (elements.editConfigValue) elements.editConfigValue.innerHTML = selectHTML("No configs found", null);
+    if (elements.editConfigValue) elements.editConfigValue.innerHTML = selectHTML(t("edit.noConfigs"), null);
   }
 }
 
@@ -821,7 +821,7 @@ function registerEvents() {
     var data = evt.detail;
     if (captureActive && elements.newNoteInput) {
       elements.newNoteInput.value = String(data.note);
-      elements.newNoteInput.placeholder = "Click then play a MIDI note";
+      elements.newNoteInput.placeholder = t("edit.captureNotePrompt");
       captureActive = false;
       elements.newNoteInput.blur();
     }
@@ -839,7 +839,7 @@ function registerEvents() {
     // Capture for edit tab "Add Mapping" note input
     if (listeningForNote && elements.newNoteInput) {
       elements.newNoteInput.value = String(data.note);
-      elements.newNoteInput.placeholder = "Click then play a MIDI note";
+      elements.newNoteInput.placeholder = t("edit.captureNotePrompt");
       listeningForNote = false;
       elements.newNoteInput.blur();
     }
@@ -940,10 +940,10 @@ if (elements.newNoteInput) {
   elements.newNoteInput.addEventListener("focus", function () {
     if (isRunning) {
       listeningForNote = true;
-      elements.newNoteInput.placeholder = "Play a MIDI note...";
+      elements.newNoteInput.placeholder = t("edit.captureNoteListening");
     } else {
       captureActive = true;
-      elements.newNoteInput.placeholder = "Play a MIDI note...";
+      elements.newNoteInput.placeholder = t("edit.captureNoteListening");
       var capPort = selectedPortIndex >= 0 ? selectedPortIndex : 0;
       sendCommand("captureNote", { port: capPort });
     }
@@ -954,7 +954,7 @@ if (elements.newNoteInput) {
       captureActive = false;
       sendCommand("stopCapture");
     }
-    elements.newNoteInput.placeholder = "Click then play a MIDI note";
+    elements.newNoteInput.placeholder = t("edit.captureNotePrompt");
   });
 }
 
@@ -1088,7 +1088,7 @@ function pushComboToken(input, token) {
 
 if (elements.newKeyInput) {
   elements.newKeyInput.addEventListener("focus", function () {
-    elements.newKeyInput.placeholder = "Press a key...";
+    elements.newKeyInput.placeholder = t("edit.keyListening");
     keyCaptureHandler = function (e) {
       e.preventDefault();
       // 忽略孤立的修饰键按下，继续等待真正的按键（Shift+A → 'a'）。
@@ -1097,7 +1097,7 @@ if (elements.newKeyInput) {
       var normalized = normalizeCapturedKey(e);
       if (!normalized) return;
       elements.newKeyInput.value = normalized;
-      elements.newKeyInput.placeholder = "a–z, 0–9, F1–F12...";
+      elements.newKeyInput.placeholder = t("edit.keyHint");
       document.removeEventListener("keydown", keyCaptureHandler, true);
       keyCaptureHandler = null;
       elements.newKeyInput.blur();
@@ -1105,7 +1105,7 @@ if (elements.newKeyInput) {
     document.addEventListener("keydown", keyCaptureHandler, true);
   });
   elements.newKeyInput.addEventListener("blur", function () {
-    elements.newKeyInput.placeholder = "Click then press a key";
+    elements.newKeyInput.placeholder = t("edit.keyIdle");
     if (keyCaptureHandler) {
       document.removeEventListener("keydown", keyCaptureHandler, true);
       keyCaptureHandler = null;
@@ -1115,7 +1115,7 @@ if (elements.newKeyInput) {
 
 if (elements.newComboInput) {
   elements.newComboInput.addEventListener("focus", function () {
-    elements.newComboInput.placeholder = "Press keys...";
+    elements.newComboInput.placeholder = t("edit.comboListening");
     var keydownHandler = function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -1130,7 +1130,7 @@ if (elements.newComboInput) {
   });
 
   elements.newComboInput.addEventListener("blur", function () {
-    elements.newComboInput.placeholder = "Click then press keys in sequence";
+    elements.newComboInput.placeholder = t("edit.comboIdle");
     if (elements.newComboInput._cleanup) {
       elements.newComboInput._cleanup();
       elements.newComboInput._cleanup = null;
@@ -1157,12 +1157,12 @@ if (elements.addMappingBtn) {
       ? (elements.newComboInput ? elements.newComboInput.value.trim() : "")
       : elements.newKeyInput.value.trim();
     if (!note || !keyValue) {
-      addLog("Please capture MIDI Note and a Key (single or combo)", "log-warn");
+      addLog(t("edit.errCaptureRequired"), "log-warn");
       return;
     }
     var noteNum = parseInt(note, 10);
     if (isNaN(noteNum) || noteNum < 0 || noteNum > 127) {
-      addLog("MIDI Note must be 0–127", "log-warn");
+      addLog(t("edit.errNoteRange"), "log-warn");
       return;
     }
     var configPath = null;
@@ -1267,7 +1267,7 @@ function showUpdateNotification(data) {
     '<span class="update-text">' +
     esc(t("update.available", { latest: data.latest, current: data.current })) +
     '<br>' + esc(t("update.action")) +
-    '<br><button class="update-link" id="updateOpenBtn">GitHub Releases</button>' +
+    '<br><button class="update-link" id="updateOpenBtn">' + esc(t("update.releasesBtn")) + '</button>' +
     '</span>' +
     '<button class="update-dismiss" id="updateDismissBtn" title="' + esc(t("update.dismiss")) + '">' +
     '<img src="icons/cross.svg" alt="" width="16" height="16" draggable="false">' +
@@ -1282,7 +1282,7 @@ function showUpdateNotification(data) {
     if (!releaseUrl) return;
     if (typeof Neutralino !== "undefined" && Neutralino.os && Neutralino.os.open) {
       Neutralino.os.open(releaseUrl).catch(function () {
-        addLog(t("log.error", { message: "Failed to open browser" }), "log-error");
+        addLog(t("log.openBrowserError"), "log-error");
       });
     }
   });
