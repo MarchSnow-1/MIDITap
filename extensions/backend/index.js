@@ -5,9 +5,20 @@ const fs = require("fs");
 const path = require("path");
 const { createContext } = require("./context");
 const { createBroadcast, connect } = require("./ws");
-const midiHandlers = require("./midi");
-const configHandlers = require("./config");
-const { createEventHandler } = require("./handlers");
+
+// --- Runtime prerequisites --------------------------------------------------
+// The backend relies on native modules (koffi, node-midi) that are compiled
+// against a specific Node.js ABI, and on Windows-only Win32 APIs. Fail with a
+// clear, actionable message instead of an opaque crash when the environment is
+// wrong (e.g. the end-user machine has no Node, or a different Node major).
+
+if (process.platform !== "win32" || process.arch !== "x64") {
+  console.error(
+    "[miditap.backend]: MIDITap currently supports Windows x64 only. " +
+    "Detected " + process.platform + " " + process.arch + "."
+  );
+  process.exit(1);
+}
 
 const APP_VERSION = (() => {
   try {
@@ -15,6 +26,24 @@ const APP_VERSION = (() => {
     return pkg.version || "0.0.0";
   } catch { return "0.0.0"; }
 })();
+
+// Native modules are required indirectly by the handler modules; wrap them so a
+// missing or ABI-mismatched Node.js produces a helpful message.
+let midiHandlers, configHandlers;
+try {
+  midiHandlers = require("./midi");
+  configHandlers = require("./config");
+} catch (err) {
+  console.error(
+    "[miditap.backend]: Failed to load a native backend module: " + (err && err.message) + "\n" +
+    "MIDITap needs Node.js 22 (x64) — the same major version the release was built with — " +
+    "because its native modules (node-midi / koffi) are compiled against that ABI.\n" +
+    "Install Node.js 22+ from https://nodejs.org (make sure `node` is on your PATH) and relaunch."
+  );
+  process.exit(1);
+}
+
+const { createEventHandler } = require("./handlers");
 
 // Read connection parameters from stdin (official NeutralinoJS extension protocol)
 let processInput;
