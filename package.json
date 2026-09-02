@@ -2,7 +2,7 @@
   "name": "miditap",
   "version": "1.6.2",
   "scripts": {
-    "version": "auto-changelog -p && git add CHANGELOG.md",
+    "version": "node scripts/sync-neutralino-version.js && auto-changelog -p && git add CHANGELOG.md neutralino.config.json",
     "test": "node --test test/"
   },
   "description": "Convert MIDI signal in to Keyboard out",
@@ -23,3 +23,4 @@
     "auto-changelog-plus": "^1.2.3"
   }
 }
+
