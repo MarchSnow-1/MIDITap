@@ -952,15 +952,107 @@ if (elements.keyModeTabCombo) {
   elements.keyModeTabCombo.addEventListener("click", function () { setKeyModeTab("combo"); });
 }
 
+// --- Captured key normalization -------------------------------------------
+// The backend VK table (libs/keyboard.js) only understands its canonical
+// names ('up', 'ctrl', 'win', 'semicolon', ...). Browser KeyboardEvent.key
+// returns different spellings ('ArrowUp', 'Control', 'Meta', ';', ...), so
+// keys captured here MUST be translated to the VK vocabulary before being
+// persisted — otherwise the mapping is silently dropped on the next reload.
+
+var CAPTURED_KEY_TO_VK = {
+  ' ': 'space',
+  'Spacebar': 'space',
+  'Enter': 'enter',
+  'Tab': 'tab',
+  'Backspace': 'backspace',
+  'Shift': 'shift',
+  'Control': 'ctrl',
+  'Alt': 'alt',
+  'Meta': 'win',
+  'CapsLock': 'capslock',
+  'Escape': 'esc',
+  'Esc': 'esc',
+  'ArrowUp': 'up',
+  'ArrowDown': 'down',
+  'ArrowLeft': 'left',
+  'ArrowRight': 'right',
+  'PageUp': 'pageup',
+  'PageDown': 'pagedown',
+  'Home': 'home',
+  'End': 'end',
+  'Insert': 'insert',
+  'Delete': 'delete',
+  'NumLock': 'numlock',
+  'PrintScreen': 'printscreen',
+  'ScrollLock': 'scrolllock',
+  'Pause': 'pause',
+  'ContextMenu': 'apps',
+  'MediaTrackNext': 'nexttrack',
+  'MediaTrackPrevious': 'prevtrack',
+  'MediaStop': 'stop',
+  'MediaPlayPause': 'playpause',
+  'AudioVolumeMute': 'mute',
+  'AudioVolumeDown': 'volumedown',
+  'AudioVolumeUp': 'volumeup'
+};
+
+// Printable punctuation produced by a US-layout physical key (including its
+// Shift variant) maps back to that physical key's VK name.
+var CAPTURED_CHAR_TO_VK = {
+  ';': 'semicolon', ':': 'semicolon',
+  '=': 'equal', '+': 'equal',
+  ',': 'comma', '<': 'comma',
+  '-': 'minus', '_': 'minus',
+  '.': 'period', '>': 'period',
+  '/': 'slash', '?': 'slash',
+  '`': 'backquote', '~': 'backquote',
+  '[': 'lbracket', '{': 'lbracket',
+  '\\': 'backslash', '|': 'backslash',
+  ']': 'rbracket', '}': 'rbracket',
+  "'": 'quote', '"': 'quote',
+  '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+  '^': '6', '&': '7', '*': '8', '(': '9', ')': '0'
+};
+
+var CAPTURED_MODIFIERS = { 'shift': true, 'ctrl': true, 'alt': true, 'win': true };
+
+function normalizeCapturedKey(keyEvent) {
+  var key = typeof keyEvent.key === 'string' ? keyEvent.key : '';
+  var mapped = CAPTURED_KEY_TO_VK[key];
+  if (mapped) return mapped;
+  if (/^F([1-9]|1[0-9]|2[0-4])$/i.test(key)) return key.toLowerCase();
+  if (key.length === 1) {
+    if (/[a-zA-Z0-9]/.test(key)) return key.toLowerCase();
+    var charMapped = CAPTURED_CHAR_TO_VK[key];
+    if (charMapped) return charMapped;
+  }
+  return null;
+}
+
+function isCapturedModifier(keyEvent) {
+  var key = typeof keyEvent.key === 'string' ? keyEvent.key : '';
+  return key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta';
+}
+
+// Add a token to the combo accumulator without duplicating entries.
+function pushComboToken(input, token) {
+  var parts = input.value ? input.value.split('+').filter(Boolean) : [];
+  if (parts.indexOf(token) === -1) {
+    parts.push(token);
+    input.value = parts.join('+');
+  }
+}
+
 if (elements.newKeyInput) {
   elements.newKeyInput.addEventListener("focus", function () {
     elements.newKeyInput.placeholder = "Press a key...";
     keyCaptureHandler = function (e) {
       e.preventDefault();
-      var key = e.key;
-      if (key === " ") key = "Space";
-      if (key.length === 1 && key !== " ") key = key.toLowerCase();
-      elements.newKeyInput.value = key;
+      // Ignore bare modifier key-downs: wait for the actual key (Shift+A → 'a').
+      if (isCapturedModifier(e)) return;
+      var normalized = normalizeCapturedKey(e);
+      if (!normalized) return;
+      elements.newKeyInput.value = normalized;
       elements.newKeyInput.placeholder = "a–z, 0–9, F1–F12...";
       document.removeEventListener("keydown", keyCaptureHandler, true);
       keyCaptureHandler = null;
@@ -983,19 +1075,9 @@ if (elements.newComboInput) {
     var keydownHandler = function (e) {
       e.preventDefault();
       e.stopPropagation();
-      var key = e.key;
-      if (key === " ") key = "Space";
-      else if (key === "Control") key = "ctrl";
-      else if (key === "Shift") key = "shift";
-      else if (key === "Alt") key = "alt";
-      else if (key === "Meta") key = "win";
-      else if (key.length === 1) key = key.toLowerCase();
-
-      var parts = elements.newComboInput.value ? elements.newComboInput.value.split("+").filter(Boolean) : [];
-      if (parts.indexOf(key) === -1) {
-        parts.push(key);
-        elements.newComboInput.value = parts.join("+");
-      }
+      var normalized = normalizeCapturedKey(e);
+      if (!normalized) return;
+      pushComboToken(elements.newComboInput, normalized);
     };
     document.addEventListener("keydown", keydownHandler, true);
     elements.newComboInput._cleanup = function () {
