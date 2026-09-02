@@ -253,3 +253,76 @@ test('parseBinding accepts single keys, combos and rejects unknown names', () =>
   assert.equal(parseBinding('', '60'), null);
   assert.equal(parseBinding('ctrl++', '60'), null);
 });
+
+test('loadConfig returns null for missing or malformed config files', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const missing = path.join(configDir, 'nope.json');
+    assert.equal(loadConfig(baseDir, { configPath: missing, silent: true }), null);
+
+    const badPath = path.join(configDir, 'bad.json');
+    fs.writeFileSync(badPath, '{ broken');
+    assert.equal(loadConfig(baseDir, { configPath: badPath, silent: true }), null);
+  });
+});
+
+test('loadConfig builds a noteMap keyed by integer notes and keeps name/port', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, [
+      '{',
+      '  name: "My Config",', // unquoted JSON5 key
+      '  "port": 2,',
+      '  "48": "a",',
+      '  "50": "ctrl+b",',
+      '  "200": "z",', // out of range -> skipped
+      '  "ArrowUp": "q"', // invalid note text -> skipped (not an integer key)
+      '}',
+      '',
+    ].join('\n'));
+
+    const result = loadConfig(baseDir, { configPath, silent: true });
+    assert.ok(result);
+    assert.equal(result.name, 'My Config');
+    assert.equal(result.port, 2);
+    assert.equal(result.noteMap.size, 2);
+    assert.deepEqual(result.noteMap.get(48), [0x41]);
+    assert.deepEqual(result.noteMap.get(50), [0x11, 0x42]);
+    assert.equal(result.noteMap.has(200), false);
+  });
+});
+
+test('strict mode rejects any config that contains an invalid entry', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const strictPath = path.join(configDir, 'strict.json');
+    fs.writeFileSync(strictPath, '{\n  "name": "t",\n  "48": "notavalidkeyname"\n}\n');
+    assert.equal(loadConfig(baseDir, { configPath: strictPath, silent: true, strict: true }), null);
+
+    // Non-strict mode still returns the valid entries while dropping the bad one.
+    const loose = loadConfig(baseDir, { configPath: strictPath, silent: true });
+    assert.ok(loose);
+    assert.equal(loose.noteMap.size, 0);
+  });
+});
+
+test('loadConfig rejects an out-of-range note even in non-strict mode', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, '{\n  "name": "t",\n  "128": "a",\n  "127": "b"\n}\n');
+    const result = loadConfig(baseDir, { configPath, silent: true });
+    assert.ok(result);
+    assert.equal(result.noteMap.has(128), false);
+    assert.equal(result.noteMap.has(127), true);
+  });
+});
+
+test('port field is parsed as a non-negative integer', () => {
+  withConfigDir(({ baseDir, configDir }) => {
+    const configPath = path.join(configDir, 'mapping.json');
+    fs.writeFileSync(configPath, '{\n  "name": "t",\n  "port": 3,\n  "48": "a"\n}\n');
+    assert.equal(loadConfig(baseDir, { configPath, silent: true }).port, 3);
+
+    fs.writeFileSync(configPath, '{\n  "name": "t",\n  "port": "x",\n  "48": "a"\n}\n');
+    // invalid port -> null (main flow falls back to default 0)
+    assert.equal(loadConfig(baseDir, { configPath, silent: true }).port, null);
+  });
+});
