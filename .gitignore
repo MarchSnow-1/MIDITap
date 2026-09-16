@@ -1,0 +1,37 @@
+# .NET 构建产物
+#
+# .NET build output
+bin/
+obj/
+publish/
+stage/
+*.binlog
+
+# 依赖与前端产物
+#
+# Dependencies and front-end build output
+node_modules/
+dist/
+
+# IDE 配置
+#
+# IDE settings
+.vs/
+.vscode/
+.idea/
+*.user
+
+# 系统与临时文件
+#
+# System and temporary files
+*.log
+Thumbs.db
+.*.tmp
+scripts/.tmp-*
+
+# 开发期临时脚本
+# 这些是排查用的工具，不属于产品，也不必发给用户
+#
+# Throwaway development scripts.
+# They are investigation tools, not product code, and do not belong in the user's package.
+.dev/

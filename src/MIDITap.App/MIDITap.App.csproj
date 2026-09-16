@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>MIDITap.App</RootNamespace>
+    <!-- 产物命名 MIDITap.exe
+
+         The output is named MIDITap.exe -->
+    <AssemblyName>MIDITap</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64</Platforms>
+    <Platform Condition="'$(Platform)' == 'AnyCPU'">x64</Platform>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- 版本号与根目录 package.json 保持一致：npm version 改的是 package.json，这里不会自动跟着变
+         发布时 release.yml 会用标签版本注入 -p:Version 覆盖它
+
+         The version number is kept in step with the root package.json
+         npm version edits package.json only, so this value does not follow automatically
+         At release time release.yml overrides it by injecting -p:Version with the tag version -->
+    <Version>1.7.1</Version>
+    <!-- 版本号后面默认不追加 git 提交哈希
+         .NET 8 默认会追加（InformationalVersion 变成 "1.7.1+<40位哈希>"）
+         而这一串会直接显示在「关于」区，既难看又不好抄
+         开发构建需要可区分时，由 dev.yml 显式传入带标识的版本号（见那里的说明）
+         Do not append the git commit hash to the version by default
+         .NET 8 does by default, which turns InformationalVersion into "1.7.1+<40-char hash>"
+         That string then shows up verbatim under About — ugly and awkward to copy
+         Development builds pass an identifying version explicitly from dev.yml instead -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <ApplicationIcon>Assets\appIcon.ico</ApplicationIcon>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260804001" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <!-- 只引用 NAudio.Midi，而不是 NAudio 元包
+         元包会把 NAudio.WinForms 一起拉进来，进而带上 System.Windows.Forms 与 PresentationFramework/PresentationCore（WPF）
+         本应用是 WinUI 3，源码里只用到 NAudio.Midi，那些程序集纯属陪跑
+
+         NAudio.Midi is referenced rather than the NAudio meta-package
+         The meta-package also pulls in NAudio.WinForms
+         That brings System.Windows.Forms and PresentationFramework/PresentationCore (WPF) with it
+         This app is WinUI 3 and its source uses only NAudio.Midi
+         Those assemblies are dead weight
+ -->
+    <PackageReference Include="NAudio.Midi" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MIDITap.Core\MIDITap.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\appIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\appIcon.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="i18n\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "📖 Documentation / 项目文档"
+    url: https://github.com/MarchSnow-1/MIDITap
+    about: "Before submitting feedback or suggestions, please check the documentation first / 在反馈问题或提出建议前，请先检查文档中是否有相关内容"
+  - name: "💬 GitHub Issues / 已有问题"
+    url: https://github.com/MarchSnow-1/MIDITap/issues
+    about: "Check existing issues before submitting / 提交前请先查看已有 Issues"
+  - name: "🔒 Report a Security Vulnerability / 报告安全漏洞"
+    url: https://github.com/MarchSnow-1/MIDITap/security/advisories/new
+    about: "Privately report security vulnerabilities to the maintainers / 向开发者报告安全问题"

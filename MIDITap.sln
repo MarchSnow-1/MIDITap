@@ -1,0 +1,66 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{77708919-6AF9-41E4-8860-325609A8DCF2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MIDITap.Core", "src\MIDITap.Core\MIDITap.Core.csproj", "{B0F629B9-525B-4ACA-9542-59E26A76DAB7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MIDITap.Core.Tests", "src\MIDITap.Core.Tests\MIDITap.Core.Tests.csproj", "{6A222A91-BB14-436D-9BA7-6ACEC548AC21}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MIDITap.App", "src\MIDITap.App\MIDITap.App.csproj", "{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MIDITap.Integration.Tests", "src\MIDITap.Integration.Tests\MIDITap.Integration.Tests.csproj", "{E2753CD2-4C6D-4774-B09D-F220CF7189FA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7}.Debug|x64.Build.0 = Debug|Any CPU
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7}.Release|x64.ActiveCfg = Release|Any CPU
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7}.Release|x64.Build.0 = Release|Any CPU
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21}.Debug|x64.Build.0 = Debug|Any CPU
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21}.Release|x64.ActiveCfg = Release|Any CPU
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21}.Release|x64.Build.0 = Release|Any CPU
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}.Debug|Any CPU.Build.0 = Debug|x64
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}.Debug|x64.ActiveCfg = Debug|x64
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}.Debug|x64.Build.0 = Debug|x64
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}.Release|Any CPU.ActiveCfg = Release|x64
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}.Release|Any CPU.Build.0 = Release|x64
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}.Release|x64.ActiveCfg = Release|x64
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64}.Release|x64.Build.0 = Release|x64
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA}.Debug|x64.Build.0 = Debug|Any CPU
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA}.Release|x64.ActiveCfg = Release|Any CPU
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA}.Release|x64.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B0F629B9-525B-4ACA-9542-59E26A76DAB7} = {77708919-6AF9-41E4-8860-325609A8DCF2}
+		{6A222A91-BB14-436D-9BA7-6ACEC548AC21} = {77708919-6AF9-41E4-8860-325609A8DCF2}
+		{7E4A5B2C-91D3-4F6E-8A5B-3C2D1E0F9A64} = {77708919-6AF9-41E4-8860-325609A8DCF2}
+		{E2753CD2-4C6D-4774-B09D-F220CF7189FA} = {77708919-6AF9-41E4-8860-325609A8DCF2}
+	EndGlobalSection
+EndGlobal

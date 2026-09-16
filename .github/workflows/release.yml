@@ -1,0 +1,343 @@
+# release.yml — 打 v2.x.y 标签时构建并发布正式版
+#
+# 与 dev.yml 的分工：dev.yml 在推送到 v2 时产出 workflow artifact，不出 Release
+# 本文件只在打标签时产出 GitHub Release
+#
+# 发布说明**从提交历史生成**（auto-changelog-plus，按 Conventional Commits 归类）
+# 而不是抽取 CHANGELOG.md，因为后者要求 CHANGELOG 与标签严格同步，一旦漏提交就发出空说明
+# 只有当前标签那一节被保留：
+#
+#   npx auto-changelog-plus --starting-version <tag>
+#   sed -i '1,4d' CHANGELOG.md
+#
+# **为什么必须显式传 --handlebars-setup，且必须是相对路径**：
+# auto-changelog-plus 默认把自己的绝对路径传给 auto-changelog
+# 而后者判断"是否绝对路径"用的是 /^\//，只认以 / 开头的 POSIX 路径
+# Windows 路径形如 D:\...，匹配不上，于是被当成相对路径再与 cwd 拼接
+# 结果得到 D:\...\D:\... 这种重复路径并崩溃（实测）
+# 传相对路径即可绕过，它会被正确地与 cwd 拼成绝对路径
+# 这也是本步骤之前必须先 npm ci 的原因，相对路径要能解析到本地的 node_modules
+# 顺带一提：这个 bug 只影响 Windows，auto-changelog 2.6.x 上仍然存在
+#
+# Builds and publishes a stable release when a v2.x.y tag is pushed
+#
+# Split of duties: dev.yml produces a workflow artifact on pushes to v2, with no Release
+# This file produces a GitHub Release, only on tags
+#
+# The release notes are GENERATED FROM COMMIT HISTORY (auto-changelog-plus, grouping commits by Conventional Commits type)
+# They are not extracted from CHANGELOG.md, because extraction requires the committed changelog to line up with the tag exactly
+# A missed commit then yields empty notes
+# Only the current tag's section is kept:
+#
+#   npx auto-changelog-plus --starting-version <tag>
+#   sed -i '1,4d' CHANGELOG.md
+#
+# **Why --handlebars-setup must be passed explicitly, and as a RELATIVE path**:
+# auto-changelog-plus hands its own absolute path to auto-changelog
+# That tool's is-this-absolute check is /^\//, which recognises only POSIX paths starting with /
+# A Windows path such as D:\... does not match, so it is treated as relative and joined onto cwd
+# The result is a doubled D:\...\D:\... path and a crash (measured)
+# Passing a relative path sidesteps this, since it is correctly joined to cwd
+# That is also why npm ci must run first, as the relative path has to resolve inside node_modules
+# Note this bug is Windows-only and is still present in auto-changelog 2.6.x
+
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "v2.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      # 发布说明要按标签划分版本区间，因此取回完整历史与全部标签
+      # fetch-depth: 0 即 all history for all branches and tags，无需再写 fetch-tags
+      #
+      # Release notes are split into version ranges by tag, so the full history and every tag are needed
+      # fetch-depth: 0 means all history for all branches and tags, so fetch-tags is not needed as well
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # 生成发布说明要用 auto-changelog-plus（Node 包），且必须走本地安装
+      # 理由见文件头：helper 的相对路径要能解析到 node_modules
+      #
+      # Node is needed because release notes come from auto-changelog-plus, and it must be installed locally
+      # See the header for why the helper path has to resolve inside node_modules
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      # --------------------------------------------------- 测试 / Tests
+
+      # 发布前重跑测试，因为标签可能打在未验证的提交上，而产物会进入用户的自动更新通道
+      #
+      # Re-run the tests before releasing, because a tag can point at an unverified commit and the artifact enters users' automatic-update channel
+      - name: Core tests
+        run: dotnet test src/MIDITap.Core.Tests/MIDITap.Core.Tests.csproj -c Release --logger "console;verbosity=normal"
+
+      # --------------------------------------------------- 版本号 / Version
+
+      # **把标签版本注入构建**，而不是沿用 csproj 里的值
+      # 这不是锦上添花，因为应用比较的是自身版本与最新标签
+      # 若标签是 v2.0.1 而二进制仍自称 2.0.0，用户装完新版本后依然会"发现"有更新
+      # 于是形成**无限更新循环**
+      #
+      # Inject the tag version into the build rather than trusting the csproj value
+      # This is not a nicety: the app compares its own version against the latest tag
+      # If the tag were v2.0.1 while the binary still reported 2.0.0, an updated install would still "see" an update
+      # That becomes an INFINITE UPDATE LOOP
+      - name: Compute version from the tag
+        id: ver
+        shell: pwsh
+        run: |
+          $raw = "${{ github.ref_name }}"
+          $base = $raw.TrimStart("v")
+          if ($base -notmatch "^[0-9]+\.[0-9]+\.[0-9]+") {
+            throw "Tag is not a semver release tag: $raw"
+          }
+          "BASE=$base" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "VERSION=$raw" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          # csproj 与标签不一致会让**开发构建**报告错误的版本号，因为 dev.yml 从 csproj 取值
+          # 只告警不中断，因为标签对产物是权威，为一条元数据拦下一次发布得不偿失
+          #
+          # A mismatch makes DEVELOPMENT builds report the wrong version, since dev.yml reads the csproj
+          # Warn rather than fail: the tag is authoritative for the artifact, and blocking a release over metadata is not worth it
+          $match = [regex]::Match((Get-Content "src/MIDITap.App/MIDITap.App.csproj" -Raw), "<Version>([^<]+)</Version>")
+          if ($match.Success -and $match.Groups[1].Value.Trim() -ne $base) {
+            Write-Host "::warning title=Version mismatch::csproj says $($match.Groups[1].Value.Trim()) but the tag is $raw; the dev build will report the csproj value."
+          }
+          Write-Host "Version: $raw (build $base)"
+
+      # --------------------------------------------------- 构建 / Build
+
+      - name: Publish app (self-contained win-x64)
+        run: >
+          dotnet publish src/MIDITap.App/MIDITap.App.csproj
+          -c Release -p:Platform=x64 -r win-x64 --self-contained true
+          -p:Version=${{ steps.ver.outputs.BASE }} -o publish
+
+      - name: Stage portable layout
+        shell: pwsh
+        run: |
+          $stage = "stage/MIDITap"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          # 排除 .storage：PowerShell 的 * 会匹配点开头的项（实测）
+          # 因此只要 publish/ 里存在 .storage，它就会被复制进用户包，把开发机的状态发给所有人
+          # 这里用 Get-ChildItem -Force 显式过滤，而不是依赖通配符碰巧不匹配
+          #
+          # Exclude .storage: PowerShell's * DOES match dot-prefixed entries (measured)
+          # Any .storage left in publish/ would be copied into the user package and ship a developer's state to everyone
+          # Filtering explicitly with -Force beats relying on a lucky wildcard
+          Get-ChildItem publish -Force | Where-Object { $_.Name -ne ".storage" } |
+            ForEach-Object { Copy-Item $_.FullName $stage -Recurse -Force }
+          Copy-Item README.md, README_zh-CN.md, CHANGELOG.md, LICENSE $stage/ -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path "$stage/config" | Out-Null
+          Copy-Item config/mapping.json "$stage/config/"
+          # E2E 脚本随包发布：用户与维护者都能用同一份脚本对真实设备做验证
+          #
+          # The E2E script ships with the package so users and maintainers validate against real hardware with exactly the same script
+          New-Item -ItemType Directory -Force -Path "$stage/scripts" | Out-Null
+          Copy-Item scripts/*.ps1 "$stage/scripts/" -ErrorAction SilentlyContinue
+          # 不自行发布校验和文件
+          # GitHub 已为每个资产提供 SHA-256：API 的 assets[].digest，以及网页 expanded_assets HTML 里的同一摘要
+          # 应用直接从那里读
+          #
+          # No self-published checksum file
+          # GitHub already provides a SHA-256 per asset: the API's assets[].digest, and the same digest embedded in the expanded_assets HTML
+          # The app reads it from there
+          Compress-Archive -Path $stage -DestinationPath ("MIDITap-" + ${{ steps.ver.outputs.VERSION }} + "-win-x64.zip") -Force
+
+      # --------------------------------------------------- 安装包 / Installer
+
+      # **必须用同一个 stage 目录**：安装出来的文件与自更新包逐文件相同
+      # 否则用户装完后点「重启并更新」会因缺少 scripts/apply-update.ps1 而失败
+      #
+      # The very same stage directory is used, so what gets installed is file-for-file what the self-update package holds
+      # Otherwise restart-and-update would fail after installing, because scripts/apply-update.ps1 would be missing
+      - name: Build the Inno Setup installer
+        shell: pwsh
+        run: |
+          # Inno 不在 windows-latest 预装清单里，因此显式装一份（choco 在镜像上已有）
+          #
+          # Inno is not on the windows-latest preinstalled list, so install it explicitly
+          # choco is already present on the image
+          choco install innosetup --no-progress -y
+
+          # 三个候选位置都找一遍
+          # choco 通常装在 Program Files (x86)，但安装器版本变了以后可能落到 Program Files 或用户目录
+          # 只认一个路径会让发布因为找不到编译器而失败
+          #
+          # Three candidates are tried
+          # choco usually lands under Program Files (x86), yet a different installer version may put it under Program Files or the user profile
+          # Trusting one path would fail a release over a missing compiler
+          $isccCandidates = @(
+            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            throw ("ISCC.exe not found after install; looked in: " + ($isccCandidates -join ", "))
+          }
+          Write-Host "Using $iscc"
+
+          # WizardStyle 是 Inno 6.6+ 才有的指令，旧版本读到会直接编译失败
+          # 因此这里探测版本后再决定是否启用现代向导
+          #
+          # WizardStyle only exists from Inno 6.6 onward, and an older compiler rejects it outright
+          # The version is therefore probed before enabling the modern wizard
+          $ver = (Get-Item $iscc).VersionInfo.ProductVersion
+          $modern = $false
+          if ($ver -match "^(\d+)\.(\d+)") {
+            $maj = [int]$Matches[1]; $min = [int]$Matches[2]
+            $modern = ($maj -gt 6) -or ($maj -eq 6 -and $min -ge 6)
+          }
+          Write-Host "ISCC $ver -> modern wizard: $modern"
+
+          $isccArgs = @(
+            "/DAppVersion=${{ steps.ver.outputs.BASE }}",
+            "/DAssetTag=${{ steps.ver.outputs.VERSION }}",
+            "/DSourceDir=$((Resolve-Path stage/MIDITap).Path)"
+          )
+          if ($modern) { $isccArgs += "/DModernWizard=1" }
+          & $iscc @isccArgs "installer/MIDITap.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed with code $LASTEXITCODE" }
+
+          $setup = "dist/MIDITap-${{ steps.ver.outputs.VERSION }}-win-x64-setup.exe"
+          if (-not (Test-Path $setup)) { throw "Expected installer not found: $setup" }
+          Write-Host ("installed package: " + $setup + "  " + [math]::Round((Get-Item $setup).Length / 1MB, 1) + " MB")
+
+      # 资产文件名必须与应用的期望一致，即 UpdateAssetSelector 匹配的 -win-x64.zip
+      # 这里提前断言，否则用户会看得见新版本却下不到，那是最难解释的一类故障
+      #
+      # The asset file name must match what the app expects, the -win-x64.zip that UpdateAssetSelector matches
+      # Asserting it here prevents the hardest kind of failure to explain: the user can see the new version but cannot download it
+      - name: Verify the asset name matches what the app looks for
+        shell: pwsh
+        run: |
+          $expected = "MIDITap-" + ${{ steps.ver.outputs.VERSION }} + "-win-x64.zip"
+          if (-not (Test-Path $expected)) { throw "Expected asset not found: $expected" }
+          $stage = "stage/MIDITap"
+          $missing = @()
+          if (-not (Test-Path "$stage/scripts/apply-update.ps1")) { $missing += "scripts/apply-update.ps1" }
+          if (-not (Test-Path "$stage/MIDITap.exe")) { $missing += "MIDITap.exe" }
+          if ($missing.Count -gt 0) {
+            throw "Package is missing files required for self-update: $($missing -join ', ')"
+          }
+          # 解压替换必须跳过这两棵子树，否则用户的配置与状态会被出厂默认覆盖
+          #
+          # The replace step must skip both subtrees, or factory defaults would overwrite user data
+          $entries = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $expected)).Entries
+          try {
+            $bad = @($entries | Where-Object { $_.FullName -match "^MIDITap/(config|\.storage)/" })
+            Write-Host "包内条目数: $($entries.Count)"
+            Write-Host "用户数据条目: $($bad.Count)（可存在，但替换时必须被排除）"
+          } finally { $entries.Dispose() }
+          Write-Host "资产名与包结构均正确: $expected"
+
+      # 安装包与 zip 载荷相同，因此也要断言它带上了自更新所需的两样东西
+      # 并且**没有**把开发机的 .storage 打进去，因为安装器不像解压那样有排除规则，会照装不误
+      #
+      # The installer shares the zip's payload, so assert it carries what self-update needs
+      # Also assert it did NOT pick up a developer's .storage: unlike extraction, an installer has no exclusion rule and would install it anyway
+      - name: Verify the installer payload
+        shell: pwsh
+        run: |
+          $setup = "dist/MIDITap-${{ steps.ver.outputs.VERSION }}-win-x64-setup.exe"
+          if (-not (Test-Path $setup)) { throw "Expected installer not found: $setup" }
+
+          # 安装包是自解压 exe，无法直接列出内容，因此核对它的来源 stage 目录
+          # 这一步与 zip 的校验互补，因为两者都源自同一个 stage 目录
+          #
+          # The installer is a self-extracting exe whose contents cannot be listed directly, so its source stage directory is checked instead
+          # That complements the zip check, since both come from the same stage directory
+          $stage = "stage/MIDITap"
+          $missing = @()
+          if (-not (Test-Path "$stage/MIDITap.exe")) { $missing += "MIDITap.exe" }
+          if (-not (Test-Path "$stage/scripts/apply-update.ps1")) { $missing += "scripts/apply-update.ps1" }
+          if (Test-Path "$stage/.storage") { $missing += ".storage (must not ship)" }
+          if ($missing.Count -gt 0) {
+            throw "The installer payload is wrong: $($missing -join ", ")"
+          }
+          Write-Host ("安装包 " + [math]::Round((Get-Item $setup).Length / 1MB, 1) + " MB，载荷含自更新脚本且无 .storage")
+
+      # --------------------------------------------------- 发布说明 / Release notes
+
+      # **必须在打包之后运行**：它会覆写工作区里的 CHANGELOG.md，只留当前标签那一节
+      # 而用户包里那份应当是完整的历史，顺序颠倒会让包里的 CHANGELOG 只剩一个版本
+      # shell 用 bash 是为了 sed，按行删除是字节级操作，比在 PowerShell 里重写文本更不容易改坏编码
+      #
+      # This MUST run after packaging: it overwrites the working tree's CHANGELOG.md, keeping only the current tag's section
+      # The copy inside the user package should hold the full history
+      # Reversing the order leaves the package with a single-version changelog
+      # bash is used for sed: deleting lines by number is byte-exact, unlike rewriting the text in PowerShell, which can quietly change the encoding
+      - name: Generate release notes from commit history
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npx auto-changelog-plus \
+            --starting-version "${{ github.ref_name }}" \
+            --handlebars-setup node_modules/auto-changelog-plus/settings/setup.cjs
+
+          # 删掉前 4 行，也就是标题、说明与两者之间的空行
+          # 生成标记那行 HTML 注释保留，它属于正文
+          #
+          # The first four lines are dropped: the title, the description and the blank lines around them
+          # The HTML generation marker is kept, as it belongs to the body
+          sed -i '1,4d' CHANGELOG.md
+
+          # 空说明比没有说明更糟，它会让用户以为这次发布没有任何改动
+          # 因此宁可让发布失败
+          #
+          # Empty notes are worse than none, since users would read them as "this release changed nothing"
+          # Failing the release is therefore the better outcome
+          if [ ! -s CHANGELOG.md ]; then
+            echo "::error::release notes came out empty for ${{ github.ref_name }}"
+            exit 1
+          fi
+
+          echo "--- 发布说明预览 / release notes preview ---"
+          cat CHANGELOG.md
+
+      # --------------------------------------------------- 发布 / Publish
+
+      # 含连字符的标签（如 v2.0.0-beta.1）标记为预发布
+      # 应用查的是 /releases/latest，而该端点**忽略预发布版本**，因此 beta 不会推给正式用户
+      # 这是刻意的分流
+      #
+      # Tags containing a hyphen (e.g. v2.0.0-beta.1) are marked prerelease
+      # The app queries /releases/latest, which IGNORES prereleases, so a beta never reaches stable users
+      # That split is intentional
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: CHANGELOG.md
+          # 两个资产：安装包（首次安装）与 win-x64.zip（自更新用）
+          # 两者载荷相同
+          # 应用只认 -win-x64.zip 后缀（UpdateAssetSelector），因此 -setup.exe 不会被误当成更新包下载
+          #
+          # Two assets: the installer for first-time setup, and win-x64.zip for self-update
+          # Their payloads are identical
+          # The app matches only the -win-x64.zip suffix (UpdateAssetSelector), so -setup.exe is never mistaken for an update package
+          files: |
+            MIDITap-*-win-x64.zip
+            dist/MIDITap-*-win-x64-setup.exe
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: false

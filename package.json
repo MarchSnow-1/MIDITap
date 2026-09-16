@@ -1,0 +1,15 @@
+{
+  "name": "miditap",
+  "version": "1.7.1",
+  "scripts": {
+    "version": "auto-changelog -p && node scripts/sync-version.js && git add CHANGELOG.md && git add -u -- src"
+  },
+  "keywords": [],
+  "author": "MarchSnow",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "devDependencies": {
+    "auto-changelog": "^2.5.0",
+    "auto-changelog-plus": "^1.2.3"
+  }
+}

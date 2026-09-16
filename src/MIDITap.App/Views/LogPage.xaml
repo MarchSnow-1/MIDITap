@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="MIDITap.App.Views.LogPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Log -->
+    <Grid Padding="24,18,24,20" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ===== toolbar：筛选 + 计数 + 清空 =====
+             与主页设备条、映射页工具栏使用**同一个容器样式**
+
+             ===== toolbar: filters + counter + clear =====
+             Uses **the same container style** as the device bar on Home and the toolbar on the mappings page -->
+        <Border Grid.Row="0" CornerRadius="8" Padding="14,10"
+                Background="{ThemeResource MiditapSurfaceBrush}">
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 级别筛选：用 ToggleButton 而非下拉 —— 常见操作要一次点击到位
+                     **级别按钮由代码按 Core 的 LogLevels.All 生成**（见 LogPage.xaml.cs 的BuildFilterButtons），XAML 里只声明"全部"那一个
+                     级别的权威清单只存在于 Core，界面不再把「哪个级别配哪个控件」手写一遍
+                     **debug 默认不勾选**（它的记录量很大，默认显示会把真正要看的 info/warn/error 挤出 1000 条缓冲区）
+                     而"全部"按字面意思包含 debug —— 因此初始状态下"全部"本身也是未勾选的
+                     这个筛选是**全局共享**的（AppServices.LogFilter），主页日志跟随同一份状态
+
+                     Level filters use ToggleButtons rather than a drop-down: a common action should be one click away
+                     **The level buttons are generated in code from Core's LogLevels.All** (see BuildFilterButtons in LogPage.xaml.cs)
+                     XAML declares only the single "all" one
+                     The authoritative list of levels exists in Core alone
+                     So the UI no longer hand-writes which level goes with which control
+                     **Debug is unchecked by default**
+                     It records a lot
+                     Showing it by default would push the info/warn/error lines the user actually wants out of the 1000-entry buffer
+                     And "all" literally includes debug, so "all" itself starts unchecked as well
+                     This filter is **shared globally** (AppServices.LogFilter), and Home's log follows the same state
+
+ -->
+                <StackPanel x:Name="FilterButtons" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                    <ToggleButton x:Name="FilterAll" Click="OnFilterChanged" MinWidth="0" />
+                </StackPanel>
+
+                <TextBlock x:Name="CountText" Grid.Column="1" Style="{ThemeResource MiditapCaptionStyle}"
+                           VerticalAlignment="Center" Margin="6,0,0,0" />
+
+                <!-- 导出与清空并排放在工具栏右端：两者都是"对整份日志的操作"，放在一起才自解释
+                     导出在清空**左侧**：清空是破坏性的，不让它落在鼠标最自然的落点上
+
+                     Export and clear sit side by side at the right end of the toolbar
+                     Both act on the whole log, and only together are they self-explanatory
+                     Export is to the **left** of clear
+                     Clearing is destructive, so it is kept off the most natural resting place for the mouse
+
+-->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                    <Button x:Name="ExportBtn" Click="OnExport"
+                            Background="Transparent" BorderThickness="0" Padding="10,5">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xEDE1;" FontSize="13" />
+                            <TextBlock x:Name="ExportLabel" Style="{ThemeResource MiditapBodyStyle}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="ClearBtn" Click="OnClear"
+                            Background="Transparent" BorderThickness="0" Padding="10,5">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE74D;" FontSize="13" />
+                            <TextBlock x:Name="ClearLabel" Style="{ThemeResource MiditapBodyStyle}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 不给 Padding：这张卡片的四周间距由 LogTextRenderer.CardInset 一处提供，由本页传给 LogFeed
+
+             No Padding here: this card's inset comes from LogTextRenderer.CardInset alone, passed to LogFeed by this page -->
+        <Border Grid.Row="1" CornerRadius="8"
+                Background="{ThemeResource MiditapSurfaceBrush}">
+          <!-- Border 只能有一个子元素：文本与空态提示必须包在同一个容器里
+
+               A Border takes exactly one child
+               So the text and the empty-state hint must be wrapped in a single container -->
+          <Grid>
+            <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollMode="Disabled"
+                          HorizontalScrollBarVisibility="Disabled">
+              <!-- IsTextSelectionEnabled 打开整块文本的选中：跨行拖动与 Ctrl+C 都基于它
+                   字体、字号与行距**不在这里设**
+                   它们由 LogTextRenderer 统一决定、由 LogFeed 应用到本元素
+                   免得两个页面各写一份
+                   IsTextSelectionEnabled turns on selection over the whole block
+                   Both cross-line dragging and Ctrl+C rely on it
+                   Font, size and line height are **not** set here
+                   LogTextRenderer decides them and LogFeed applies them to this element
+                   So the two pages cannot each keep a copy -->
+              <TextBlock x:Name="LogText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+            </ScrollViewer>
+            <TextBlock x:Name="EmptyHint" Style="{ThemeResource MiditapCaptionStyle}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Visibility="Collapsed" />
+          </Grid>
+        </Border>
+    </Grid>
+</Page>

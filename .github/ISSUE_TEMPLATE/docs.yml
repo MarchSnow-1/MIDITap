@@ -1,0 +1,42 @@
+name: "📖 Documentation / 文档相关"
+description: "Report a doc issue or suggest improvements / 报告文档问题或提出改进建议"
+title: "[Docs] "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 📖 Before submitting, please check the [documentation](https://github.com/MarchSnow-1/MIDITap) or [Issues](https://github.com/MarchSnow-1/MIDITap/issues) first to see if a similar topic already exists.
+        > 🔄 If you hit a problem, please try updating to the latest version first — Settings → About → Check for updates.
+        >
+        > 📖 提交前请先检查 [文档](https://github.com/MarchSnow-1/MIDITap) 或 [Issues](https://github.com/MarchSnow-1/MIDITap/issues) 中是否已有相关内容
+        > 🔄 如遇问题，请先尝试更新至最新版本（设置 → 关于 → 检查更新）后再反馈
+
+  - type: input
+    id: location
+    attributes:
+      label: "📍 Where / 文档位置"
+      description: "File and section, or the URL / 文件名与章节，或链接"
+      placeholder: |
+        e.g. README.md -> Getting Started, or a URL
+        例如 README.md 的「快速开始」，或一个链接
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: "📖 Documentation Issue / 文档问题"
+      description: "What is wrong or missing? If the content is factually wrong, saying what you expected instead helps a lot / 哪里不对或缺失？若是内容有误，说明你认为正确的写法会很有帮助"
+      placeholder: |
+        Describe the doc issue or suggestion
+        请描述文档的问题或改进建议
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: "💬 Additional Context / 其他补充"
+    validations:
+      required: false

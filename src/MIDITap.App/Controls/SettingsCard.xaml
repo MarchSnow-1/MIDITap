@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="MIDITap.App.Controls.SettingsCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    HorizontalContentAlignment="Stretch"
+    VerticalContentAlignment="Stretch">
+
+    <!-- 设置页的一行：**左侧图标 + 标题/说明，右侧控件**（WinUI Gallery 的 SettingsCard 布局）
+
+         颜色与字号全部走本项目自己的 token
+         这些 token 是 MiditapSurfaceBrush / MiditapSubtleBorderBrush /
+         MiditapTextSecondaryBrush / MiditapSubtitleStyle / MiditapCaptionStyle
+         不用 WinUI 内置的 CardBackgroundFillColorDefaultBrush 之类
+         那套不受本项目的高对比度字典控制
+         本项目的每个 Miditap* 画笔都在 ThemeDictionaries 里映射过
+
+         Colours and font sizes all come from this project's own tokens
+         The tokens are MiditapSurfaceBrush / MiditapSubtleBorderBrush /
+         MiditapTextSecondaryBrush / MiditapSubtitleStyle / MiditapCaptionStyle
+         They are used rather than WinUI built-ins such as CardBackgroundFillColorDefaultBrush
+         That built-in set is not governed by this project's HighContrast dictionary
+         Every Miditap* brush here is mapped under ThemeDictionaries
+
+          -->
+    <!-- HorizontalContentAlignment/VerticalContentAlignment=Stretch 是必需的，不是装饰
+         UserControl 继承自 ContentControl
+         而 ContentControl 的内容对齐默认不是 Stretch
+         一旦非 Stretch，内容在测量阶段拿到的是无限宽
+         于是这块 Grid 的星号列会按「说明文字排成一行」的宽度撑开
+         整块 Grid 比卡片还宽、右侧溢出后被窗口裁掉
+
+         HorizontalContentAlignment and VerticalContentAlignment must be Stretch, and this is not cosmetic
+         UserControl derives from ContentControl
+         A ContentControl's content alignment does not default to Stretch
+         When it is not Stretch the content is measured with INFINITE width
+         This Grid's star column then expands to the width of an unwrapped description line
+         That makes the Grid wider than the card and pushes the right-hand controls past the window edge -->
+    <!-- 不设 MaxWidth：卡片铺满可用宽度，宽度由窗口决定
+         No MaxWidth: the card fills the available width, and that width comes from the window -->
+    <Border CornerRadius="8" Padding="16,12"
+            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+            Background="{ThemeResource MiditapSurfaceBrush}"
+            BorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+            BorderThickness="1">
+        <Grid ColumnSpacing="14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <FontIcon x:Name="GlyphIcon" Grid.Column="0" FontSize="18" VerticalAlignment="Center"
+                      Foreground="{ThemeResource MiditapTextSecondaryBrush}" />
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                <TextBlock x:Name="HeaderText" Style="{ThemeResource MiditapSubtitleStyle}"
+                           TextWrapping="Wrap" />
+                <TextBlock x:Name="DescriptionText" Style="{ThemeResource MiditapCaptionStyle}"
+                           TextWrapping="Wrap" Visibility="Collapsed" />
+            </StackPanel>
+
+            <!-- 右侧控件由页面通过 Action 属性塞进来
+                 The right-hand control is supplied by the page through the Action property -->
+            <ContentPresenter x:Name="ActionHost" Grid.Column="2" VerticalAlignment="Center" />
+        </Grid>
+    </Border>
+</UserControl>

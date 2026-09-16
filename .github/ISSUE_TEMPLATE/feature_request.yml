@@ -1,0 +1,63 @@
+name: "💡 Feature Request / 功能请求"
+description: "Suggest a new feature / 提出新功能建议"
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 📖 Before submitting, please check the [documentation](https://github.com/MarchSnow-1/MIDITap) or [Issues](https://github.com/MarchSnow-1/MIDITap/issues) first to see if a similar topic already exists.
+        > 🔄 If you hit a problem, please try updating to the latest version first — Settings → About → Check for updates.
+        >
+        > 📖 提交前请先检查 [文档](https://github.com/MarchSnow-1/MIDITap) 或 [Issues](https://github.com/MarchSnow-1/MIDITap/issues) 中是否已有相关内容
+        > 🔄 如遇问题，请先尝试更新至最新版本（设置 → 关于 → 检查更新）后再反馈
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "💡 Description / 功能描述"
+      placeholder: |
+        Describe the feature you would like
+        请描述你想要的功能
+    validations:
+      required: true
+
+  - type: textarea
+    id: usecase
+    attributes:
+      label: "🎯 Use Case / 使用场景"
+      description: "What are you actually trying to do? A concrete scenario is far more persuasive than an abstract request / 你实际想做成什么事？具体场景比抽象需求更有说服力"
+      placeholder: |
+        Why do you need this
+        为什么需要这个功能
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "🔀 Alternatives Considered / 考虑过的替代方案"
+      placeholder: |
+        Other tools or workarounds you have tried
+        你试过的其它工具或办法
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "🔢 Priority / 优先级自评"
+      default: 1
+      options:
+        - "Low / 低"
+        - "Medium / 中"
+        - "High / 高"
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: "📝 Additional Context / 其他补充"
+    validations:
+      required: false

@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="MIDITap.App.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- ============================================================
+                 主题字典：Default = 深色（应用默认，RequestedTheme=Dark）
+                 Light = 浅色，HighContrast = 高对比度（Windows 对比度主题）
+                 查找规则（官方文档）：浅色主题取 Light、深色取 Default、高对比度取 HighContrast
+                 高对比度开启时 RequestedTheme 会被系统忽略
+                 因此 HighContrast 字典一定会生效
+
+                 高对比度下**不得写死颜色**（官方明确要求）
+                 一律映射到 SystemColor* 动态系统色
+                 这些值会随用户选择的对比度主题（水生/沙漠/黄昏/夜空）自动变化
+                 注意这里用了两层 {ThemeResource}：一层解析 SystemColor，一层解析本画笔
+                 这样运行时切换对比度主题才能自动更新
+
+                 配色配对依据官方推荐表：ButtonFace 配 ButtonText、Highlight 配 HighlightText、Window 配 WindowText
+                 GrayText 仅用于禁用态、Hotlight 仅用于超链接，本项目都没有使用
+
+                 Theme dictionaries: Default = dark (the app default, RequestedTheme=Dark)
+                 Light = light, HighContrast = high contrast (the Windows contrast theme)
+                 Lookup rules (from the docs): the light theme takes Light, dark takes Default, high contrast takes HighContrast
+                 While high contrast is on, the system ignores RequestedTheme
+                 Lookups therefore land in the HighContrast dictionary
+                 Under high contrast colours **must not be hard-coded** (an explicit requirement in the docs)
+                 They all map to dynamic SystemColor* system colours
+                 Those values change automatically with the contrast theme the user picks (Aquatic / Desert / Dusk / Night sky)
+                 Note the two layers of {ThemeResource} used here
+                 One resolves the SystemColor, the other resolves this brush
+                 A runtime contrast-theme switch therefore updates automatically
+                 Colour pairings follow the recommended table in the docs
+                 ButtonFace with ButtonText, Highlight with HighlightText, Window with WindowText
+                 GrayText is only for disabled states and Hotlight only for hyperlinks
+                 This project uses neither
+
+
+                 ============================================================ -->
+
+            <ResourceDictionary.ThemeDictionaries>
+
+                <!-- ===== 深色（应用默认外观）/ Dark (the app default look) ===== -->
+                <ResourceDictionary x:Key="Default">
+                    <!-- 音符盘：平涂色，Idle / Mapped / Active 是三档底色
+                         Note 是每个格子上的音高文字色（空槽与已绑定共用）
+                         Label 是已绑定格子上的键位色
+                         ActiveLabel 是正在响时的反色文字色
+
+                         Note board: flat fills, with Idle / Mapped / Active as the three background levels
+                         Note is the pitch text colour in each cell (shared by empty and bound cells)
+                         Label is the key colour on a bound cell
+                         ActiveLabel is the inverted text colour while the note sounds
+ -->
+                    <SolidColorBrush x:Key="MiditapNoteGridIdleBrush" Color="#1F2124" />
+                    <SolidColorBrush x:Key="MiditapNoteGridMappedBrush" Color="#24405F" />
+                    <SolidColorBrush x:Key="MiditapNoteGridActiveBrush" Color="#2563EB" />
+                    <SolidColorBrush x:Key="MiditapNoteGridNoteBrush" Color="#8B93A1" />
+                    <SolidColorBrush x:Key="MiditapNoteGridLabelBrush" Color="#93C5FD" />
+                    <SolidColorBrush x:Key="MiditapNoteGridActiveLabelBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="MiditapStatusPillBackgroundBrush" Color="#2F3136" />
+                    <SolidColorBrush x:Key="MiditapStatusPillBorderBrush" Color="#3F4147" />
+                    <SolidColorBrush x:Key="MiditapStatusDotRunningBrush" Color="#4ADE80" />
+                    <SolidColorBrush x:Key="MiditapStatusDotIdleBrush" Color="#6B7280" />
+                    <!-- 实时触发的 chip 配色：淡强调底 + 强调前景，不用边框 / Chip colours for live triggers: soft accent fill + accent foreground, no border -->
+                    <SolidColorBrush x:Key="MiditapChipBackgroundBrush" Color="#1E3A5F" />
+                    <SolidColorBrush x:Key="MiditapChipForegroundBrush" Color="#93C5FD" />
+
+                    <!-- ===== 设计 tokens =====
+                         间距节奏统一为 4 的倍数
+                         排版分五级（Title/Subtitle/Body/Caption/Mono）
+                         表面用三层色阶（Surface/SurfaceAlt/SurfaceSubtle）而非到处加边框
+                         1px 边框满屏是会显得廉价的最大原因
+                         Design tokens: a 4px spacing rhythm, a five-step type scale
+                         There are three surface levels instead of borders everywhere -->
+                    <SolidColorBrush x:Key="MiditapSurfaceBrush" Color="#202124" />
+                    <SolidColorBrush x:Key="MiditapSurfaceAltBrush" Color="#2A2D31" />
+                    <SolidColorBrush x:Key="MiditapSubtleBorderBrush" Color="#3A3D42" />
+                    <SolidColorBrush x:Key="MiditapAccentBrush" Color="#60A5FA" />
+                    <SolidColorBrush x:Key="MiditapTextPrimaryBrush" Color="#F3F4F6" />
+                    <!-- 细笔画的 SemiBold 标题在深色背景上用低对比灰会显得发虚
+                         仍与正文(#F3F4F6)有层级
+                         thin SemiBold headings on a dark background
+                         They look fuzzy at low contrast
+                         It still sits clearly below the body colour (#F3F4F6)
+                         The hierarchy therefore holds -->
+                    <SolidColorBrush x:Key="MiditapTextSecondaryBrush" Color="#C8CDD4" />
+                    <SolidColorBrush x:Key="MiditapTextTertiaryBrush" Color="#71767E" />
+                    <!-- 右上角浮窗提示 / Toast pop-ups in the top-right corner -->
+                    <SolidColorBrush x:Key="MiditapToastBackgroundBrush" Color="#2B2F36" />
+                    <SolidColorBrush x:Key="MiditapToastInfoBrush" Color="#60A5FA" />
+                    <SolidColorBrush x:Key="MiditapToastSuccessBrush" Color="#6CCB5F" />
+                    <SolidColorBrush x:Key="MiditapToastWarningBrush" Color="#FCE100" />
+                    <SolidColorBrush x:Key="MiditapToastErrorBrush" Color="#FF99A4" />
+
+                    <Style x:Key="MiditapMutedMonoStyle" TargetType="TextBlock">
+                        <Setter Property="FontFamily" Value="Consolas" />
+                        <Setter Property="FontSize" Value="12" />
+                        <Setter Property="Foreground" Value="{ThemeResource MiditapTextTertiaryBrush}" />
+                    </Style>
+
+                </ResourceDictionary>
+
+                <!-- ===== 浅色 / Light ===== -->
+                <ResourceDictionary x:Key="Light">
+                    <!-- 音符盘：与深色字典同键，取值按浅底重选（同样全是平涂色）
+                         Note board: the same keys as the dark dictionary
+                         They are re-picked for a light background (equally flat) -->
+                    <SolidColorBrush x:Key="MiditapNoteGridIdleBrush" Color="#ECEEF1" />
+                    <SolidColorBrush x:Key="MiditapNoteGridMappedBrush" Color="#CFE0FA" />
+                    <SolidColorBrush x:Key="MiditapNoteGridActiveBrush" Color="#1D4ED8" />
+                    <SolidColorBrush x:Key="MiditapNoteGridNoteBrush" Color="#5C6470" />
+                    <SolidColorBrush x:Key="MiditapNoteGridLabelBrush" Color="#1D4ED8" />
+                    <SolidColorBrush x:Key="MiditapNoteGridActiveLabelBrush" Color="#FFFFFF" />
+
+                    <SolidColorBrush x:Key="MiditapStatusPillBackgroundBrush" Color="#F3F3F3" />
+                    <SolidColorBrush x:Key="MiditapStatusPillBorderBrush" Color="#D1D1D1" />
+                    <SolidColorBrush x:Key="MiditapStatusDotRunningBrush" Color="#0F7B0F" />
+                    <SolidColorBrush x:Key="MiditapStatusDotIdleBrush" Color="#9CA3AF" />
+                    <SolidColorBrush x:Key="MiditapChipBackgroundBrush" Color="#DBEAFE" />
+                    <SolidColorBrush x:Key="MiditapChipForegroundBrush" Color="#1D4ED8" />
+
+                    <!-- ===== 设计 tokens =====
+                         间距节奏统一为 4 的倍数
+                         排版分五级（Title/Subtitle/Body/Caption/Mono）
+                         表面用三层色阶（Surface/SurfaceAlt/SurfaceSubtle）而非到处加边框
+                         1px 边框满屏是会显得廉价的最大原因
+                         Design tokens: a 4px spacing rhythm, a five-step type scale
+                         There are three surface levels instead of borders everywhere -->
+                    <SolidColorBrush x:Key="MiditapSurfaceBrush" Color="#F7F8FA" />
+                    <SolidColorBrush x:Key="MiditapSurfaceAltBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="MiditapSubtleBorderBrush" Color="#E3E5E9" />
+                    <SolidColorBrush x:Key="MiditapAccentBrush" Color="#2563EB" />
+                    <SolidColorBrush x:Key="MiditapTextPrimaryBrush" Color="#1A1D21" />
+                    <!-- 浅色主题同理略微加深，保证细笔画标题在浅底上不发虚/ Deepened a touch for the light theme too, so thin-stroke headings do not look washed out on a light background. -->
+                    <SolidColorBrush x:Key="MiditapTextSecondaryBrush" Color="#4A5058" />
+                    <SolidColorBrush x:Key="MiditapTextTertiaryBrush" Color="#8B9098" />
+
+                    <SolidColorBrush x:Key="MiditapToastBackgroundBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="MiditapToastInfoBrush" Color="#0F6CBD" />
+                    <SolidColorBrush x:Key="MiditapToastSuccessBrush" Color="#0F7B0F" />
+                    <SolidColorBrush x:Key="MiditapToastWarningBrush" Color="#9D5D00" />
+                    <SolidColorBrush x:Key="MiditapToastErrorBrush" Color="#C42B1C" />
+
+                    <Style x:Key="MiditapMutedMonoStyle" TargetType="TextBlock">
+                        <Setter Property="FontFamily" Value="Consolas" />
+                        <Setter Property="FontSize" Value="12" />
+                        <Setter Property="Foreground" Value="{ThemeResource MiditapTextTertiaryBrush}" />
+                    </Style>
+
+                </ResourceDictionary>
+
+                <!-- ===== 高对比度 / High contrast ===== -->
+                <ResourceDictionary x:Key="HighContrast">
+                    <!-- 音符盘的画笔**不在这里定义**：本控件是代码绘制的
+                         需要按实测亮度决定哪一个系统色当盘面、哪一个当格子
+                         （High Contrast White 的ButtonFace/ButtonText 与另外三套正好相反）
+                         XAML 无法表达这种运行时判断
+                         详见 Controls/NoteGrid.cs 的 BuildContrastPalette
+
+                         The note-board brushes are **not defined here**
+                         This control is code-drawn
+                         It has to decide from measured luminance which system colour is the board and which the cells
+                         On High Contrast White the ButtonFace/ButtonText pair is the exact opposite of the other three schemes
+                         XAML cannot express that runtime decision
+                         See BuildContrastPalette in Controls/NoteGrid.cs
+ -->
+                    <SolidColorBrush x:Key="MiditapStatusPillBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="MiditapStatusPillBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <!-- "监听中"属于"进行中"状态，用 Highlight 强调
+                         "未监听"用常规文本色
+                         文字本身也说明了状态，不单靠颜色
+                         "Listening" is an in-progress state so it uses Highlight
+                         The idle dot uses plain text colour
+                         The label carries the state in words too -->
+                    <SolidColorBrush x:Key="MiditapStatusDotRunningBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="MiditapStatusDotIdleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="MiditapSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <!-- 对比度下 chip 用 Highlight/HighlightText —— 官方保证的高对比配对 / Under contrast themes the chips use Highlight/HighlightText, the pairing the docs guarantee -->
+                    <SolidColorBrush x:Key="MiditapChipBackgroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="MiditapChipForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                    <SolidColorBrush x:Key="MiditapSurfaceAltBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="MiditapSubtleBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="MiditapAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="MiditapTextPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="MiditapTextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="MiditapTextTertiaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+                    <!-- 浮窗：卡片用 Window 底 + WindowText 边框
+                         保证与任何对比度方案都有可辨识的边界
+                         四个级别的强调色仍分别映射到系统语义色
+                         Toast: Window background with a WindowText border
+                         The card keeps a visible boundary in every contrast scheme
+                         The four severity accents still map to distinct system colours -->
+                    <SolidColorBrush x:Key="MiditapToastBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="MiditapToastInfoBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="MiditapToastSuccessBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="MiditapToastWarningBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="MiditapToastErrorBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+
+                    <Style x:Key="MiditapMutedMonoStyle" TargetType="TextBlock">
+                        <Setter Property="FontFamily" Value="Consolas" />
+                        <Setter Property="FontSize" Value="12" />
+                        <!-- 高对比度下**刻意不设 Foreground**：官方指南要求
+                             否则 ListView 行在悬停/选中时背景翻转为 Highlight 而文字颜色不变，无法阅读
+                             Foreground is deliberately omitted under contrast themes
+                             The docs require it
+                             Otherwise a hovered/selected row inverts its background while the text keeps its colour
+                             It then becomes unreadable -->
+                    </Style>
+
+
+                </ResourceDictionary>
+
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- ===== 共享设计 tokens（不随主题变化）=====
+                 间距与排版对所有主题相同
+                 样式内部用 {ThemeResource} 引颜色，因此它们会随当前主题解析
+                 放在三个主题字典之外，避免同一套样式重复三遍
+                 Shared tokens: spacing and typography do not vary by theme
+                 The styles reference colours through {ThemeResource} so they resolve per theme
+                 They are kept outside the theme dictionaries rather than duplicated three times -->
+            <x:Double x:Key="GapXs">4</x:Double>
+            <x:Double x:Key="GapSm">8</x:Double>
+            <x:Double x:Key="GapMd">12</x:Double>
+            <x:Double x:Key="GapLg">20</x:Double>
+            <x:Double x:Key="GapXl">28</x:Double>
+
+            <Style x:Key="MiditapDialogStyle" TargetType="ContentDialog">
+                <Setter Property="CornerRadius" Value="8" />
+            </Style>
+
+            <!-- ===== 浮层圆角 =====
+                 未打包（unpackaged）的 WinUI 3 应用里，ContentDialog 等**浮层**渲染出来是直角
+                 圆角窗口由系统按"打包应用"的身份提供
+                 未打包时拿不到，WinUI 也不会为浮层补齐
+                 本应用正是 WindowsPackageType=None（便携单目录），因此必须显式覆盖
+                 覆盖 OverlayCornerRadius 而不只是给 ContentDialog 加样式
+                 该键同时作用于飞出菜单与提示气泡等所有浮层
+                 统一覆盖才能保证观感一致。8 与自绘的浮窗卡片一致
+                 In an unpackaged WinUI 3 app, overlays such as ContentDialog render with square corners
+                 The rounded window is provided by the OS for packaged apps
+                 WinUI does not add it for overlays
+                 This app is WindowsPackageType=None (portable), so the override is required
+                 Overriding OverlayCornerRadius rather than styling ContentDialog alone also fixes flyouts and tooltips
+                 That keeps overlays consistent -->
+            <!-- 圆角覆盖见下方 MergedDictionaries 末尾的 MiditapRounding
+
+                 The overlay corner-radius override is the MiditapRounding dictionary
+                 It sits at the end of MergedDictionaries below -->
+
+            <!-- 对话框样式见下方 MergedDictionaries 末尾的 MiditapRounding
+
+                 The dialog style is the MiditapRounding dictionary at the end of MergedDictionaries
+                 below -->
+
+                    <!-- 排版：标题/副标题/正文/说明/等宽 / Typography: title / subtitle / body / caption / mono -->
+                    <!-- 页面标题。**不设字重**，理由与下面的副标题完全相同
+                         中文字体 Microsoft YaHei UI 只有 Regular 与 Bold、没有 SemiBold
+                         中文写 SemiBold 会被 DirectWrite **合成**，笔画边缘发虚（实测中间调/核心像素比 4.22 对 0.88）
+                         层级只靠字号拉开（22 对 15 对 13）
+                         Page title. **No font weight**, for exactly the reason given under the subtitle style
+                         Microsoft YaHei UI ships Regular and Bold but no SemiBold
+                         Asking for SemiBold on CJK makes DirectWrite SYNTHESISE it and blur the stroke edges
+                         The measured mid-tone/core ratio is 4.22 versus 0.88
+                         Size alone carries the hierarchy (22 vs 15 vs 13) -->
+                    <Style x:Key="MiditapTitleStyle" TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="22" />
+                        <Setter Property="Foreground" Value="{ThemeResource MiditapTextPrimaryBrush}" />
+                    </Style>
+                    <!-- 分区标题 **刻意不设任何字重，也不设 CharacterSpacing、不指定字体**
+                         即与正文采用完全相同的渲染方式
+                         层级只靠字号拉开（标题 15 / 正文 13）
+
+                         Section headings **deliberately set no font weight, no CharacterSpacing and no font**
+                         They render exactly like body text
+                         Size alone carries the hierarchy (heading 15 / body 13) -->
+                    <Style x:Key="MiditapSubtitleStyle" TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="15" />
+                        <Setter Property="Foreground" Value="{ThemeResource MiditapTextPrimaryBrush}" />
+                    </Style>
+                    <Style x:Key="MiditapBodyStyle" TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="13" />
+                        <Setter Property="Foreground" Value="{ThemeResource MiditapTextPrimaryBrush}" />
+                    </Style>
+                    <Style x:Key="MiditapCaptionStyle" TargetType="TextBlock">
+                        <Setter Property="FontSize" Value="12" />
+                        <Setter Property="Foreground" Value="{ThemeResource MiditapTextTertiaryBrush}" />
+                    </Style>
+                    <Style x:Key="MiditapMonoStyle" TargetType="TextBlock">
+                        <Setter Property="FontFamily" Value="Consolas" />
+                        <Setter Property="FontSize" Value="12" />
+                    </Style>
+
+
+            <!-- 非主题化的兜底画笔：LogBrushes 在系统主题键缺失时使用
+                 注意它们**不会**随高对比度变化，因此只作为最后兜底
+                 正常情况下永远不会被取到
+                 Non-themed fallbacks used by LogBrushes only when a system theme key is missing
+                 They do NOT follow contrast themes, hence they are a last resort
+                 That last resort should never actually be reached -->
+            <SolidColorBrush x:Key="MiditapWarnBrush" Color="#FBBF24" />
+            <SolidColorBrush x:Key="MiditapErrorBrush" Color="#F87171" />
+            <SolidColorBrush x:Key="MiditapDimBrush" Color="#9CA3AF" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

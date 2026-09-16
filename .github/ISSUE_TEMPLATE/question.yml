@@ -1,0 +1,67 @@
+name: "❓ Question / 提问"
+description: "Ask a question / 提出问题或咨询"
+title: "[Question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 📖 Before submitting, please check the [documentation](https://github.com/MarchSnow-1/MIDITap) or [Issues](https://github.com/MarchSnow-1/MIDITap/issues) first to see if a similar topic already exists.
+        > 🔄 If you hit a problem, please try updating to the latest version first — Settings → About → Check for updates.
+        >
+        > 📖 提交前请先检查 [文档](https://github.com/MarchSnow-1/MIDITap) 或 [Issues](https://github.com/MarchSnow-1/MIDITap/issues) 中是否已有相关内容
+        > 🔄 如遇问题，请先尝试更新至最新版本（设置 → 关于 → 检查更新）后再反馈
+
+  - type: textarea
+    id: question
+    attributes:
+      label: "❓ Question / 问题描述"
+      placeholder: |
+        Describe your question
+        请描述你的问题
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: "🔍 What I Tried / 已尝试的方案"
+      placeholder: |
+        What have you tried so far
+        你已经尝试了什么
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: "🏗️ Environment / 运行环境"
+      description: "Often answers half the question by itself: most issues are version- or device-specific / 往往能直接回答一半问题：多数情况与版本或设备有关"
+      placeholder: |
+        MIDITap version (Settings -> About):
+        Windows version:
+        MIDI device / keyboard:
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: "📄 Mapping Config / 映射配置"
+      placeholder: |
+        Paste config or drag the file here (e.g. config/mapping.json)
+        请粘贴配置或把文件拖到此处（例如 config/mapping.json）
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: "📋 Activity Log / 活动日志"
+      description: "If behaviour looks wrong, turn on Write to file under Settings -> Activity Log first, then attach .storage/logs/miditap.log / 如果行为异常，请先在「设置 → 活动日志」打开「写入文件」，再附上 .storage/logs/miditap.log"
+      render: shell
+      placeholder: |
+        Paste or attach the log file
+        请粘贴或附上日志文件
+    validations:
+      required: false

@@ -1,0 +1,249 @@
+# dev.yml
+
+# v2 分支的常规提交构建
+
+# v2 branch regular commit build
+
+name: Build Dev
+
+on:
+  push:
+    branches: ["v2"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # ------------------------------------------------------- 测试 / Tests
+
+      - name: Core tests (pure logic, no hardware)
+        run: dotnet test src/MIDITap.Core.Tests/MIDITap.Core.Tests.csproj -c Release --logger "console;verbosity=normal"
+
+      # 集成测试经真实驱动往返字节，需要虚拟 MIDI 回环端口
+      # CI 的 windows-latest 没有 MIDI 设备，也不该为了跑测试去装一台
+      # 因此这些用例在发现阶段就自动跳过（见 MidiFactAttribute）
+      # 本步骤断言它们确实被跳过了，而不是让它们静默消失
+      # 静默跳过会给人虚假的安心
+      #
+      # The integration tests round-trip bytes through a real driver and need a virtual MIDI loopback port
+      # CI windows-latest has no MIDI devices, and installing one just to run tests would be wrong
+      # Those cases therefore skip at discovery time (see MidiFactAttribute)
+      # This step asserts that they were in fact skipped rather than letting them vanish silently
+      # A silent skip would give false confidence
+      - name: Integration tests (MIDI cases skip without a loopback port)
+        shell: pwsh
+        run: |
+          $output = dotnet test src/MIDITap.Integration.Tests/MIDITap.Integration.Tests.csproj -c Release --logger "console;verbosity=normal" 2>&1
+          $output | Write-Host
+          if ($LASTEXITCODE -ne 0) { throw "Integration test run failed" }
+          if ($output -match "(失败|Failed):\s*[1-9]") { throw "Integration tests reported failures" }
+          Write-Host "MIDI loopback port unavailable on this runner: integration cases skipped as designed."
+
+      # E2E 脚本无法在 CI 上运行（需要回环端口、交互式桌面与 GetAsyncKeyState）
+      # 但语法可以在 CI 上验证
+      # 脚本出错若只在本地真跑时才发现，代价很高
+      #
+      # The E2E script cannot run on CI (needs a loopback port, an interactive desktop and GetAsyncKeyState)
+      # Its syntax can be validated here, though
+      # Finding a script error only when the script really runs is expensive
+      - name: Validate PowerShell scripts parse
+        shell: pwsh
+        run: |
+          $failed = $false
+          # 两个目录都查：scripts/ 里的脚本会随包发布，dev-scripts/ 里的只在仓库中（见 AGENTS.md §5）
+          # 但两者都要能通过解析，因为语法错误只有真跑时才暴露
+          #
+          # Both directories are checked: scripts/ ships in the package while dev-scripts/ stays in the repository (see AGENTS.md §5)
+          # Both must parse, because a syntax error otherwise surfaces only at run time
+          foreach ($file in @(Get-ChildItem scripts,dev-scripts -Filter *.ps1 -Recurse)) {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors)
+            if ($errors) {
+              Write-Host "::error file=$($file.FullName)::$($errors.Count) parse error(s)"
+              $errors | ForEach-Object { Write-Host "  $($_.Extent.StartLineNumber): $($_.Message)" }
+              $failed = $true
+            } else {
+              Write-Host "OK: $($file.Name)"
+            }
+          }
+          if ($failed) { throw "PowerShell script parse errors" }
+
+      # --------------------------------------------- 版本号 / Version number
+
+      # 版本号取自 csproj 的 <Version>，也就是「关于」区显示的那个值，不从 git 标签推算
+      # 两者若不一致，用户报的版本号就无法定位到代码
+      # 末尾追加 run number 与提交短哈希，因为同一个版本号可以有多份开发构建
+      # 它们必须能被区分开
+      #
+      # The version comes from <Version> in the csproj, the value the app shows under About
+      # It does not come from git tags: if the two disagreed, a version number in a bug report could not be traced to code
+      # The run number and short SHA are appended because one version can have several development builds
+      # They have to be told apart
+      - name: Compute version
+        id: version
+        shell: pwsh
+        run: |
+          $csproj = "src/MIDITap.App/MIDITap.App.csproj"
+          $match = [regex]::Match((Get-Content $csproj -Raw), "<Version>([^<]+)</Version>")
+          if (-not $match.Success) { throw "No <Version> found in $csproj" }
+          $base = $match.Groups[1].Value.Trim()
+          $sha = '${{ github.sha }}'.Substring(0, 7)
+          $full = $base + "-dev." + '${{ github.run_number }}' + "+g" + $sha
+          "VERSION=$full" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "BASE=$base" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Version: $full"
+
+      # ------------------------------------------------------ 构建 / Build
+
+      # 传入完整的 VERSION（形如 1.7.1-dev.42+g0d1d487），而不是 BASE
+      # 这样开发构建的「关于」区会显示是哪个版本的第几次构建、对应哪次提交
+      # 用户报问题时能直接定位
+      # 正式版由 release.yml 注入纯版本号，保持干净
+      # csproj 里已关掉自动追加提交哈希，所以这里给什么就显示什么
+      #
+      # Pass the full VERSION (e.g. 1.7.1-dev.42+g0d1d487) rather than BASE
+      # A development build then shows which version and run it is, and which commit it came from
+      # That lets a bug report be traced straight away
+      # Release builds get a clean version from release.yml instead
+      # The csproj has auto-appending of the commit hash turned off, so whatever is given here is what is shown
+      - name: Publish app (self-contained win-x64)
+        run: >
+          dotnet publish src/MIDITap.App/MIDITap.App.csproj
+          -c Release -p:Platform=x64 -r win-x64 --self-contained true
+          -p:Version=${{ steps.version.outputs.VERSION }} -o publish
+
+      - name: Stage portable layout
+        shell: pwsh
+        run: |
+          $stage = "stage/MIDITap"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          # 排除 .storage：PowerShell 的 * 会匹配点开头的项（实测）
+          # 因此只要 publish/ 里存在 .storage，它就会被复制进用户包，把开发机的状态发给所有人
+          # 这里用 Get-ChildItem -Force 显式过滤，而不是依赖通配符碰巧不匹配
+          #
+          # Exclude .storage: PowerShell's * DOES match dot-prefixed entries (measured)
+          # Any .storage left in publish/ would be copied into the user package and ship a developer's state to everyone
+          # Filtering explicitly with -Force beats relying on a lucky wildcard
+          Get-ChildItem publish -Force | Where-Object { $_.Name -ne ".storage" } |
+            ForEach-Object { Copy-Item $_.FullName $stage -Recurse -Force }
+          Copy-Item README.md, README_zh-CN.md, CHANGELOG.md, LICENSE $stage/ -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path "$stage/config" | Out-Null
+          Copy-Item config/mapping.json "$stage/config/"
+          # E2E 脚本随包发布：用户与维护者都能用同一份脚本对真实设备做验证
+          #
+          # The E2E script ships with the package so users and maintainers validate against real hardware with exactly the same script
+          New-Item -ItemType Directory -Force -Path "$stage/scripts" | Out-Null
+          Copy-Item scripts/*.ps1 "$stage/scripts/" -ErrorAction SilentlyContinue
+          # 不自行发布校验和文件
+          # GitHub 已为每个资产提供 SHA-256：API 的 assets[].digest，以及网页 expanded_assets HTML 里的同一摘要
+          # 应用直接从那里读
+          #
+          # No self-published checksum file
+          # GitHub already provides a SHA-256 per asset: the API's assets[].digest, and the same digest embedded in the expanded_assets HTML
+          # The app reads it from there
+          Compress-Archive -Path $stage -DestinationPath ("MIDITap-" + ${{ steps.version.outputs.VERSION }} + "-win-x64.zip") -Force
+
+      # 自更新依赖两件事：包里必须有 scripts/apply-update.ps1，且用户数据在替换时被排除
+      # 这里显式校验包结构
+      # 若将来改动打包步骤而漏掉脚本，应用会在「重启并更新」时报找不到辅助脚本
+      # 而 CI 本该在发布前就发现这件事
+      #
+      # 同样的要求也存在于 Core（UpdateStager.RequiredRelativePaths），这是刻意的重复
+      # 一处在这里提前报警，一处保证运行时遇到别的包也会拒绝安装
+      #
+      # Self-update depends on two things: the archive must contain scripts/apply-update.ps1, and user data must be excluded when files are replaced
+      # This verifies the layout explicitly
+      # If a future change to the staging step dropped the script, the app would report a missing helper at restart time
+      # CI is supposed to catch that before a release
+      #
+      # The same requirement also lives in Core (UpdateStager.RequiredRelativePaths); the duplication is deliberate
+      # One warns early here, the other refuses to install at run time
+      - name: Verify the package supports self-update
+        shell: pwsh
+        run: |
+          $zip = "MIDITap-" + ${{ steps.version.outputs.VERSION }} + "-win-x64.zip"
+          $stage = "stage/MIDITap"
+          $missing = @()
+          if (-not (Test-Path "$stage/scripts/apply-update.ps1")) { $missing += "scripts/apply-update.ps1" }
+          if (-not (Test-Path "$stage/MIDITap.exe")) { $missing += "MIDITap.exe" }
+          if ($missing.Count -gt 0) {
+            throw "Package is missing files required for self-update: $($missing -join ', ')"
+          }
+
+          # 解压替换必须跳过这两棵子树，否则用户的配置与状态会被出厂默认覆盖
+          #
+          # The replace step must skip both subtrees, or factory defaults would overwrite user data
+          $entries = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip)).Entries
+          try {
+            $bad = @($entries | Where-Object { $_.FullName -match "^MIDITap/(config|\.storage)/" })
+            Write-Host "包内条目数: $($entries.Count)"
+            Write-Host "用户数据条目: $($bad.Count)（可存在，但替换时必须被排除）"
+          } finally { $entries.Dispose() }
+          Write-Host "自更新所需的脚本与可执行文件均在包内。"
+
+      # 开发分支也打一个安装包，这样标签发布前就能验证 .iss 仍然可用
+      # 而不是等到正式发布时才发现编译不过
+      #
+      # The dev branch builds the installer too, so the .iss is proven to still compile
+      # That happens before a tag is ever pushed, rather than at release time
+      - name: Build the Inno Setup installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+
+          # 三个候选位置都找一遍
+          # choco 通常装在 Program Files (x86)，但安装器版本变了以后可能落到 Program Files 或用户目录
+          # 只认一个路径会让发布因为找不到编译器而失败
+          #
+          # Three candidates are tried
+          # choco usually lands under Program Files (x86), yet a different installer version may put it under Program Files or the user profile
+          # Trusting one path would fail a release over a missing compiler
+          $isccCandidates = @(
+            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            throw ("ISCC.exe not found after install; looked in: " + ($isccCandidates -join ", "))
+          }
+          Write-Host "Using $iscc"
+          $ver = (Get-Item $iscc).VersionInfo.ProductVersion
+          $modern = $false
+          if ($ver -match "^(\d+)\.(\d+)") {
+            $maj = [int]$Matches[1]; $min = [int]$Matches[2]
+            $modern = ($maj -gt 6) -or ($maj -eq 6 -and $min -ge 6)
+          }
+          Write-Host "ISCC $ver -> modern wizard: $modern"
+          $isccArgs = @(
+            "/DAppVersion=${{ steps.version.outputs.BASE }}",
+            "/DAssetTag=${{ steps.version.outputs.VERSION }}",
+            "/DSourceDir=$((Resolve-Path stage/MIDITap).Path)"
+          )
+          if ($modern) { $isccArgs += "/DModernWizard=1" }
+          & $iscc @isccArgs "installer/MIDITap.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compile failed with code $LASTEXITCODE" }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MIDITap-dev-win-x64
+          # 两个产物：自更新包与安装包，载荷相同
+          #
+          # Two artifacts with the same payload: the self-update zip and the installer
+          path: |
+            MIDITap-*-win-x64.zip
+            dist/MIDITap-*-win-x64-setup.exe
+          retention-days: 30

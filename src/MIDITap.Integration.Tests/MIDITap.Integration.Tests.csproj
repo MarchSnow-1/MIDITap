@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <!-- 集成测试需要真实 MIDI 端口，因此**不在 CI 上失败**
+         端口不存在时用例自动跳过（见 MidiFactAttribute）
+         这样同一个测试项目既能本地跑真机验证，也能在 GitHub Actions 上顺利通过
+         GitHub Actions 上的 windows-latest 没有 MIDI 设备
+         These tests need a real MIDI port, so they must not fail CI
+         When no port is present, each case is skipped automatically (see MidiFactAttribute)
+         The same project therefore works both locally against real hardware
+         It also works on GitHub Actions, where windows-latest has no MIDI devices -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- 与被测应用使用同一 MIDI 栈
+         集成测试要验证的正是"应用实际走的那条路"
+         同样只引用 NAudio.Midi，而非元包
+         元包会带入 NAudio.WinForms 及 WPF/WinForms
+         Same MIDI stack as the app
+         The point is to exercise the path the app really uses
+         Again NAudio.Midi only, not the metapackage
+         The metapackage would drag in NAudio.WinForms and the WPF/WinForms assemblies -->
+    <PackageReference Include="NAudio.Midi" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MIDITap.Core\MIDITap.Core.csproj" />
+  </ItemGroup>
+
+</Project>

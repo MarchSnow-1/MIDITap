@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="MIDITap.App.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:MIDITap.App.Controls">
+
+    <!-- 设置 = 全应用唯一的偏好页（语言已并入，不再有单独的语言页）
+
+         版式照 WinUI Gallery 的原生设置页：**页标题 + 一行一行的设置卡片**
+         每张卡片左侧是图标与「标题/说明」，右侧是控件（见 Controls/SettingsCard）
+         为什么用这个版式：标题在左、控件在右是 Windows 设置类界面的通行读法
+         用户不必先读一遍才知道右边那个开关管什么
+         说明跟在标题下面，需要时才读，不需要时它只是淡淡的第二行
+
+         内容**铺满可用宽度**，和本项目其它页面（日志页、映射页）一样：只靠这一层的 Padding 留边
+         不设限宽、不做居中
+         宽度完全由窗口决定，因此拖窗口时卡片跟着变，没有任何写死的尺寸
+         卡内控件也不写宽度（代理输入框除外：地址比按钮长得多，见那里的说明）
+
+         Settings is the application's only preferences page
+         Language is merged into it, and there is no separate language page
+
+         The layout follows the native settings page in WinUI Gallery
+         That is **a page title plus one settings card per row**
+         Each card carries an icon and a "title / description" on the left, and the control on the right (see Controls/SettingsCard)
+         Why this layout: a title on the left and the control on the right is the accepted reading of Windows settings-style surfaces
+         So the user does not have to read a row first to know what the switch on the right controls
+         The description follows under the title, read only when needed, and is otherwise just a faint second line
+
+         The content **fills the available width**, as on this project's other pages (log page, mappings page)
+         The margins come from this layer's Padding alone, with no maximum width and no centring
+         The width is decided entirely by the window, so the cards follow when the window is dragged
+         No size is hardcoded anywhere
+         Controls inside a card carry no width either
+         The exception is the proxy input box: an address is far longer than a button, see the note there
+ -->
+    <Grid Padding="24,18,24,20">
+        <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
+            <!-- 这一层只负责纵向间距：宽度从 ScrollViewer 一路传下来，卡片自己撑满
+                 This layer only sets vertical spacing
+                 The width comes down from the ScrollViewer and each card fills it -->
+            <StackPanel Spacing="10">
+
+                <TextBlock x:Name="PageTitle" Style="{ThemeResource MiditapTitleStyle}" Margin="0,0,0,6" />
+
+                <!-- ===== 语言 / Language =====
+                     置顶：它是用户最可能需要先改的一项 —— 看不懂界面时第一件事就是换语言
+                     Topmost: the item a user is most likely to need first
+                     When the interface is unreadable, switching the language comes first -->
+                <controls:SettingsCard x:Name="LanguageCard" Glyph="&#xE8C1;">
+                    <controls:SettingsCard.Action>
+                        <!-- 不写宽度：下拉框按自身内容取宽（卡片右列已经是 Auto 列）
+                             语言项又是运行期从 i18n 目录读出来的，写死一个数字只会是多余的约束
+                             No width: the drop-down sizes to its own content (the card's right column is already Auto)
+                             Its items are read from the i18n folder at run time
+                             A hardcoded number would be a constraint with nothing behind it -->
+                        <ComboBox x:Name="LanguageBox" SelectionChanged="OnLanguageSelected" />
+                    </controls:SettingsCard.Action>
+                </controls:SettingsCard>
+
+                <!-- ===== 外观 / Appearance =====
+                     用下拉框而不是一排单选按钮
+                     A drop-down rather than a row of radio buttons -->
+                <controls:SettingsCard x:Name="ThemeCard" Glyph="&#xE790;">
+                    <controls:SettingsCard.Action>
+                        <!-- 条目**不在 XAML 里写死**：由代码按 Core 的 SupportedThemes 生成
+                             文案键按约定拼出（settings.theme.<模式>）
+                             The items are **not hardcoded in XAML**
+                             The code generates them from Core's SupportedThemes, and the label keys are composed by convention (settings.theme.<mode>) -->
+                        <ComboBox x:Name="ThemeBox" SelectionChanged="OnThemeChanged" />
+                    </controls:SettingsCard.Action>
+                </controls:SettingsCard>
+
+                <!-- ===== 配置目录 / Config folder =====
+                     放在活动日志上方：两者都是打开一个目录，相邻便于对照
+                     只有按钮没有开关，因为这里没有可切换的状态
+                     Sits above the activity log: both open a folder, so keeping the pair adjacent reads better
+                     A button and no switch, because nothing here has a state to toggle -->
+                <controls:SettingsCard x:Name="ConfigCard" Glyph="&#xE8B7;">
+                    <controls:SettingsCard.Action>
+                        <Button x:Name="OpenConfigDirBtn" Click="OnOpenConfigDir" />
+                    </controls:SettingsCard.Action>
+                </controls:SettingsCard>
+
+                <!-- ===== 活动日志 / Activity log =====
+                     开关不带可见标签：上面的标题与说明已经说清它管什么（原生设置的通行做法）
+                     读屏用户拿到的名字由 AutomationProperties.Name 补上（见 RefreshTexts）
+                     The switch carries no visible label
+                     The title and description above already say what it controls, which is the native pattern
+                     Screen readers get a name from AutomationProperties.Name (set in RefreshTexts) -->
+                <controls:SettingsCard x:Name="LogCard" Glyph="&#xE7C3;">
+                    <controls:SettingsCard.Action>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <!-- MinWidth=0：ToggleSwitch 的模板为 On/Off 内容预留宽度，即使两者都是空串
+                                 布局宽度仍达 164px（可见仅 52px），会把按钮推远
+                                 MinWidth=0: the template reserves room for On/Off content
+                                 Even with both empty the layout width reaches 164px (only 52px visible)
+                                 It pushes the buttons away -->
+                            <ToggleSwitch x:Name="LogFileToggle" Toggled="OnLogFileToggled"
+                                          OnContent="" OffContent="" MinWidth="0" />
+                            <Button x:Name="OpenLogDirBtn" Click="OnOpenLogDir" />
+                        </StackPanel>
+                    </controls:SettingsCard.Action>
+                </controls:SettingsCard>
+
+                <!-- ===== 更新 / Updates ===== -->
+                <controls:SettingsCard x:Name="UpdatesCard" Glyph="&#xE896;">
+                    <controls:SettingsCard.Action>
+                        <ToggleSwitch x:Name="AutoCheckToggle" Toggled="OnAutoCheckToggled"
+                                      OnContent="" OffContent="" MinWidth="0" />
+                    </controls:SettingsCard.Action>
+                </controls:SettingsCard>
+
+                <!-- 更新进度面板：内容是多行的（状态 + 进度条 + 按钮）
+                     因此不用 SettingsCard 的「一行一控件」结构，而是同款外观的竖排卡片
+                     The update progress panel is multi-line (status, progress bar, buttons)
+                     So it does not use SettingsCard's "one row, one control" shape but a vertical card with the same look -->
+                <Border x:Name="UpdatePanel" CornerRadius="8" Padding="16,12" Visibility="Collapsed"
+                        Background="{ThemeResource MiditapSurfaceBrush}"
+                        BorderBrush="{ThemeResource MiditapSubtleBorderBrush}" BorderThickness="1">
+                    <StackPanel Spacing="10">
+                        <TextBlock x:Name="UpdateStatusText" Style="{ThemeResource MiditapBodyStyle}"
+                                   TextWrapping="Wrap" />
+                        <ProgressBar x:Name="UpdateProgressBar" Minimum="0" Maximum="100" Value="0"
+                                     Visibility="Collapsed" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="UpdateActionBtn" Click="OnUpdateAction"
+                                    Style="{ThemeResource AccentButtonStyle}" />
+                            <Button x:Name="UpdateDismissBtn" Click="OnUpdateDismiss" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== 代理 / Proxy ===== -->
+                <controls:SettingsCard x:Name="ProxyCard" Glyph="&#xE774;">
+                    <controls:SettingsCard.Action>
+                        <!-- 唯一带自己宽度的控件：地址比按钮长得多，给它可输入的宽度比"填满卡片"合理
+                             The only control with a width of its own
+                             An address is much longer than a button, and giving it room to be typed into beats filling the card -->
+                        <TextBox x:Name="ProxyBox" TextChanged="OnProxyChanged" Width="240" />
+                    </controls:SettingsCard.Action>
+                </controls:SettingsCard>
+
+                <!-- ===== 关于 / About ===== -->
+                <controls:SettingsCard x:Name="AboutCard" Glyph="&#xE946;">
+                    <controls:SettingsCard.Action>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <!-- 检查更新在 GitHub 仓库左侧（用户指定顺序）
+                                 Check for updates sits left of the GitHub repo (the order the user specified) -->
+                            <Button x:Name="CheckUpdateBtn" Click="OnCheckUpdates"
+                                    Style="{ThemeResource AccentButtonStyle}" />
+                            <Button x:Name="GitHubBtn" Click="OnGitHub" />
+                        </StackPanel>
+                    </controls:SettingsCard.Action>
+                </controls:SettingsCard>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

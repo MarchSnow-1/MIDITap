@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="MIDITap.App.Views.MappingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MIDITap.App.Views">
+
+    <!-- Mappings = 映射表。设计意图：
+         1) 左上是"配置 toolbar"，把选择/刷新/打开目录/重命名收进一个紧凑区域
+         2) 主区是一张真正的表 —— 有列宽契约（音符 | 类型 | 键位 | 操作）与表头
+            行用悬停反馈与交替底色区分，而不是每行都套一个边框盒子
+         3) 主操作"添加映射"放在表头右侧，与它所作用的对象在同一视线内
+
+         Mappings is a mapping TABLE
+         The config controls (select / refresh / open folder / rename) collapse into one compact toolbar
+         The main area is a real table with a column contract (note | type | output key | actions) and a header row
+         Rows are told apart by hover feedback and alternating background rather than a bordered box around each one
+         The primary action, "add mapping", sits at the right end of the header row
+         The objects it acts on stay in the same line of sight -->
+    <Grid Padding="24,18,24,20" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ===== 配置 toolbar / Config toolbar ===== -->
+        <Border Grid.Row="0" CornerRadius="8" Padding="14,10"
+                Background="{ThemeResource MiditapSurfaceBrush}">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <FontIcon Grid.Column="0" Glyph="&#xE8A5;" FontSize="16"
+                          Foreground="{ThemeResource MiditapTextSecondaryBrush}"
+                          VerticalAlignment="Center" />
+                <ComboBox x:Name="ConfigBox" Grid.Column="1" HorizontalAlignment="Stretch"
+                          DisplayMemberPath="DisplayName" SelectionChanged="OnConfigSelected"
+                          Background="Transparent" BorderThickness="0" />
+
+                <!-- 操作顺序：改名(笔) -> 刷新 -> 新建(+) -> 打开目录(folder)
+                     全部为图标按钮，用 tooltip 说明用途
+
+                     Button order: rename (pen) -> refresh -> new (+) -> open folder
+                     All of them are icon buttons whose purpose is explained by a tooltip -->
+                <!-- 图标按钮统一 36x32 且水平居中
+                     统一尺寸也让四个按钮在视觉上成组
+                     Uniform 36x32 icon buttons
+                     The four buttons did not read as a group -->
+                <Button x:Name="RenameConfigBtn" Grid.Column="2" Click="OnRenameConfig"
+                        Background="Transparent" BorderThickness="0"
+                        Width="36" Height="32" Padding="0" HorizontalContentAlignment="Center">
+                    <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                </Button>
+                <Button x:Name="ConfigRefreshBtn" Grid.Column="3" Click="OnRefreshConfigs"
+                        Background="Transparent" BorderThickness="0"
+                        Width="36" Height="32" Padding="0" HorizontalContentAlignment="Center">
+                    <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                </Button>
+                <Button x:Name="NewConfigBtn" Grid.Column="4" Click="OnNewConfig"
+                        Background="Transparent" BorderThickness="0"
+                        Width="36" Height="32" Padding="0" HorizontalContentAlignment="Center">
+                    <FontIcon Glyph="&#xE710;" FontSize="14" />
+                </Button>
+                <Button x:Name="BrowseBtn" Grid.Column="5" Click="OnBrowse"
+                        Background="Transparent" BorderThickness="0"
+                        Width="36" Height="32" Padding="0" HorizontalContentAlignment="Center">
+                    <FontIcon Glyph="&#xE8B7;" FontSize="14" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ===== 映射表 / Mapping table ===== -->
+        <Grid Grid.Row="1" RowSpacing="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- 标题 + 主操作。左右内边距 14 与工具栏内部、表头、表格行**完全一致**
+
+                 Title + primary action
+                 The 14px left and right padding matches the toolbar interior, the header row and the table rows **exactly** -->
+            <Grid Grid.Row="0" Padding="14,0" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <!-- 标题与主操作**同一行、同一条对齐规则**
+                     两者都显式 Center
+                     行高由较高的那个（按钮）决定，较矮的那个（文字）在这条行里居中
+
+                     Title and primary action share **one row and one alignment rule**
+                     Both set Center explicitly
+                     So the taller one (the button) decides the row height and the shorter one (the text) is centred in that row -->
+                <TextBlock x:Name="NameLabel" Grid.Column="0"
+                           Style="{ThemeResource MiditapSubtitleStyle}" VerticalAlignment="Center" />
+                <Button x:Name="AddMappingBtn" Grid.Column="2" Click="OnAddMapping"
+                        VerticalAlignment="Center" Style="{ThemeResource AccentButtonStyle}" />
+            </Grid>
+
+            <!-- 表头：列宽契约与行模板一致（音符 | 类型 | 键位 | 操作）
+                 类型列用固定宽度而非自适应
+                 单键/组合键两种取值长度稳定
+                 固定宽度能让键位列的起点在所有行上对齐，便于纵向扫读
+                 Column contract: note | type | output key | actions
+                 The type column is fixed-width rather than auto
+                 It has exactly two stable values
+                 A fixed width keeps the key column aligned across every row for easy vertical scanning -->
+            <Grid x:Name="HeaderRow" Grid.Row="1" Padding="14,0,14,6" ColumnSpacing="12"
+                  BorderBrush="{ThemeResource MiditapSubtleBorderBrush}" BorderThickness="0,0,0,1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="44" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="ColNoteHeader" Grid.Column="0" Style="{ThemeResource MiditapCaptionStyle}" />
+                <TextBlock x:Name="ColNoteNumberHeader" Grid.Column="1" Style="{ThemeResource MiditapCaptionStyle}" />
+                <TextBlock x:Name="ColTypeHeader" Grid.Column="2" Style="{ThemeResource MiditapCaptionStyle}" />
+                <TextBlock x:Name="ColKeyHeader" Grid.Column="3" Style="{ThemeResource MiditapCaptionStyle}" />
+            </Grid>
+
+            <!-- 表体：无外框，行自带悬停反馈 / Table body: no outer frame, rows carry their own hover feedback -->
+            <ListView x:Name="MappingList" Grid.Row="2" SelectionMode="None" IsItemClickEnabled="False"
+                      Padding="0" Background="Transparent" BorderThickness="0">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="MinHeight" Value="0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="local:MappingRow">
+                        <Grid Padding="14,9" ColumnSpacing="12" CornerRadius="6" Margin="0,1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="44" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{x:Bind NoteDisplay}" FontWeight="SemiBold"
+                                       FontSize="13" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource MiditapTextPrimaryBrush}" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind NoteNumber}" FontSize="13"
+                                       VerticalAlignment="Center"
+                                       Foreground="{ThemeResource MiditapTextSecondaryBrush}" />
+                            <!-- 类型用次级文字色：它是"解释键位怎么用"的元信息
+                                 重要性低于键位本身，不该与键位争夺注意力
+                                 Type uses the secondary text colour: it explains how the key is used
+                                 That is meta-information ranking below the key itself
+                                 It should not compete with it for attention -->
+                            <TextBlock Grid.Column="2" Text="{x:Bind TypeLabel}" FontSize="13"
+                                       VerticalAlignment="Center"
+                                       Foreground="{ThemeResource MiditapTextSecondaryBrush}" />
+                            <!-- 键位是这张表的核心信息，给强调色 + 等宽字体：扫一眼就能对上
+
+                                 The output key is the core information of this table, so it gets the accent colour and a monospace font
+                                 One glance is enough to match it up -->
+                            <TextBlock Grid.Column="3" Text="{x:Bind KeyLabel}" FontFamily="Consolas"
+                                       FontSize="13"
+                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="4" Click="OnDeleteMappingClick" Tag="{x:Bind}"
+                                    Background="Transparent" BorderThickness="0" Padding="6"
+                                    ToolTipService.ToolTip="{x:Bind DeleteTip}"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE74D;" FontSize="13"
+                                          Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                            </Button>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- 空态：不是"一行提示"，而是给一个明确的下一步 / Empty state: not a one-line hint, but an explicit next step -->
+            <StackPanel x:Name="EmptyPanel" Grid.Row="2" Spacing="6"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Visibility="Collapsed">
+                <FontIcon x:Name="EmptyIcon" Glyph="&#xE8A5;" FontSize="26"
+                          Foreground="{ThemeResource MiditapTextTertiaryBrush}"
+                          HorizontalAlignment="Center" />
+                <!-- TextAlignment 而不是 TextWrapping 单独用：损坏那条提示是两行，居中要按行生效
+                     宽度上限避免长句拉成一条横跨整页的细线
+                     TextAlignment rather than TextWrapping alone: the corruption hint is two lines and centring has to apply per line
+                     The width cap keeps a long sentence from stretching into one thin line across the page -->
+                <TextBlock x:Name="EmptyHint" Style="{ThemeResource MiditapCaptionStyle}"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" MaxWidth="420" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

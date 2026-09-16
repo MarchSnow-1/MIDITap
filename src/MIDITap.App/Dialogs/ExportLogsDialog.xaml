@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="MIDITap.App.Dialogs.ExportLogsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Style="{ThemeResource MiditapDialogStyle}"
+    PrimaryButtonClick="OnPrimaryClicked">
+
+    <!-- 导出对话框只做两件事
+         一是确认要导出哪些级别，二是确认导出到哪
+         其余（打包、失败不留半成品）都在 Core 的 LogExporter 里
+         因此这里没有逻辑分支
+
+         The export dialog does exactly two things
+         One is to confirm which levels to export, and the other is to confirm where they go
+         Everything else (packing, leaving no half-product on failure) lives in Core's LogExporter
+         So there is no branching logic here -->
+    <StackPanel MinWidth="380" Spacing="10" Margin="0,8,0,0">
+        <TextBlock x:Name="SummaryText" Style="{ThemeResource MiditapBodyStyle}" TextWrapping="Wrap" />
+
+        <TextBlock x:Name="IncludeLabel" Style="{ThemeResource MiditapSubtitleStyle}" Margin="0,4,0,0" />
+
+        <!-- 勾选框由代码按 Core 的 LogLevels.All 生成（见 ExportLogsDialog.xaml.cs 的 BuildLevelBoxes）
+             级别清单只存在于 Core 一处，界面不再把「四个级别配四个控件」手写一遍
+             生成时**默认全部勾选（含 debug）**
+             导出的用途是排查，而排查时最缺的往往是最详细的那一档
+             与界面默认隐藏 debug 相反，这是刻意的，两者目的不同
+
+             The check boxes are generated in code from Core's LogLevels.All
+             See BuildLevelBoxes in ExportLogsDialog.xaml.cs
+             Core holds the level list, so the UI no longer writes out four levels against four controls
+             They are **all checked by default, debug included**
+             An export exists for triage, where the most detailed level is usually what is missing
+             This is the opposite of the UI default of hiding debug, and deliberately so
+             The two have different purposes -->
+        <StackPanel x:Name="LevelBoxes" Orientation="Horizontal" Spacing="14" />
+
+        <TextBlock x:Name="DebugNote" Style="{ThemeResource MiditapCaptionStyle}" TextWrapping="Wrap" />
+
+        <TextBlock x:Name="ErrorText" Style="{ThemeResource MiditapCaptionStyle}"
+                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                   TextWrapping="Wrap" Visibility="Collapsed" />
+    </StackPanel>
+</ContentDialog>

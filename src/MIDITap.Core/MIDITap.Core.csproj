@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net8.0-windows 而非 net8.0：本应用只支持 Windows
+         显式声明平台后，分析器不会再要求给 Windows 专有 API 加 OperatingSystem.IsWindows() 守卫
+         那些守卫会掩盖真实的平台依赖
+         这不改变功能，只是把"仅 Windows"写进项目声明，而不是靠注释说明
+
+         net8.0-windows rather than net8.0: the app is Windows-only
+         Declaring the platform stops the analyzer from demanding OperatingSystem.IsWindows() guards
+         Those guards would surround Windows-specific APIs and obscure the real platform dependency
+         It changes no behaviour: Windows-only belongs in the project declaration rather than in a comment -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Version>1.7.1</Version>
+    <Description>MIDITap core logic: MIDI note state machine, key injection, JSON5 mapping config editing (comment preserving), settings storage and update checking.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 版本比较交给成熟的 semver 库，而不是自己手写
+         手写那份（原 Update/Semver.cs，173 行）在边界上确实有错
+         实测它把不合法的 "2.28.0-01"（数字段前导零）和 "1.2"（缺补丁号）都当成了有效版本
+         这类错误不会立刻暴露，只会在某个畸形标签出现时让用户看到错误的更新提示
+         SemVersionStyles.Any 接受真实的 GitHub 标签（都带 v 前缀）
+         构建元数据不参与排序（ComparePrecedenceTo）
+
+         Version comparison is delegated to a mature semver library rather than hand-written
+         The hand-written one (formerly Update/Semver.cs, 173 lines) really was wrong at the edges
+         Measured, it accepted the invalid "2.28.0-01" (leading zero) and "1.2" (no patch number)
+         Such mistakes do not surface immediately
+         They only show up as a wrong update prompt the day a malformed tag appears
+         SemVersionStyles.Any accepts real GitHub tags (all carry the v prefix)
+         Build metadata takes no part in ordering (ComparePrecedenceTo) -->
+    <PackageReference Include="Semver" Version="3.0.0" />
+  </ItemGroup>
+
+</Project>

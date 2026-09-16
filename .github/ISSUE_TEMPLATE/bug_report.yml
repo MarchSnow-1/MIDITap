@@ -1,0 +1,113 @@
+name: "🐛 Bug Report / 上报 Bug"
+description: "Report a bug / 报告 Bug"
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 📖 Before submitting, please check the [documentation](https://github.com/MarchSnow-1/MIDITap) or [Issues](https://github.com/MarchSnow-1/MIDITap/issues) first to see if a similar topic already exists.
+        > 🔄 If you hit a problem, please try updating to the latest version first — Settings → About → Check for updates.
+        >
+        > 📖 提交前请先检查 [文档](https://github.com/MarchSnow-1/MIDITap) 或 [Issues](https://github.com/MarchSnow-1/MIDITap/issues) 中是否已有相关内容
+        > 🔄 如遇问题，请先尝试更新至最新版本（设置 → 关于 → 检查更新）后再反馈
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "🐛 Description / 描述"
+      placeholder: |
+        Describe the bug
+        请描述你遇到的 Bug
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "🔄 Steps to Reproduce / 复现步骤"
+      description: "The more precise this is, the faster it can be fixed / 越精确越容易定位"
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "✅ Expected Behavior / 期望行为"
+      placeholder: |
+        What you expected to happen
+        你期望发生什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "❌ Actual Behavior / 实际行为"
+      placeholder: |
+        What actually happened
+        实际发生了什么
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: component
+    attributes:
+      label: "🧩 Affected Area / 问题模块"
+      description: "Check every area that applies / 勾选所有相关模块"
+      options:
+        - label: "MIDI input / 输入与设备识别（收不到音符、设备不出现）"
+        - label: "Key injection / 按键注入（映射了但没反应）"
+        - label: "Key capture / 按键捕获（按键抓不到）"
+        - label: "Mappings / 映射与配置编辑"
+        - label: "Activity log / 活动日志"
+        - label: "Settings & language / 设置与语言"
+        - label: "Self-update / 自动更新"
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: "🏗️ Environment / 运行环境"
+      description: "All three matter: the version identifies the code, Windows decides the input path, and the device decides the MIDI path / 三项都重要：版本定位代码、系统决定按键路径、设备决定 MIDI 路径"
+      placeholder: |
+        MIDITap version (Settings -> About):
+        Windows version (e.g. Windows 11 24H2):
+        MIDI device / keyboard (and whether a virtual loopback port such as loopMIDI is used):
+        使用的 MIDI 设备/键盘（是否使用 loopMIDI 之类的虚拟回环端口）：
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: "📄 Mapping Config / 映射配置"
+      description: "Drag the affected file from the config folder here, or paste its contents / 从 config 目录把相关文件拖到此处，或粘贴内容"
+      placeholder: |
+        e.g. config/mapping.json
+        例如 config/mapping.json
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: "📋 Activity Log / 活动日志"
+      description: "In Settings, turn on Write to file under Activity Log, reproduce the issue, then attach the file or paste the lines around the failure. This is usually the single most useful part of a report. / 在「设置 → 活动日志」打开「写入文件」，复现问题后附上该文件（或粘贴出错前后的几行）。这通常是报告中**最有价值**的部分"
+      render: shell
+      placeholder: |
+        Attach .storage/logs/miditap.log, or paste the relevant lines
+        请附上 .storage/logs/miditap.log，或粘贴相关行
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: "📝 Additional Context / 其他补充"
+      description: "Screenshots, recordings, whether it is reproducible / 截图、录屏、问题是否可复现"
+    validations:
+      required: false

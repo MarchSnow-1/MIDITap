@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="MIDITap.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:controls="using:MIDITap.App.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!-- 主题不在这里钉死：由 ThemeService 按用户设置（跟随系统/浅色/深色）在运行时写入 RequestedTheme
+         XAML 里的 {ThemeResource} 会自动跟随它重新解析
+         The theme is deliberately NOT pinned here
+         ThemeService writes RequestedTheme at runtime according to the user's setting (system/light/dark)
+         Every {ThemeResource} in XAML re-resolves automatically when it changes -->
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 自绘标题栏：图标 + 名称 + 运行状态胶囊（拖拽区由 SetTitleBar 注册）
+
+             Custom title bar: icon + app name + a running-state pill
+             The drag region is registered by SetTitleBar -->
+        <Grid x:Name="AppTitleBar" Height="48" Background="Transparent">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0" Spacing="10">
+                <Image Source="Assets/appIcon.png" Width="20" Height="20" />
+                <TextBlock x:Name="AppTitleText" Text="MIDITap" FontWeight="SemiBold" FontSize="14"
+                           VerticalAlignment="Center" />
+                <!-- 取主题字典里的画笔（含 HighContrast 分支），不写死颜色
+                     圆点用两个叠放的同位置 Ellipse 表示两种状态，各自带 {ThemeResource}，由代码切换 Visibility
+                     这样颜色永远由框架按当前主题解析，高对比度也在其中
+                     代码不必也不应直接赋值画刷
+
+                     The brushes come from the theme dictionaries (the HighContrast branch included)
+                     They are not hard-coded colours
+                     The two states are shown as two stacked Ellipses at the same position
+                     Each carries its own {ThemeResource} and is switched by Visibility from code
+                     The colour is therefore resolved by the framework from the current theme
+                     High contrast is included in that resolution
+                     Code neither needs to nor should assign a brush directly
+ -->
+                <Border x:Name="StatusPill" CornerRadius="10" Padding="10,2" VerticalAlignment="Center"
+                        Background="{ThemeResource MiditapStatusPillBackgroundBrush}"
+                        BorderBrush="{ThemeResource MiditapStatusPillBorderBrush}" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Grid Width="8" Height="8" VerticalAlignment="Center">
+                            <Ellipse x:Name="StatusDotRunning" Width="8" Height="8"
+                                     Fill="{ThemeResource MiditapStatusDotRunningBrush}" Visibility="Collapsed" />
+                            <Ellipse x:Name="StatusDotIdle" Width="8" Height="8"
+                                     Fill="{ThemeResource MiditapStatusDotIdleBrush}" />
+                        </Grid>
+                        <TextBlock x:Name="StatusText" Text="Stopped" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <NavigationView x:Name="NavView" Grid.Row="1"
+                        IsBackButtonVisible="Collapsed"
+                        IsSettingsVisible="False"
+                        PaneDisplayMode="Left"
+                        OpenPaneLength="200"
+                        SelectionChanged="OnNavSelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="NavHome" Tag="home">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE80F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="NavMappings" Tag="mappings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE765;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="NavLog" Tag="log">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7C3;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem x:Name="NavSettings" Tag="settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+
+        <!-- 右上角浮窗层：横跨两行、盖在导航与之上，留出标题栏高度(48)所以不会挡住窗口按钮
+             IsHitTestVisible 保持 true，避免整层吃掉点击
+             只有卡片本身接收输入（控件内子元素默认不透明区域才命中）
+
+             Toast layer in the top-right corner: it spans both rows and sits above the navigation
+             It leaves the title-bar height (48) clear so it does not cover the window buttons
+             IsHitTestVisible stays true so the layer as a whole does not swallow clicks
+             Only the cards themselves take input
+             Inside a control, only the non-transparent areas of child elements are hit
+ -->
+        <controls:ToastHost x:Name="Toasts" Grid.Row="0" Grid.RowSpan="2"
+                            VerticalAlignment="Top" HorizontalAlignment="Right"
+                            Margin="0,60,14,0" />
+    </Grid>
+</Window>

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="MIDITap.App.Dialogs.MappingEditorDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    PrimaryButtonText="Add"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    Closing="OnClosing"
+    Style="{ThemeResource MiditapDialogStyle}">
+
+    <Grid x:Name="Root" MinWidth="420" Margin="0,8,0,0">
+        <StackPanel Spacing="14">
+
+            <!-- MIDI 音符 / MIDI note -->
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="NoteLabel" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="NoteBox" MaxLength="3" TextChanged="OnNoteTextChanged" />
+                    <ToggleButton x:Name="CaptureNoteBtn" Grid.Column="1" Checked="OnCaptureNoteChecked"
+                                  Unchecked="OnCaptureNoteUnchecked" />
+                </Grid>
+            </StackPanel>
+
+            <!-- 键位模式 / Key mode -->
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="KeyModeLabel" />
+                <RadioButtons x:Name="KeyMode" SelectionChanged="OnKeyModeChanged">
+                    <RadioButton x:Name="ModeSingle" />
+                    <RadioButton x:Name="ModeCombo" />
+                </RadioButtons>
+            </StackPanel>
+
+            <!-- 单键 / Single key -->
+            <StackPanel x:Name="SinglePanel" Spacing="4">
+                <TextBlock x:Name="SingleKeyLabel" />
+                <TextBox x:Name="SingleKeyBox" IsReadOnly="True" GotFocus="OnSingleKeyFocus" LostFocus="OnKeyBlur" />
+            </StackPanel>
+
+            <!-- 组合键 / Combo key -->
+            <StackPanel x:Name="ComboPanel" Spacing="4" Visibility="Collapsed">
+                <TextBlock x:Name="ComboKeyLabel" />
+                <TextBox x:Name="ComboKeyBox" IsReadOnly="True" GotFocus="OnComboKeyFocus" LostFocus="OnKeyBlur" />
+            </StackPanel>
+
+            <!-- 移除映射放在清空输入的**左侧**
+                 移除是破坏性的
+                 按日志页工具栏的同一条约定，不让破坏性操作落在鼠标最自然的落点上
+                 Remove mapping sits to the LEFT of clearing the fields
+                 Removing is destructive (it really deletes a mapping)
+                 By the same rule the log page toolbar follows
+                 A destructive action should not sit at the most natural cursor resting place -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="RemoveMappingBtn" Click="OnRemoveMapping" Visibility="Collapsed" />
+                <Button x:Name="ClearBtn" Click="OnClear" />
+            </StackPanel>
+
+            <TextBlock x:Name="ErrorText" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                       Visibility="Collapsed" TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</ContentDialog>
