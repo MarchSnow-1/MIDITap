@@ -38,7 +38,7 @@
          That makes the Grid wider than the card and pushes the right-hand controls past the window edge -->
     <!-- 不设 MaxWidth：卡片铺满可用宽度，宽度由窗口决定
          No MaxWidth: the card fills the available width, and that width comes from the window -->
-    <Border CornerRadius="8" Padding="16,12"
+    <Border x:Name="CardRoot" CornerRadius="8" Padding="16,12"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
             Background="{ThemeResource MiditapSurfaceBrush}"
             BorderBrush="{ThemeResource MiditapSubtleBorderBrush}"

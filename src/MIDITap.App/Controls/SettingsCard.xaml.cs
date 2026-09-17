@@ -64,4 +64,19 @@ public sealed partial class SettingsCard : UserControl
         get => ActionHost.Content;
         set => ActionHost.Content = value;
     }
+
+    /// <summary>整张卡片上的悬浮提示；留空表示不设
+    /// 提示挂在**卡片外壳**上而不是右侧控件上，因为禁用的控件不接收指针事件，挂上去也不会弹出
+    /// WinUI 3 的 ToolTipService 没有 WPF 那个 ShowOnDisabled 属性，因此只能在能接收事件的元素上挂
+    /// 挂在卡片上还有个好处：说明文字周围任意位置悬浮都能看到，不只是那个已被禁用的控件
+    ///
+    /// A hover hint covering the whole card; empty means none is set
+    /// It hangs on the **card shell** rather than on the right-hand control, because a disabled control receives no pointer events and a tooltip set on it would not open
+    /// WinUI 3's ToolTipService has no ShowOnDisabled property as WPF's does, so the hint has to sit on an element that does receive events
+    /// The card has a further advantage: hovering anywhere near the description shows it, not only over the control that is already disabled
+    /// </summary>
+    public string Hint
+    {
+        set => ToolTipService.SetToolTip(CardRoot, string.IsNullOrEmpty(value) ? null : value);
+    }
 }

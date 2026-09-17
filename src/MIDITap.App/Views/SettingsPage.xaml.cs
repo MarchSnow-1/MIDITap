@@ -419,9 +419,16 @@ public sealed partial class SettingsPage : Page
         {
             AutoCheckToggle.IsOn = AppStorage.GetAutoCheckUpdates(AppServices.BaseDir);
             // 开关同理：开发构建里它没有可控制的对象
+            // 这一条与卡片常驻的说明重复，是有意为之：那行字在卡片左侧，而用户把指针移到开关上时视线也在开关上
+            // 三处（开关、代理框、检查更新按钮）行为一致，不必让使用者记住哪一个才会弹
             //
             // The switch likewise: in a development build it has nothing to control
+            // This duplicates the card's standing description on purpose: that line sits on the left of the card, while the pointer and the eye are both on the switch
+            // All three controls (the switch, the proxy box and the check-for-updates button) then behave the same, so no one has to remember which one shows a hint
             AutoCheckToggle.IsEnabled = AppServices.UpdatesEnabled;
+            UpdatesCard.Hint = AppServices.UpdatesEnabled
+                ? string.Empty
+                : AppServices.I18n.T("settings.devTooltip");
             // 代理也一并禁用
             // 它的用途只与更新有关（文案见 settings.proxy.hint，此处不重复一遍）
             // 更新整条链路不成立时还留一个能改的输入框，只会让人以为它仍有作用
@@ -433,13 +440,15 @@ public sealed partial class SettingsPage : Page
             ProxyBox.IsEnabled = AppServices.UpdatesEnabled;
             ProxyBox.Text = AppStorage.GetUpdateProxy(AppServices.BaseDir);
             // 禁用而不给原因，看起来像界面坏了：悬浮时补一句说明
-            // 发布构建里更新功能可用，这一项清除即可（SetToolTip 传 null 表示清除）
+            // 提示挂**卡片**而不是输入框本身：禁用的控件不接收指针事件，挂上去不会弹出（见 SettingsCard.Hint）
+            // 发布构建里更新功能可用，传空串即清除
             //
             // Disabled without a reason reads as a broken control, so the explanation goes on hover
-            // In a release build the feature works and the tooltip is cleared (null clears it in SetToolTip)
-            ToolTipService.SetToolTip(
-                ProxyBox,
-                AppServices.UpdatesEnabled ? null : AppServices.I18n.T("settings.devTooltip"));
+            // The hint hangs on the **card** rather than on the box itself: a disabled control receives no pointer events, so a tooltip set on it would not open (see SettingsCard.Hint)
+            // In a release build the feature works, and an empty string clears it
+            ProxyCard.Hint = AppServices.UpdatesEnabled
+                ? string.Empty
+                : AppServices.I18n.T("settings.devTooltip");
         }
         finally
         {
@@ -709,12 +718,10 @@ public sealed partial class SettingsPage : Page
         //
         // In a development build the button has nothing to do: disabled, rather than doing nothing when clicked
         CheckUpdateBtn.IsEnabled = AppServices.UpdatesEnabled;
-        // 同上：禁用按钮旁边补一句原因，鼠标悬浮即可看到
+        // 同上：原因挂在卡片上，鼠标悬浮在卡片任意位置都能看到
         //
-        // Same as the proxy box: the reason sits on the disabled button, shown on hover
-        ToolTipService.SetToolTip(
-            CheckUpdateBtn,
-            AppServices.UpdatesEnabled ? null : t("settings.devTooltip"));
+        // Same as the proxy box: the reason sits on the card, shown while hovering anywhere on it
+        AboutCard.Hint = AppServices.UpdatesEnabled ? string.Empty : t("settings.devTooltip");
         GitHubBtn.Content = t("settings.github");
         SyncThemeSelection();
         SyncLanguageSelection();
