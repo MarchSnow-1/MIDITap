@@ -243,6 +243,16 @@ public static class AppStorage
     /// </summary>
     public const string IgnoredUpdateStorageKey = "miditap_ignored_update";
 
+    /// <summary>
+    /// 已下载完成、等待重启的版本号存储键
+    /// 记下它，用户关掉更新窗口、之后重新启动应用时，才能恢复到「重启并更新」而不是重新下载一遍
+    ///
+    /// Storage key for the version downloaded and awaiting a restart
+    /// Recording it lets a relaunch resume at "restart and update" after the update window was closed,
+    /// rather than downloading the whole package again
+    /// </summary>
+    public const string StagedUpdateStorageKey = "miditap_staged_update";
+
     private static string AutoCheckPath(string baseDir)
         => AppPaths.StorageFile(baseDir, AutoCheckUpdatesStorageKey);
 
@@ -252,6 +262,8 @@ public static class AppStorage
     private static string IgnoredUpdatePath(string baseDir)
         => AppPaths.StorageFile(baseDir, IgnoredUpdateStorageKey);
 
+    private static string StagedUpdatePath(string baseDir)
+        => AppPaths.StorageFile(baseDir, StagedUpdateStorageKey);
 
     /// <summary>
     /// 是否在启动时自动检查更新
@@ -329,6 +341,40 @@ public static class AppStorage
         }
     }
 
+    /// <summary>
+    /// 读取已下载完成、等待重启的版本号，没有记录时返回空串
+    /// 读失败同样按"没有记录"处理：重新下载一次即可，不该让程序起不来或卡在某个阶段
+    ///
+    /// Reads the version downloaded and awaiting a restart; empty when there is no record
+    /// A read failure counts as "no record" as well: the user simply downloads again,
+    /// which beats failing to start or getting stuck at a stage
+    /// </summary>
+    public static string GetStagedUpdate(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(StagedUpdatePath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>记录等待重启的版本号，空串表示清除记录 / Records the version awaiting a restart; an empty string clears it</summary>
+    public static bool SaveStagedUpdate(string baseDir, string version)
+    {
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(StagedUpdatePath(baseDir), version.Trim());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// 读取更新代理地址

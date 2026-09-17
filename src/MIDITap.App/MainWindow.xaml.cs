@@ -120,28 +120,13 @@ public sealed partial class MainWindow : Window
         // The rest default to on and can be turned off in Settings
         // A development build still logs why
         // A missing "check started" line would otherwise look like the check was silently dropped
-        if (!AppServices.UpdatesEnabled)
-        {
-            AppServices.Log.Debug(
-                AppServices.I18n.T("log.debug.updateSkipped", ("version", AppServices.AppVersion)));
-        }
-        else if (AppStorage.GetAutoCheckUpdates(AppServices.BaseDir))
-        {
-            // 记一条"开始检查"的 debug：更新失败时最需要知道的是"到底有没有真的发出去请求"
-            //
-            // Logs a debug "check started"
-            // When an update fails, the first thing worth knowing is whether a request was actually made
-            AppServices.Log.Debug(
-                AppServices.I18n.T("log.debug.updateCheck", ("version", AppServices.AppVersion)));
-            _ = AppServices.Backend.CheckForUpdatesAsync(AppServices.AppVersion);
-        }
-
-        // 更新失败的结果由 apply-update.ps1 经命令行带回（见 Core 的 UpdateApplyReport）
-        // 等根元素加载完再提示：构造阶段抛出的浮窗会在窗口显示前就走完自己的计时，用户看不到
+        // 更新相关的启动动作全部推迟到 OnRootLoaded
+        // 更新窗口要有 XamlRoot 才能显示，而构造阶段它还是 null
+        // 更新失败的结果也一并等在那里，见 OnRootLoaded
         //
-        // A failed update's outcome arrives on the command line (see Core's UpdateApplyReport)
-        // The toast waits for the root element to load
-        // One raised during construction would run out its timer before the window is on screen
+        // Every update-related startup action waits for OnRootLoaded
+        // The update window needs a XamlRoot to be shown, and it is still null during construction
+        // A failed update's outcome waits there too; see OnRootLoaded
         RootGrid.Loaded += OnRootLoaded;
     }
 
@@ -152,6 +137,57 @@ public sealed partial class MainWindow : Window
         // Once only: Loaded fires again whenever the element re-enters the visual tree
         RootGrid.Loaded -= OnRootLoaded;
         ReportUpdateApplyFailure();
+        StartUpdateFlow();
+    }
+
+    /// <summary>
+    /// 启动时的更新动作：先看有没有上次下载好却没重启的包，没有才去问 GitHub
+    ///
+    /// 为什么先看本地：那份包已经校验通过、解压就绪，再问一次 GitHub 只能得到同一版本或更新的版本
+    /// 而两条路都会弹一次窗口，用户在同一次启动里就会看到两个
+    /// 因此有可恢复的更新时不再发起网络检查
+    ///
+    /// The startup update actions: an already-downloaded package is checked first, and GitHub is asked only without one
+    ///
+    /// Why the local check comes first: that package has already passed verification and been extracted,
+    /// so asking GitHub again could only return the same version or a newer one
+    /// Both routes raise a window, and the user would see two of them in a single launch
+    /// With a restorable update present, no network check is started
+    /// </summary>
+    private void StartUpdateFlow()
+    {
+        var staged = UpdateService.TryRestoreStaged();
+        if (staged is not null)
+        {
+            AppServices.Log.Info(AppServices.I18n.T("log.updateStaged", ("version", staged)));
+            // 其余字段填当前已知值即可：包已在磁盘上，下载地址与发布说明那时都用不上了
+            //
+            // The remaining fields take the currently known values: the package is on disk,
+            // so the download address and the release notes are of no further use
+            _ = UpdateNotifier.ShowAsync(
+                new Core.Update.UpdateInfo(staged, AppServices.AppVersion, Core.Update.UpdateChecker.ReleasesUrl));
+            return;
+        }
+
+        if (!AppServices.UpdatesEnabled)
+        {
+            AppServices.Log.Debug(
+                AppServices.I18n.T("log.debug.updateSkipped", ("version", AppServices.AppVersion)));
+            return;
+        }
+
+        if (!AppStorage.GetAutoCheckUpdates(AppServices.BaseDir))
+        {
+            return;
+        }
+
+        // 记一条"开始检查"的 debug：更新失败时最需要知道的是"到底有没有真的发出去请求"
+        //
+        // Logs a debug "check started"
+        // When an update fails, the first thing worth knowing is whether a request was actually made
+        AppServices.Log.Debug(
+            AppServices.I18n.T("log.debug.updateCheck", ("version", AppServices.AppVersion)));
+        _ = AppServices.Backend.CheckForUpdatesAsync(AppServices.AppVersion);
     }
 
     /// <summary>
@@ -433,6 +469,18 @@ public sealed partial class MainWindow : Window
         backend.UpdateAvailable += info => AppServices.RunOnUi(() =>
             log.Debug(AppServices.I18n.T(
                 "log.debug.updateFound", ("latest", info.Latest), ("current", info.Current))));
+        // 更新可用时弹窗，弹一次即可
+        // 订阅在窗口上而不是某个页面上：页面按导航重建，页面级订阅会随之消失并可能重复
+        // 早先主页与设置页各订阅一次，同一个事件因此可能弹两个提示
+        //
+        // The update dialog is raised here, once
+        // The subscription lives on the window rather than on a page: pages are rebuilt on navigation,
+        // so a page-level subscription both disappears and duplicates
+        // The home page and the settings page each had one before, which could raise two prompts for one event
+        backend.UpdateAvailable += info => AppServices.RunOnUi(() =>
+        {
+            _ = UpdateNotifier.ShowAsync(info);
+        });
 
         // 映射增删的日志在这里本地化，与上面各事件保持一致
         //

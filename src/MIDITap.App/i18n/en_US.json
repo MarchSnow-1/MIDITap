@@ -84,6 +84,7 @@
   "log.shuttingDown": "Shutting down",
   "log.unbound": "unbound, skipped",
   "log.unexpectedOff": "Note off: {note} · unexpected, ignored",
+  "log.updateStaged": "The update {version} downloaded earlier is ready; restart to install it",
   "log.warnEmptyName": "File name cannot be empty",
   "mappings.add": "Add Mapping",
   "mappings.col.key": "OUTPUT KEY",
@@ -156,5 +157,6 @@
   "update.notes": "What's new",
   "update.ready.hint": "MIDITap will close, apply the update and restart. Save your work first.",
   "update.restart": "Restart & update",
+  "update.staged.incomplete": "The update downloaded last time was incomplete and has been discarded",
   "update.title": "Update available"
 }

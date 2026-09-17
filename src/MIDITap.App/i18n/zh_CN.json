@@ -84,6 +84,7 @@
   "log.shuttingDown": "正在退出",
   "log.unbound": "未绑定，跳过",
   "log.unexpectedOff": "按键抬起: {note} · 异常，已忽略",
+  "log.updateStaged": "上次下载的更新 {version} 已就绪，重启即可更新",
   "log.warnEmptyName": "文件名不能为空",
   "mappings.add": "新增映射",
   "mappings.col.key": "输出键位",
@@ -156,5 +157,6 @@
   "update.notes": "更新内容",
   "update.ready.hint": "MIDITap 将关闭、应用更新并重新启动。请先保存工作。",
   "update.restart": "重启并更新",
+  "update.staged.incomplete": "上次下载的更新包不完整，已丢弃",
   "update.title": "发现新版本"
 }

@@ -37,7 +37,12 @@ public static class UpdateService
 /// <remarks>The working directory used for updates (under .update/ next to the exe)</remarks>
     private static string UpdateRoot => AppPaths.UpdateDir(AppServices.BaseDir);
 
-    private static string StagingDir => Path.Combine(UpdateRoot, "new");
+    // 解压目录的定义在 Core 的 StagedUpdate 里（恢复更新时也要用同一路径）
+    // 同一个路径不在两处各写一遍，改名时就不会漏掉一处
+    //
+    // The staging directory is defined by StagedUpdate in Core, which needs the same path when restoring
+    // One path, one definition, so a rename cannot miss a place
+    private static string StagingDir => StagedUpdate.StagingDir(AppServices.BaseDir);
     private static string PackagePath => Path.Combine(UpdateRoot, "package.zip");
 
     /// <summary>当前阶段（UI 读取）</summary>
@@ -152,6 +157,7 @@ public static class UpdateService
             }
 
             Progress = 1;
+            StagedUpdate.Mark(AppServices.BaseDir, info.Latest);
             SetStage(UpdateStage.ReadyToRestart);
             return true;
         }
@@ -275,6 +281,51 @@ public static class UpdateService
         return "pwsh";
     }
 
+    /// <summary>
+    /// 启动时把上次"下载好但没重启"的更新恢复成「重启并更新」状态；没有可恢复的更新时返回 null
+    /// 返回的版本号供调用方构造更新信息，其余字段那时都已无意义（包已经落盘了）
+    ///
+    /// On startup, restores an update downloaded earlier but never restarted to the "restart and update" state
+    /// Returns null when there is nothing to restore
+    /// The returned version lets the caller build the update information; the other fields no longer matter,
+    /// because the package is already on disk
+    /// </summary>
+    public static string? TryRestoreStaged()
+    {
+        // 开发构建没有更新流程（见 AppServices.UpdatesEnabled）
+        //
+        // A development build has no update flow (see AppServices.UpdatesEnabled)
+        if (!AppServices.UpdatesEnabled)
+        {
+            return null;
+        }
+
+        // 判断本身在 Core（见 StagedUpdate），那里才测得到 —— 本方法只为它挂上界面层的前置条件
+        //
+        // The decision itself lives in Core (see StagedUpdate), which is where it can be tested
+        // This method only adds the UI-layer precondition around it
+        var result = StagedUpdate.Restore(AppServices.BaseDir, AppServices.AppVersion);
+
+        if (result.Verdict == StagedRestoreVerdict.Incomplete)
+        {
+            // 上次的下载不完整：说清是哪个版本被丢弃了，不然用户只会发现"更新不见了"
+            //
+            // The last download was incomplete: name the version that was discarded,
+            // otherwise the user just finds an update that vanished
+            AppServices.Log.Warn(
+                AppServices.I18n.T("update.staged.incomplete", ("version", result.Version ?? string.Empty)));
+        }
+
+        if (result.Verdict != StagedRestoreVerdict.Ready)
+        {
+            return null;
+        }
+
+        Progress = 1;
+        Stage = UpdateStage.ReadyToRestart;
+        return result.Version;
+    }
+
     /// <summary>丢弃暂存内容（用户放弃更新、或开始新一轮时调用）</summary>
 /// <remarks>Discards the staged content (called when the user gives up on the update or starts a new round)</remarks>
     public static void CleanStaging()
@@ -296,6 +347,12 @@ public static class UpdateService
             //
             // A failed cleanup does not affect the flow: the next round rebuilds these files
         }
+        // 内容已经丢掉了，那条"等待重启"的记录也必须跟着失效
+        // 两者不一致时下次启动会显示一个已经不存在了的更新
+        //
+        // The content is gone, so the "awaiting a restart" record has to go with it
+        // Leaving the two out of step would make the next launch offer an update that no longer exists
+        StagedUpdate.Clear(AppServices.BaseDir);
         Progress = 0;
     }
 
