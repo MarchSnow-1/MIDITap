@@ -12,6 +12,7 @@ using System.Collections.ObjectModel;
 using MIDITap.App.Dialogs;
 using MIDITap.App.Helpers;
 using MIDITap.App.Services;
+using MIDITap.Core.Midi;
 using MIDITap.Core.Update;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -71,6 +72,7 @@ public sealed partial class HomePage : Page
         backend.Stopped += OnStopped;
         backend.NoteOn += OnNoteOn;
         backend.NoteOff += OnNoteOff;
+        backend.HeldNotesRestored += OnHeldNotesRestored;
         backend.ConfigLoaded += OnConfigLoaded;
         backend.ConfigStateRestored += OnConfigLoaded; // 状态重放走同一处理器
         backend.UpdateAvailable += OnUpdateAvailable;
@@ -83,6 +85,11 @@ public sealed partial class HomePage : Page
         AppServices.Backend.ListPorts();
         AppServices.Backend.ReemitConfigLoaded();
         AppServices.Backend.ReemitUpdateAvailable();
+        // 仍被按住的音符同样要重放：站在别的页面时按下的那些，这一页没有任何来源知道
+        //
+        // The notes still held are replayed as well
+        // Presses made while another page was shown have no other way of reaching this one
+        AppServices.Backend.ReemitHeldNotes();
 
         // Attach 按当前筛选先渲染一次（含启动期那几条）并跟随后续变化与筛选
         //
@@ -107,6 +114,7 @@ public sealed partial class HomePage : Page
         backend.Stopped -= OnStopped;
         backend.NoteOn -= OnNoteOn;
         backend.NoteOff -= OnNoteOff;
+        backend.HeldNotesRestored -= OnHeldNotesRestored;
         backend.ConfigLoaded -= OnConfigLoaded;
         backend.ConfigStateRestored -= OnConfigLoaded;
         backend.UpdateAvailable -= OnUpdateAvailable;
@@ -203,10 +211,15 @@ public sealed partial class HomePage : Page
 
     private void OnStopped() => AppServices.RunOnUi(ClearActiveNotes);
 
+    /// <summary>chip 文本：音名 + 目标键位，未绑定显示占位文案
+    /// A chip's text: the note name plus the target key, or the placeholder when unbound</summary>
+    private static string NoteChipText(byte note, string? key) =>
+        $"{NoteNames.Name(note)} → {key ?? AppServices.I18n.T("monitor.notes.unbound")}";
+
     private void OnNoteOn(byte note, byte velocity, string? key) => AppServices.RunOnUi(() =>
     {
         NoteBoard.SetNoteActive(note, true);
-        var text = $"{NoteNames.Name(note)} → {key ?? AppServices.I18n.T("monitor.notes.unbound")}";
+        var text = NoteChipText(note, key);
         var existing = _activeNotes.FirstOrDefault(r => r.Note == note);
         if (existing is not null)
         {
@@ -226,6 +239,28 @@ public sealed partial class HomePage : Page
         if (existing is not null)
         {
             _activeNotes.Remove(existing);
+        }
+        RenderActiveNotes();
+    });
+
+    // 页面按导航重建，站在别的页面时按下的音符它收不到 NoteOn
+    // 加载时把这批音符补回来，否则它们要等到抬起才第一次出现，而抬起只负责移除
+    //
+    // The page is rebuilt on navigation and receives no NoteOn for presses made while another page was shown
+    // They are filled in on load; otherwise they first appear on release, and the release only removes them
+    private void OnHeldNotesRestored(IReadOnlyList<HeldNote> held) => AppServices.RunOnUi(() =>
+    {
+        foreach (var note in held)
+        {
+            // 重放可能与一次真实 NoteOn 竞争，同一音符已经在了就跳过
+            //
+            // The replay can race a genuine NoteOn, so a note already present is skipped
+            if (_activeNotes.Any(r => r.Note == note.Note))
+            {
+                continue;
+            }
+            NoteBoard.SetNoteActive(note.Note, true);
+            _activeNotes.Add(new ActiveNoteChip(note.Note, NoteChipText(note.Note, note.KeyLabel)));
         }
         RenderActiveNotes();
     });

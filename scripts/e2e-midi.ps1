@@ -498,17 +498,11 @@ try {
     Start-Sleep -Milliseconds 400
 
     Write-Section "11. 主页实时预览"
-    # 实时预览必须在**主页内**测，不能"切到日志页再切回来"
-    # HomePage 是 NavigationCacheMode=Disabled（每次导航重建）
-    # 因此"按住琴键时切换页面"会丢弃视觉上的激活状态
-    # 这是既有的、可见的行为，不该由本用例来断言
-    # 这里要验证的是"用户在主页演奏时实时看到触发了什么"
-    # The live preview must be exercised from WITHIN the home page
-    # It must never be exercised by navigating away and back
-    # HomePage uses NavigationCacheMode=Disabled (rebuilt on every navigation)
-    # So leaving while keys are held drops the visual active state
-    # That is existing, observable behaviour and not what this case is about
-    # The point is that playing on the home page shows what was triggered, live
+    # 实时预览在**主页内**测：用户在主页演奏时实时看到触发了什么
+    # "按住琴键时切走再切回"另有第 12 节专门覆盖，不在这里重复
+    #
+    # The live preview is exercised from WITHIN the home page: playing there shows what was triggered, live
+    # The "leave while keys are held, then come back" case has its own section, 12, and is not repeated here
     Select-NavItem 'NavHome'
     Send-NoteOn 60 100
     Start-Sleep -Milliseconds 900
@@ -542,7 +536,39 @@ try {
     Assert-True ($null -eq $after -or $after.Current.Name -eq '') "全部抬起后实时预览清空"
     Assert-Key $false 'F13' "收尾抬起"
 
-    Write-Section "12. 全程无崩溃"
+    Write-Section "12. 切页后仍被按住的音符会补回主页"
+    # 主页按导航重建（NavigationCacheMode=Disabled），站在别的页面时按下的音符它收不到 NoteOn
+    # 因此加载时重放一份"仍被按住"的快照
+    # 不重放的话这些音符要等到抬起那一刻才第一次出现，而抬起只负责把它们移除，等于从未显示过
+    #
+    # The home page is rebuilt on navigation (NavigationCacheMode=Disabled)
+    # Presses made while another page is shown raise no NoteOn it can hear
+    # So a snapshot of the notes still held is replayed when it loads
+    # Without that replay they first appear at the moment of release, and the release only removes them, so they are never shown
+    Select-NavItem 'NavHome'
+    Send-NoteOn 60 100
+    Send-NoteOff 60
+    Start-Sleep -Milliseconds 400
+
+    # 站到日志页再按下：这一次主页收不到 NoteOn
+    #
+    # Move to the log page and press there: this time the home page hears no NoteOn
+    Select-NavItem 'NavLog'
+    Send-NoteOn 60 100
+    Start-Sleep -Milliseconds 500
+    Select-NavItem 'NavHome'
+    Start-Sleep -Milliseconds 1200
+    $restored = Find-ById 'ActiveNotesItems'
+    $restoredText = if ($restored) { $restored.Current.Name } else { '' }
+    Assert-True ($restoredText -match 'f13') "切回主页后显示仍被按住的音符（实际：'$restoredText'）"
+    Assert-Key $true 'F13' "切回主页时该键仍处于按下"
+
+    Send-NoteOff 60
+    Start-Sleep -Milliseconds 700
+    $cleared = Find-ById 'ActiveNotesItems'
+    Assert-True ($null -eq $cleared -or $cleared.Current.Name -eq '') "抬起后主页清空"
+
+    Write-Section "13. 全程无崩溃"
     Assert-True (-not $app.HasExited) "应用在整个测试过程中保持存活"
     $crashLog = Join-Path $AppDir ".storage/crash.log"
     Assert-True (-not (Test-Path $crashLog)) "未产生崩溃日志（.storage/crash.log 不存在）"

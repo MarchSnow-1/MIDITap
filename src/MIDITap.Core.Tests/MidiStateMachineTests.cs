@@ -168,4 +168,71 @@ public class MidiStateMachineTests
         Assert.Equal(88, broadcast.Velocity);
         Assert.Equal("ctrl+b", broadcast.Key);
     }
+
+    // 页面按导航重建后要拿回“哪些音符正按着”，下面几条锁定快照的行为
+
+    [Fact]
+    public void Held_note_snapshot_lists_notes_ascending_with_their_labels()
+    {
+        var state = Map((60, [0x11, 0x42]), (62, [0x41]));
+        NoteOn(state, 0, 62);
+        NoteOn(state, 0, 60);
+        var held = state.SnapshotHeldNotes();
+        Assert.Equal(new List<byte> { 60, 62 }, held.Select(h => h.Note).ToList());
+        Assert.Equal("ctrl+b", held[0].KeyLabel);
+        Assert.Equal("a", held[1].KeyLabel);
+    }
+
+    [Fact]
+    public void Held_note_snapshot_is_empty_before_a_press_and_after_a_release()
+    {
+        var state = Map((60, [0x41]));
+        Assert.Empty(state.SnapshotHeldNotes());
+        NoteOn(state, 0, 60);
+        Assert.Single(state.SnapshotHeldNotes());
+        NoteOff(state, 0, 60);
+        Assert.Empty(state.SnapshotHeldNotes());
+    }
+
+    [Fact]
+    public void Held_note_snapshot_keeps_a_note_still_held_on_another_channel()
+    {
+        var state = Map((60, [0x41]));
+        NoteOn(state, 0, 60);
+        NoteOn(state, 1, 60);
+        NoteOff(state, 0, 60);
+        var held = state.SnapshotHeldNotes();
+        Assert.Equal(new List<byte> { 60 }, held.Select(h => h.Note).ToList());
+    }
+
+    [Fact]
+    public void Held_note_snapshot_reports_an_unmapped_note_with_no_label()
+    {
+        var state = Map();
+        NoteOn(state, 0, 64);
+        var held = state.SnapshotHeldNotes();
+        Assert.Equal(new List<byte> { 64 }, held.Select(h => h.Note).ToList());
+        Assert.Null(held[0].KeyLabel);
+    }
+
+    [Fact]
+    public void Held_note_snapshot_labels_from_the_binding_recorded_at_press_time()
+    {
+        var state = Map((60, [0x41]));
+        NoteOn(state, 0, 60);
+        // 按下之后换掉映射：快照仍用按下那一刻的绑定，与实际按住的键一致
+        //
+        // The mapping changes after the press: the snapshot keeps the binding recorded at press time, matching the key actually held
+        state.NoteMap[60] = [0x42];
+        Assert.Equal("a", state.SnapshotHeldNotes()[0].KeyLabel);
+    }
+
+    [Fact]
+    public void Held_note_snapshot_is_cleared_by_release_all_keys()
+    {
+        var state = Map((60, [0x41]));
+        NoteOn(state, 0, 60);
+        state.ReleaseAllKeys();
+        Assert.Empty(state.SnapshotHeldNotes());
+    }
 }

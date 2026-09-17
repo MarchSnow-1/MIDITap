@@ -93,9 +93,7 @@ public sealed class MidiNoteStateMachine
                 ActiveNoteBindings[note] = binding;
             }
 
-            var keyLabel = binding is null
-                ? null
-                : string.Join("+", binding.Select(code => Keys.VirtualKeyTable.LabelFor(code)));
+            var keyLabel = LabelOf(binding);
             actions.Add(new MidiAction.Broadcast(BroadcastKind.NoteOn, note, velocity, keyLabel));
             return actions;
         }
@@ -149,6 +147,39 @@ public sealed class MidiNoteStateMachine
         actions.Add(new MidiAction.Broadcast(BroadcastKind.NoteOff, note));
         return actions;
     }
+
+    /// <summary>
+    /// 当前仍被按住的音符快照，按音符编号升序
+    /// 页面按导航重建，重建期间发出的按下事件它收不到，靠这份快照把“正按着”的样子补回来
+    /// 调用方须持有保护本状态机的锁，本类自身不加锁
+    ///
+    /// A snapshot of the notes still held, ascending by note number
+    /// A page is rebuilt on navigation and receives none of the presses made while it was gone, and this snapshot restores the state it missed
+    /// The caller must hold the lock that guards this state machine, which takes no lock of its own
+    /// </summary>
+    public List<HeldNote> SnapshotHeldNotes()
+    {
+        var held = new List<HeldNote>();
+        foreach (var (note, channels) in ActiveNoteChannels)
+        {
+            // 判据是“通道集合非空”，与 HandleMessage 的抬起判据一致
+            //
+            // The test is a non-empty channel set, matching the release test in HandleMessage
+            if (channels.Count == 0)
+            {
+                continue;
+            }
+            ActiveNoteBindings.TryGetValue(note, out var binding);
+            held.Add(new HeldNote(note, LabelOf(binding)));
+        }
+        held.Sort((a, b) => a.Note.CompareTo(b.Note));
+        return held;
+    }
+
+    /// <summary>绑定转成显示标签，未绑定返回 null
+    /// A binding as its display label, or null when unbound</summary>
+    private static string? LabelOf(ushort[]? binding) =>
+        binding is null ? null : string.Join("+", binding.Select(Keys.VirtualKeyTable.LabelFor));
 
     /// <summary>
     /// 抬起当前所有被按住的按键并清空跟踪状态

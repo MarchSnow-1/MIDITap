@@ -142,6 +142,9 @@ public sealed class BackendService
     public event Action<byte>? DuplicateOn;
     public event Action<byte>? UnexpectedOff;
     public event Action<byte>? NoteCaptured;
+    /// <summary>页面状态重放专用：把当前仍被按住的音符交给（重新创建的）页面
+    /// For replaying page state only: hands the notes still held to a (recreated) page</summary>
+    public event Action<IReadOnlyList<HeldNote>>? HeldNotesRestored;
     public event Action? CaptureReady;
     public event Action<UpdateInfo>? UpdateAvailable;
 
@@ -434,6 +437,25 @@ public sealed class BackendService
         {
             ConfigStateRestored?.Invoke(_lastConfigLoaded);
         }
+    }
+
+    /// <summary>
+    /// 向（重新创建的）页面重放当前仍被按住的音符
+    /// 页面按导航重建，重建期间按下的音符它一次都没收到
+    /// 不重放的话这些音符要等到抬起才第一次出现，而抬起只会把它们移除，等于从未显示过
+    ///
+    /// Replays the notes still held to a (recreated) page
+    /// A page is rebuilt on navigation and receives none of the presses made while it was gone
+    /// Without the replay those notes first appear on release, and the release only removes them, so they are never shown
+    /// </summary>
+    public void ReemitHeldNotes()
+    {
+        List<HeldNote> held;
+        lock (_gate)
+        {
+            held = _stateMachine.SnapshotHeldNotes();
+        }
+        HeldNotesRestored?.Invoke(held);
     }
 
     // ------------------------------------------------------------------ start / stop
