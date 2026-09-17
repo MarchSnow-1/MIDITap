@@ -1,26 +1,61 @@
-# 依赖
+# 依赖与前端产物
+#
+# Dependencies and front-end build output
 node_modules/
+dist/
+
+# 环境变量
+#
+# Environment variables
+.env
 
 # 日志
+#
+# Logs
 *.log
 npm-debug.log*
 
 # 系统文件
+#
+# System files
 .DS_Store
 Thumbs.db
 
-# 编辑器
+# 编辑器与 IDE 配置
+#
+# Editor and IDE settings
 .vscode/
 .idea/
+.vs/
+*.user
 
-# 环境
-.env
-
-dist/
-
-# NeutralinoJS
+# NeutralinoJS 构建与运行时
+#
+# NeutralinoJS build and runtime
 .storage/
 .tmp/
 bin/
 
+# .NET 构建产物
+# 带过来是为了与 v2 分支的忽略规则保持一致
+#
+# .NET build output
+# Carried over so the ignore rules match the v2 branch
+publish/
+stage/
+obj/
+*.binlog
+.*.tmp
+scripts/.tmp-*
+
+# 工具配置
+#
+# Tooling config
 .claude
+
+# 开发期临时脚本
+# 这些是排查用的工具，不属于产品，也不必发给用户
+#
+# Throwaway development scripts
+# They are investigation tools, not product code, and do not belong in the user's package
+.dev/
