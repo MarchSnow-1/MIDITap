@@ -67,9 +67,20 @@ public sealed partial class UpdateDialog : ContentDialog
         // Raw HTML such as a centring <div>, <img> and <details> is outside what it supports and shows up as literal text
         // That is the boundary of the chosen control, so notes written in plain markdown render best
         NotesMd.Text = _info.Notes ?? string.Empty;
-        NotesExpander.Visibility = string.IsNullOrWhiteSpace(_info.Notes)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        var hasNotes = !string.IsNullOrWhiteSpace(_info.Notes);
+        NotesCard.Visibility = hasNotes ? Visibility.Visible : Visibility.Collapsed;
+
+        // 没有发布说明时区分两种情形，而不是一律留白
+        //   * 走了网页回退：GitHub 只给渲染后的 HTML，说明预览不可用并给出发布页入口
+        //   * 该版本本来就没写说明：什么都不显示，那是正常情况
+        //
+        // Absent notes are split into two cases rather than left blank
+        //   * the web fallback was used: GitHub served rendered HTML only, so say the preview is unavailable
+        //     and offer the release page
+        //   * the release simply has no notes: show nothing, which is normal
+        NotesUnavailableText.Visibility = !hasNotes && _info.ViaFallback
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
         NeverRemindBtn.Visibility = showNeverRemind ? Visibility.Visible : Visibility.Collapsed;
 
@@ -79,6 +90,11 @@ public sealed partial class UpdateDialog : ContentDialog
     private void OnDialogLoaded(object sender, RoutedEventArgs e)
     {
         UpdateService.StageChanged += OnStageChanged;
+        // 进度变化单独订阅：它不动阶段，只订阅阶段的话进度条只会在 0% 与 100% 各画一次
+        //
+        // Progress is subscribed separately: it does not move the stage, and a stage-only subscription
+        // would paint the bar just twice, at 0% and 100%
+        UpdateService.ProgressChanged += OnStageChanged;
         AppServices.I18n.LanguageChanged += RefreshTexts;
         RenderState();
     }
@@ -88,6 +104,7 @@ public sealed partial class UpdateDialog : ContentDialog
         // 退订：弹窗按需重建，不退订会让静态事件一直持有它
         // Unsubscribe: the dialog is rebuilt on demand, so a retained static handler would leak it
         UpdateService.StageChanged -= OnStageChanged;
+        UpdateService.ProgressChanged -= OnStageChanged;
         AppServices.I18n.LanguageChanged -= RefreshTexts;
         _cts?.Dispose();
         _cts = null;
@@ -131,6 +148,14 @@ public sealed partial class UpdateDialog : ContentDialog
             UpdateService.CleanStaging();
             UpdateService.Reset();
         }
+    }
+
+    private void OnOpenPageClick(object sender, RoutedEventArgs e)
+    {
+        // 预览不可用时的出口：把用户送到发布页，说明原文在那里
+        //
+        // The way out when the preview is unavailable: send the user to the release page, where the notes are
+        AppServices.Backend.OpenUrl(_info.Url);
     }
 
     private void OnIgnoreClick(object sender, RoutedEventArgs e)
@@ -197,6 +222,7 @@ public sealed partial class UpdateDialog : ContentDialog
         switch (UpdateService.Stage)
         {
             case UpdateStage.Downloading:
+                RestoreDismissAffordances();
                 ProgressArea.Visibility = Visibility.Visible;
                 StatusText.Text = AppServices.I18n.T("update.downloading.pct",
                     ("pct", Math.Round(UpdateService.Progress * 100).ToString("F0")));
@@ -206,6 +232,7 @@ public sealed partial class UpdateDialog : ContentDialog
                 break;
 
             case UpdateStage.Extracting:
+                RestoreDismissAffordances();
                 // 解压没有可用的百分比：包已经下完，这一步在磁盘上做
                 // Extraction has no percentage to show: the package is fully downloaded and this step is disk work
                 ProgressArea.Visibility = Visibility.Visible;
@@ -220,9 +247,21 @@ public sealed partial class UpdateDialog : ContentDialog
                 ProgressBar.Visibility = Visibility.Collapsed;
                 SetActionsEnabled(true);
                 ActionBtn.Content = t("update.restart");
+                // 包已经躺在磁盘上，此时只剩"重启"这一条有意义的路
+                // 因此收起叉号与「忽略此版本」：在这个状态下关掉窗口只会把已下载好的更新搁在那里，
+                // 而用户下次启动仍会看到同一个窗口，白下一次；「忽略」更是会让他从此错过这个版本
+                //
+                // The package is on disk, so only "restart" is a meaningful path at this point
+                // The cross and "ignore this version" are therefore withdrawn
+                // Closing the window here would merely park a finished download, and the next launch would show
+                // the same window again after a needless re-download
+                // Ignoring would make the user miss this version for good
+                CloseBtn.Visibility = Visibility.Collapsed;
+                IgnoreBtn.Visibility = Visibility.Collapsed;
                 break;
 
             case UpdateStage.Failed:
+                RestoreDismissAffordances();
                 ProgressArea.Visibility = Visibility.Visible;
                 StatusText.Text = t("update.failed") + ": " + (UpdateService.LastError ?? string.Empty);
                 ProgressBar.Visibility = Visibility.Collapsed;
@@ -231,6 +270,7 @@ public sealed partial class UpdateDialog : ContentDialog
                 break;
 
             default:
+                RestoreDismissAffordances();
                 ProgressArea.Visibility = Visibility.Collapsed;
                 SetActionsEnabled(true);
                 ActionBtn.Content = t("update.download");
@@ -244,15 +284,83 @@ public sealed partial class UpdateDialog : ContentDialog
         IgnoreBtn.IsEnabled = enabled;
     }
 
+    /// <summary>
+    /// 恢复叉号与「忽略此版本」的显示（离开"将重启更新"这一阶段时调用）
+    /// 它们在"将重启更新"时被收起，而失败后重试、或取消下载回到空闲时都要重新出现，
+    /// 否则用户会被困在一个既不能关也不能忽略的窗口里
+    ///
+    /// Restores the cross and "ignore this version" (called when leaving the "restart to update" stage)
+    /// They are withdrawn there, and must come back after a failure, a retry, or a cancelled download,
+    /// or the user would be stuck in a window that can neither be closed nor ignored
+    /// </summary>
+    private void RestoreDismissAffordances()
+    {
+        CloseBtn.Visibility = Visibility.Visible;
+        IgnoreBtn.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// 去掉版本号前的 v（GitHub 的 tag 带，程序集版本不带）
+    /// 只去开头那一个，版本号内部若出现 v 不动它
+    ///
+    /// Drops a leading v from a version (GitHub tags carry one, assembly versions do not)
+    /// Only the leading one is removed; a v inside the version is left alone
+    /// </summary>
+    private static string StripVersionPrefix(string version)
+        => version.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? version[1..] : version;
+
+    /// <summary>
+    /// 表头被点击：直接显隐内容，并把箭头换成对应的方向
+    /// 全程只改 Visibility，不涉及任何 Storyboard —— 高度在同一次布局里就切换完成，没有过渡
+    ///
+    /// The header was clicked: shows or hides the content outright and points the chevron the right way
+    /// Nothing but Visibility changes, with no storyboard involved, so the height switches within one layout pass
+    /// </summary>
+    private void OnNotesToggled(object sender, RoutedEventArgs e)
+    {
+        // 以当前可见性取反，而不是读某个勾选状态
+        // 这样切换的依据只有一处事实来源，不会出现"状态说展开了、界面却收着"的分歧
+        //
+        // The new state is the inverse of what is on screen rather than a checked flag read back
+        // That leaves one source of truth, so the display cannot disagree with the state
+        var expanded = NotesBodyHost.Visibility != Visibility.Visible;
+        NotesBodyHost.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+
+        // 箭头方向：向下表示"点了会展开"，向上表示"点了会收起"
+        // 字形用字面量而不是主题资源：省一次资源查找，也避免资源名拼错时整段 XAML 加载失败
+        //
+        // Chevron direction: down means "clicking expands", up means "clicking collapses"
+        // The glyph is a literal rather than a theme resource: one fewer lookup, and a mistyped resource name
+        // would fail the whole XAML load
+        NotesChevron.Glyph = expanded ? "\uE70E" : "\uE70D";
+    }
+
     private void RefreshTexts()
     {
         Func<string, string> t = AppServices.I18n.T;
         TitleText.Text = t("update.title");
         CurrentLabel.Text = t("update.current");
-        CurrentValue.Text = _info.Current;
+        // 版本号显示时去掉 v 前缀
+        // Current 来自程序集版本（1.9.0，本就没有 v），Latest 来自 GitHub 的 tag（v2.0.0）
+        // 两个来源不一致，直接显示会出现"1.9.0 与 v2.0.0"这种前后不齐的写法
+        // 这里统一成不带 v 的形式，与「关于」区里那一行版本号保持一致
+        //
+        // The v prefix is dropped for display
+        // Current comes from the assembly version (1.9.0, no v) and Latest from the GitHub tag (v2.0.0)
+        // Showing both as they come would put "1.9.0" next to "v2.0.0"
+        // They are normalised here to the no-v form, matching the version line under About
+        CurrentValue.Text = StripVersionPrefix(_info.Current);
         LatestLabel.Text = t("update.latest");
-        LatestValue.Text = _info.Latest;
-        NotesExpander.Header = t("update.notes");
+        LatestValue.Text = StripVersionPrefix(_info.Latest);
+        NotesHeaderText.Text = t("update.notes");
+        // 表头内容是自绘的，自动化名称取不到里面的文字，因此显式给出
+        // 屏幕阅读器与自动化测试都靠它定位这个控件
+        //
+        // The header is drawn by hand, so its text is not picked up as an automation name; it is set explicitly
+        // Screen readers and automated tests both rely on it to find this control
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(NotesToggle, t("update.notes"));
+        NotesUnavailableText.Text = t("update.notes.unavailable");
+        PageBtn.Content = t("update.notes.viewOnPage");
         IgnoreBtn.Content = t("update.ignoreVersion");
         NeverRemindBtn.Content = t("update.neverRemind");
         ToolTipService.SetToolTip(CloseBtn, t("update.close"));

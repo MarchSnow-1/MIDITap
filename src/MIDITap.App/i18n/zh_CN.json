@@ -155,6 +155,8 @@
   "update.latest": "最新版本",
   "update.neverRemind": "不再提醒更新",
   "update.notes": "更新内容",
+  "update.notes.unavailable": "GitHub 接口请求次数已达上限，无法预览更新内容；可在发布页查看。",
+  "update.notes.viewOnPage": "前往发布页",
   "update.ready.hint": "MIDITap 将关闭、应用更新并重新启动。请先保存工作。",
   "update.restart": "重启并更新",
   "update.staged.incomplete": "上次下载的更新包不完整，已丢弃",

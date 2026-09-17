@@ -57,6 +57,39 @@ public static class UpdateService
 /// <remarks>Download progress from 0 to 1 (0 before the download starts)</remarks>
     public static double Progress { get; private set; }
 
+    /// <summary>
+    /// 下载进度变化通知（UI 线程调度由订阅方负责）
+    /// 为什么不复用 StageChanged：下载过程中的进度变化不动阶段，只在下载开始与结束时各变一次
+    /// 只订阅阶段的话，用户看到的是 0% 停着不动，然后一下子跳到"将重启更新"
+    ///
+    /// Raised as the download progresses (dispatching to the UI thread is the subscriber's job)
+    /// Why not reuse StageChanged: progress changes during a download do not move the stage,
+    /// which changes only when the download starts and ends
+    /// A stage-only subscription leaves the user staring at a stuck 0%, then jumping straight to "restart to update"
+    /// </summary>
+    public static event Action? ProgressChanged;
+
+    /// <summary>
+    /// 进度通知的最小间隔（毫秒）
+    /// 下载器每读到一个数据块就上报一次，实测可达每秒数百次
+    /// 每次都投递到 UI 线程会让派发队列堆积，界面反而更卡
+    /// 按此间隔合并后进度条照样连续，UI 线程最多每秒被叫醒十次
+    ///
+    /// The minimum interval between progress notifications, in milliseconds
+    /// The downloader reports once per data block, measured in the hundreds per second
+    /// Dispatching every one of them piles up on the UI thread and makes the interface laggier
+    /// Coalescing at this interval keeps the bar smooth while waking the UI thread at most ten times a second
+    /// </summary>
+    private const int ProgressThrottleMs = 100;
+
+    // 上一次发出进度通知的时刻（Environment.TickCount64 的毫秒值）
+    // 用 Interlocked 读写：没有同步上下文时 Progress<T> 的回调会落在多个线程池线程上
+    //
+    // When the last progress notification went out, in Environment.TickCount64 milliseconds
+    // Read and written with Interlocked: without a synchronization context the Progress<T> callback
+    // lands on several thread-pool threads
+    private static long _lastProgressNotify;
+
     /// <summary>最近一次失败原因（成功时为 null）</summary>
 /// <remarks>The reason for the most recent failure (null on success)</remarks>
     public static string? LastError { get; private set; }
@@ -102,8 +135,44 @@ public static class UpdateService
         try
         {
             Progress = 0;
+            // 归零时刻戳：本轮下载的第一次上报要立刻反映到界面上，不能等满一个间隔
+            //
+            // The timestamp is reset so this download's first report reaches the UI at once
+            // rather than waiting out an interval
+            Interlocked.Exchange(ref _lastProgressNotify, 0);
             SetStage(UpdateStage.Downloading);
-            var progress = new Progress<DownloadProgress>(p => Progress = p.Fraction);
+
+            // 属性每次都更新，通知按 ProgressThrottleMs 合并
+            // 没有通知这一步时，进度条只会在阶段切换时重绘两次（0% 与 100%），下载途中的上报全部看不见
+            // 而没有节流时，上报的频次要远高于屏幕能呈现的帧数，多出来的只会堆在派发队列里
+            //
+            // The property updates every time; the notification is coalesced to ProgressThrottleMs
+            // Without a notification at all the bar would repaint only when the stage changes, twice (0% and 100%),
+            // and every report in between would never reach the screen
+            // Without the throttle the reports arrive far more often than the screen can present frames,
+            // and the surplus merely queues up on the dispatcher
+            var progress = new Progress<DownloadProgress>(p =>
+            {
+                Progress = p.Fraction;
+
+                // 下载收尾那一次必须放行
+                // 它之后紧跟着对整包做 SHA-256 校验（几百兆要花一会儿），此间阶段仍是"下载中"
+                // 若这次被节流掉，屏幕上会一直停在一个不足 100% 的数字上，看起来像卡住了
+                //
+                // The final report must go through
+                // It is followed by the SHA-256 check over the whole package (a while, at a few hundred MB),
+                // and the stage is still "downloading" during that
+                // Throttling this one away would leave a number below 100% on screen, looking stuck
+                var finished = p.Fraction >= 1.0;
+                var now = Environment.TickCount64;
+                var last = Interlocked.Read(ref _lastProgressNotify);
+                if (!finished && now - last < ProgressThrottleMs)
+                {
+                    return;
+                }
+                Interlocked.Exchange(ref _lastProgressNotify, now);
+                ProgressChanged?.Invoke();
+            });
 
             // 下载 -> **SHA-256 校验** -> 解压，整条链路由 Core 负责（因此可被完整测试，包括"校验和不匹配必须拒绝安装"这条安全关键分支）
             //

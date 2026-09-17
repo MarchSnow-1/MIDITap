@@ -7,6 +7,65 @@
     Closing="OnClosing"
     Style="{ThemeResource MiditapDialogStyle}">
 
+    <ContentDialog.Resources>
+        <!-- 表头按钮：极简模板，外观全部由本样式决定
+
+             为什么不用现成控件的默认外观：ToggleButton 的默认模板带内边距与勾选配色，
+             实测把表头压成一条窄带、箭头被挤出边界；Expander 则把展开动画写死在模板里，关不掉。
+             这里只留一个圆角矩形与内容呈现器，另加悬浮与按下的一点底色反馈。
+
+             The header button: a minimal template, its appearance decided entirely here
+
+             Why not the default look of an off-the-shelf control: a ToggleButton's template brings its own
+             padding and checked colours, which was measured to squash the header into a narrow strip and push
+             the chevron out of bounds; an Expander hard-codes its expand animation in the template with no switch.
+             What is left here is a rounded rectangle holding a content presenter, plus a slight background
+             change on hover and press. -->
+        <Style x:Key="NotesHeaderButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <!-- 上下 11 与左右 16：与本项目卡片的 16,12 同一量级
+                 不取 Expander 自带的 16,0,0,0，那个上下为 0，表头会被压成一条窄带（实测）
+                 Vertical 11 against horizontal 16 matches this project's cards at 16,12
+                 Not the Expander's own 16,0,0,0, which has no vertical padding and flattens the header into a strip -->
+            <Setter Property="Padding" Value="16,11" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                        </Border>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <!-- 正常态不设任何东西，透出卡片自身的底色
+                                     The normal state sets nothing, letting the card's own surface show through -->
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource MiditapSurfaceBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource MiditapSurfaceBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ContentDialog.Resources>
+
     <!-- 发现新版本的弹窗
 
          为什么自己画标题与叉号：ContentDialog 没有右上角关闭按钮，只有底部按钮
@@ -45,8 +104,17 @@
             </Grid>
 
             <!-- 版本对照：当前 / 最新
-                 Version pair: current and latest -->
-            <Grid ColumnSpacing="16" RowSpacing="4">
+                 标签与数值**同字号**：字号不同则行盒高度不同，而 VerticalAlignment=Center 居中的是行盒
+                 于是 12px 的标签与 13px 的数值在视觉上底部差半个像素，看起来不齐
+                 层级改由颜色承担（标签用次要色、数值用主色），这也是设置页卡片的既有做法
+
+                 Version pair: current and latest
+                 The label and the value share one FONT SIZE: different sizes give different line-box heights,
+                 and VerticalAlignment=Center centres the line box rather than the text
+                 A 12px label next to a 13px value therefore sits half a pixel off and reads as misaligned
+                 Hierarchy is carried by colour instead (label secondary, value primary),
+                 which is also what the settings cards do -->
+            <Grid ColumnSpacing="12" RowSpacing="2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -56,29 +124,121 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <TextBlock x:Name="CurrentLabel" Grid.Row="0" Grid.Column="0"
-                           Style="{ThemeResource MiditapCaptionStyle}" VerticalAlignment="Center" />
+                           Style="{ThemeResource MiditapBodyStyle}"
+                           Foreground="{ThemeResource MiditapTextTertiaryBrush}" />
                 <TextBlock x:Name="CurrentValue" Grid.Row="0" Grid.Column="1"
-                           Style="{ThemeResource MiditapBodyStyle}" VerticalAlignment="Center" />
+                           Style="{ThemeResource MiditapBodyStyle}" />
                 <TextBlock x:Name="LatestLabel" Grid.Row="1" Grid.Column="0"
-                           Style="{ThemeResource MiditapCaptionStyle}" VerticalAlignment="Center" />
+                           Style="{ThemeResource MiditapBodyStyle}"
+                           Foreground="{ThemeResource MiditapTextTertiaryBrush}" />
                 <TextBlock x:Name="LatestValue" Grid.Row="1" Grid.Column="1"
-                           Style="{ThemeResource MiditapBodyStyle}" VerticalAlignment="Center" />
+                           Style="{ThemeResource MiditapBodyStyle}" />
             </Grid>
 
-            <!-- 更新内容：默认折叠
-                 展开后给高度上限并允许滚动，否则一份长发布说明会把弹窗撑得超出屏幕
-                 没有发布说明时整个 Expander 收起（见 UpdateDialog.xaml.cs）
+            <!-- 更新内容：整块做成一张卡片，表头点了直接显隐内容，没有任何过渡动画
 
-                 What is new, collapsed by default
-                 Once expanded it gets a height cap and scrolls
-                 A long release note would otherwise push the dialog past the screen
-                 The whole Expander is collapsed when there are no notes (see UpdateDialog.xaml.cs) -->
-            <Expander AutomationProperties.AutomationId="UpdateNotesExpander" x:Name="NotesExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollMode="Disabled" Padding="0,4,8,4">
-                    <ct:MarkdownTextBlock x:Name="NotesMd" />
-                </ScrollViewer>
-            </Expander>
+                 为什么不用 Expander：它的展开/收起动画写在控件模板的 VisualState Storyboard 里，
+                 官方没有开关（文档只给了 IsExpanded 与 ExpandDirection，反射确认无动画相关属性），
+                 只能覆盖模板；而覆盖模板需要整体抄 6 KB 的 SDK 内部 XAML，
+                 实测仅漏掉一个命名空间前缀就让应用启动即崩（0xc000027b）。
+                 自绘之后结构与 SDK 版本无关，行为完全可预期。
+
+                 为什么表头也自绘：见上方 NotesHeaderButtonStyle 的说明。
+
+                 What is new: the whole block is one card, and its header shows or hides the content outright
+
+                 Why not an Expander: its expand/collapse animation lives in the control template's visual state
+                 storyboards, and there is no official switch (the documentation offers only IsExpanded and
+                 ExpandDirection; reflection confirms no animation-related property), so the template would have
+                 to be replaced wholesale. That means copying 6 KB of the SDK's internal XAML, and a single missing
+                 namespace prefix was measured to crash the app on launch (0xc000027b).
+                 Drawn here, the structure is independent of the SDK version and behaves predictably.
+
+                 Why the header is drawn too: see NotesHeaderButtonStyle above.
+
+                 配色说明：内容区里代码块、行内代码、引用、表格的背景一律透明
+                 该 markdown 控件的默认样式给每一类元素都配了自己的底色，与本节的主题字典无关；
+                 保留任何一层，弹窗里就会出现"框中框"，而用户看到的应当是同一块灰
+                 表格的描边是唯一保留的：没有它列与列的归属就看不出来，而它是线不是底色
+
+                 Colours: any background on a code block, inline run, quote or table inside the content is transparent
+                 The markdown control's default style gives each element type a tone of its own, unrelated to these theme dictionaries
+                 Keeping any of them turns the dialog into a stack of nested frames, when the user should see one grey surface
+                 The table border is the one thing kept: without it the columns cannot be told apart, and a line is not a background -->
+            <Border x:Name="NotesCard"
+                    CornerRadius="8"
+                    Background="{ThemeResource MiditapSurfaceAltBrush}"
+                    BorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                    BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Button x:Name="NotesToggle" Grid.Row="0"
+                            AutomationProperties.AutomationId="UpdateNotesToggle"
+                            Style="{StaticResource NotesHeaderButtonStyle}"
+                            Click="OnNotesToggled">
+                        <Grid>
+                            <!-- 右侧 28 留给箭头：长标题不会压到它上面
+                                 The 28 on the right is reserved for the chevron, so a long title never runs under it -->
+                            <TextBlock x:Name="NotesHeaderText"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,28,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{ThemeResource MiditapTextPrimaryBrush}" />
+                            <FontIcon x:Name="NotesChevron"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      FontSize="12"
+                                      Glyph="&#xE70D;"
+                                      Foreground="{ThemeResource MiditapTextSecondaryBrush}" />
+                        </Grid>
+                    </Button>
+
+                    <!-- 表头与内容之间一条分隔线：同在一张卡片里，没有它两块会连成一片
+                         A divider between header and content: they share one card, and without it the two run together -->
+                    <Border x:Name="NotesBodyHost" Grid.Row="1" Visibility="Collapsed"
+                            BorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                            BorderThickness="0,1,0,0">
+                        <ScrollViewer x:Name="NotesBody"
+                                      MaxHeight="260"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="16,12,10,12">
+                            <ct:MarkdownTextBlock x:Name="NotesMd"
+                                                  Background="Transparent"
+                                                  Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                  CodeBackground="Transparent"
+                                                  CodeBorderBrush="Transparent"
+                                                  CodeForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                  InlineCodeBackground="Transparent"
+                                                  InlineCodeBorderBrush="Transparent"
+                                                  InlineCodeForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                  QuoteBackground="Transparent"
+                                                  QuoteBorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                  QuoteForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                  TableBorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                  HorizontalRuleBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                  Header1Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                  Header2Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                  Header3Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                  LinkForeground="{ThemeResource MiditapAccentBrush}" />
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- 发布说明拿不到时的说明
+                 走网页回退路径时 GitHub 只给渲染后的 HTML，markdown 原文无从取得
+                 这里只说明原因，发布页入口统一放在下方按钮行里（那里无论能否取得 markdown 都在）
+
+                 Shown when the release notes cannot be obtained
+                 On the web fallback path GitHub serves rendered HTML only, so the markdown source is out of reach
+                 It explains why and nothing more: the way to the release page lives in the button row below,
+                 which is present whether or not the markdown could be fetched -->
+            <TextBlock x:Name="NotesUnavailableText" Style="{ThemeResource MiditapCaptionStyle}"
+                       TextWrapping="Wrap" Visibility="Collapsed" />
 
             <!-- 进度区：只在下载/解压阶段出现
                  Progress area: shown only while downloading or extracting -->
@@ -88,24 +248,46 @@
             </StackPanel>
 
             <!-- 操作按钮
-                 破坏性/放弃性的操作放在主操作左侧，与日志页工具栏、映射编辑弹窗同一条约定
+                 主操作在最左，放弃性的操作紧随其后，与日志页工具栏、映射编辑弹窗同一条约定
                  Action buttons
-                 The dismissive action sits to the LEFT of the primary one, matching the log toolbar
-                 and the mapping editor dialog -->
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <Button AutomationProperties.AutomationId="UpdateActionBtn" x:Name="ActionBtn" Click="OnActionClick" Style="{ThemeResource AccentButtonStyle}" />
-                <Button AutomationProperties.AutomationId="UpdateIgnoreBtn" x:Name="IgnoreBtn" Click="OnIgnoreClick" />
-            </StackPanel>
-
-            <!-- 不再提醒：刻意做成小字而不是按钮，与两个主操作区分开
+                 The primary action comes first and the dismissive one right after it,
+                 matching the log toolbar and the mapping editor dialog -->
+            <!-- 操作行：左侧是三个按钮，右侧是「不再提醒」小字，同处一行
+                 用 Grid 而不是水平 StackPanel：小字要贴住右边缘，而 StackPanel 只会把它紧挨着上一个按钮
+                 小字与按钮垂直居中对齐，读起来是同一行而不是掉在下面
+                 刻意不做成按钮：它与两个主操作不是一类东西
                  仅在启动时自动弹出的那个窗口里出现（由构造参数控制）
 
-                 Do not remind me again: deliberately small text rather than a button
-                 So it reads differently from the two main actions
+                 The action row: three buttons on the left, the "do not remind me" link on the right, in one row
+                 A Grid rather than a horizontal StackPanel: the link has to sit against the right edge,
+                 and a StackPanel would only place it next to the previous button
+                 The link is centred vertically so the row reads as one line rather than something dropped below
+                 Deliberately not a button: it is not the same kind of thing as the two main actions
                  It appears only in the dialog shown automatically at startup (controlled by a constructor argument) -->
-            <HyperlinkButton AutomationProperties.AutomationId="UpdateNeverRemindBtn" x:Name="NeverRemindBtn" Click="OnNeverRemindClick"
-                             Padding="0" MinHeight="0" FontSize="12"
-                             Foreground="{ThemeResource MiditapTextTertiaryBrush}" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                    <Button AutomationProperties.AutomationId="UpdateActionBtn" x:Name="ActionBtn" Click="OnActionClick" Style="{ThemeResource AccentButtonStyle}" />
+                    <Button AutomationProperties.AutomationId="UpdateIgnoreBtn" x:Name="IgnoreBtn" Click="OnIgnoreClick" />
+                    <!-- 「前往发布页」常驻：发布说明能不能在这里预览，与用户要不要去网页看是两件事
+                         预览成功时它同样有用 —— 完整说明（含图片与折叠块）只有网页上有
+
+                         The release page button is always present: whether the notes can be previewed here
+                         has nothing to do with whether the user wants to read them on the web
+                         Even a successful preview only shows part of them: images and collapsed blocks exist only there -->
+                    <Button AutomationProperties.AutomationId="UpdatePageBtn" x:Name="PageBtn" Click="OnOpenPageClick" />
+                </StackPanel>
+
+                <HyperlinkButton Grid.Column="1" x:Name="NeverRemindBtn" Click="OnNeverRemindClick"
+                                 AutomationProperties.AutomationId="UpdateNeverRemindBtn"
+                                 HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 Padding="0" MinHeight="0" FontSize="12"
+                                 Foreground="{ThemeResource MiditapTextTertiaryBrush}" />
+            </Grid>
         </StackPanel>
     </Grid>
 </ContentDialog>

@@ -18,21 +18,28 @@ using Semver;
 namespace MIDITap.Core.Update;
 
 /// <summary>
-/// 更新信息：新版本号、当前版本、Release 页面地址、可下载资产、发布说明
+/// 更新信息：新版本号、当前版本、Release 页面地址、可下载资产、发布说明、是否走了网页回退
 /// 资产可能为 null（尚未上传完成），此时调用方退回"打开 Releases 页面"
-/// 发布说明是**原始 markdown**，只有 API 路径拿得到，网页回退路径为 null
+/// 发布说明是**原始 markdown**，只有 API 路径拿得到
+/// 因此回退路径下 Notes 为 null 且 <paramref name="ViaFallback"/> 为 true
+/// 界面据此说明"预览不可用、可到发布页查看"，而不是留下一个空白的更新内容区
 ///
-/// Update information: the new version, current version, release page URL, the downloadable asset, and the release notes
+/// Update information: the new version, current version, release page URL, the downloadable asset,
+/// the release notes, and whether the web fallback was used
 /// The asset may be null, e.g. when it has not been uploaded yet
 /// The caller then falls back to opening the Releases page
-/// The notes are RAW markdown, available on the API path alone and null on the web fallback
+/// The notes are RAW markdown, available on the API path alone
+/// The fallback path therefore carries null notes and sets <paramref name="ViaFallback"/> to true
+/// The UI uses that to say "the preview is unavailable, view it on the release page"
+/// rather than leaving an empty notes area
 /// </summary>
 public sealed record UpdateInfo(
     string Latest,
     string Current,
     string Url,
     UpdateAsset? Asset = null,
-    string? Notes = null);
+    string? Notes = null,
+    bool ViaFallback = false);
 
 /// <summary>
 /// 检查失败的**可归因原因**。为什么要分类而不是只给一个 bool
@@ -440,7 +447,7 @@ public static class UpdateChecker
             // Notes therefore stays null, and the UI hides the "what's new" section accordingly
             // That is a limitation of the sources, not something the parsing missed
             return new UpdateCheckOutcome(
-                new UpdateInfo(tag, currentVersion, ReleasesUrl, asset), true);
+                new UpdateInfo(tag, currentVersion, ReleasesUrl, asset, ViaFallback: true), true);
         }
         catch (Exception err)
         {

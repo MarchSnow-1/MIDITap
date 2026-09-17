@@ -40,6 +40,11 @@ public sealed class UpdateFallbackOrderTests
         Assert.True(outcome.Ok);
         Assert.Equal("v9.9.9", outcome.Info!.Latest);
         Assert.Equal("MIDITap-v9.9.9-win-x64.zip", outcome.Info.Asset!.Name);
+        // 走 API 时不能被标成回退：那会让界面平白说一句"预览不可用"
+        //
+        // A successful API call must not be marked as the fallback,
+        // which would make the UI claim the preview is unavailable for no reason
+        Assert.False(outcome.Info.ViaFallback);
         // 关键断言：API 成功时**完全不访问**网页路径
         //
         // The key assertion: when the API succeeds the web path is **never touched at all**
@@ -130,11 +135,14 @@ public sealed class UpdateFallbackOrderTests
         Assert.Equal("v9.9.9", outcome.Info!.Latest);
         Assert.Equal("MIDITap-v9.9.9-win-x64.zip", outcome.Info.Asset!.Name);
         Assert.Contains("/releases/latest", page.Requests);
-        // 网页路径拿不到 markdown 原文，因此没有发布说明 —— 界面据此收起"更新内容"一节
+        // 网页路径拿不到 markdown 原文，因此没有发布说明
+        // 同时必须标出"这是回退路径"，界面才能说明预览为何不可用，而不是留一块空白
         //
         // The web path cannot obtain the markdown source, so there are no notes
-        // The UI hides the "what's new" section accordingly
+        // It must also be marked as the fallback path, so the UI can explain why the preview is missing
+        // rather than leaving an empty area
         Assert.Null(outcome.Info.Notes);
+        Assert.True(outcome.Info.ViaFallback);
     }
 
     [Fact]

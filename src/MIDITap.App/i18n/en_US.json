@@ -155,6 +155,8 @@
   "update.latest": "Latest version",
   "update.neverRemind": "Don't remind me about updates",
   "update.notes": "What's new",
+  "update.notes.unavailable": "The GitHub API request limit was reached, so the release notes cannot be previewed here. They are available on the release page.",
+  "update.notes.viewOnPage": "Open release page",
   "update.ready.hint": "MIDITap will close, apply the update and restart. Save your work first.",
   "update.restart": "Restart & update",
   "update.staged.incomplete": "The update downloaded last time was incomplete and has been discarded",
