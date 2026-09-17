@@ -46,7 +46,6 @@ public sealed partial class SettingsPage : Page
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         AppServices.I18n.LanguageChanged += RefreshTexts;
-        AppServices.Backend.UpdateAvailable += OnUpdateAvailable;
         BuildLanguageChoices();
         RefreshTexts();
         SyncThemeSelection();
@@ -62,19 +61,11 @@ public sealed partial class SettingsPage : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         RefreshTexts();
-        // 下载进度与阶段变化都来自后台线程，统一投递回 UI 线程
-        // Download progress and stage changes both arrive from the background thread
-        // So both are dispatched back to the UI thread
-        UpdateService.StageChanged += OnUpdateStageChanged;
     }
-
-    private void OnUpdateStageChanged() => AppServices.RunOnUi(RenderUpdatePanel);
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppServices.I18n.LanguageChanged -= RefreshTexts;
-        AppServices.Backend.UpdateAvailable -= OnUpdateAvailable;
-        UpdateService.StageChanged -= OnUpdateStageChanged;
     }
 
     // ------------------------------------------------------------------ theme
@@ -276,138 +267,6 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private void OnOpenConfigDir(object sender, RoutedEventArgs e) => AppServices.Backend.OpenConfigDir();
 
-    // ------------------------------------------------------------------ 更新流程 / Update flow
-
-    /// <summary>当前待安装的版本信息（没有可用更新时为 null）</summary>
-    private UpdateInfo? _pendingUpdate;
-
-    /// <summary>用户是否已点过「下载并安装」（用于决定按钮是"下载"还是"重启"）</summary>
-    private bool _staged;
-
-    /// <summary>把更新区同步到 UpdateService 的当前阶段</summary>
-    private void RenderUpdatePanel()
-    {
-        Func<string, string> t = AppServices.I18n.T;
-
-        // 开发构建里更新功能整个不存在（见 AppServices.UpdatesEnabled）：面板直接收起
-        // 「下载并安装」「重启并更新」不可能被点到 —— 服务层另有拒绝（UpdateService），这里是界面层
-        //
-        // The update feature simply does not exist in a development build (see AppServices.UpdatesEnabled)
-        // The panel is collapsed so "download and install" / "restart and update" can never be clicked
-        // The service layer refuses as well (UpdateService); this is the UI layer
-        if (!AppServices.UpdatesEnabled || _pendingUpdate is null)
-        {
-            UpdatePanel.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        UpdatePanel.Visibility = Visibility.Visible;
-        var stage = UpdateService.Stage;
-
-        switch (stage)
-        {
-            case UpdateStage.Downloading:
-                UpdateStatusText.Text = t("update.downloading");
-                UpdateProgressBar.Visibility = Visibility.Visible;
-                UpdateProgressBar.Value = UpdateService.Progress * 100;
-                UpdateActionBtn.IsEnabled = false;
-                UpdateDismissBtn.IsEnabled = false;
-                break;
-
-            case UpdateStage.Extracting:
-                UpdateStatusText.Text = t("update.extracting");
-                UpdateProgressBar.Visibility = Visibility.Visible;
-                UpdateProgressBar.Value = 100;
-                UpdateActionBtn.IsEnabled = false;
-                UpdateDismissBtn.IsEnabled = false;
-                break;
-
-            case UpdateStage.ReadyToRestart:
-                // 已就绪：文案里明确说明"会关闭并重启"，避免用户在没保存工作时被突然打断
-                // Already ready: the copy states plainly that the app will close and restart
-                // So the user is not interrupted abruptly with unsaved work
-                UpdateStatusText.Text = t("update.ready.hint");
-                UpdateProgressBar.Visibility = Visibility.Collapsed;
-                UpdateActionBtn.IsEnabled = true;
-                UpdateActionBtn.Content = t("update.restart");
-                UpdateDismissBtn.IsEnabled = true;
-                break;
-
-            case UpdateStage.Failed:
-                UpdateStatusText.Text = t("update.failed") + ": " + (UpdateService.LastError ?? string.Empty);
-                UpdateProgressBar.Visibility = Visibility.Collapsed;
-                UpdateActionBtn.IsEnabled = true;
-                UpdateActionBtn.Content = t("update.download");
-                UpdateDismissBtn.IsEnabled = true;
-                break;
-
-            default:
-                // 必须走 AppServices.I18n.T：本方法里的局部 t 只有单参重载
-                // 用它会编译失败（带插值的重载是 params 版本）
-                //
-                // Must call AppServices.I18n.T: the local t here is the single-argument overload
-                // The interpolating overload is the params one
-                UpdateStatusText.Text = AppServices.I18n.T("update.available",
-                    ("latest", _pendingUpdate.Latest), ("current", _pendingUpdate.Current));
-                UpdateProgressBar.Visibility = Visibility.Collapsed;
-                UpdateActionBtn.IsEnabled = true;
-                UpdateActionBtn.Content = t("update.download");
-                UpdateDismissBtn.IsEnabled = true;
-                break;
-        }
-    }
-
-    /// <summary>
-    /// 「下载并安装」或「重启并更新」，同一个按钮的两个阶段
-    ///
-    /// Download &amp; install, or restart &amp; update — two phases of one button
-    /// </summary>
-    private async void OnUpdateAction(object sender, RoutedEventArgs e)
-    {
-        if (_pendingUpdate is null)
-        {
-            return;
-        }
-
-        if (_staged && UpdateService.Stage == UpdateStage.ReadyToRestart)
-        {
-            // 交给辅助脚本并退出：脚本会等待本进程结束，所以必须真的关掉窗口
-            //
-            // Hand off to the helper and exit
-            // It waits for this process to end, so the window must actually close
-            if (UpdateService.LaunchApplyAndExit())
-            {
-                AppServices.I18n.LanguageChanged -= RefreshTexts;
-                App.MainWindowInstance?.Close();
-            }
-            else
-            {
-                RenderUpdatePanel();
-            }
-            return;
-        }
-
-        if (_pendingUpdate.Asset is null)
-        {
-            AppServices.Backend.OpenUrl(Core.Update.UpdateChecker.ReleasesUrl);
-            return;
-        }
-
-        RenderUpdatePanel();
-        var ok = await UpdateService.PrepareAsync(_pendingUpdate);
-        _staged = ok;
-        RenderUpdatePanel();
-    }
-
-    private void OnUpdateDismiss(object sender, RoutedEventArgs e)
-    {
-        UpdateService.CleanStaging();
-        UpdateService.Reset();
-        _staged = false;
-        _pendingUpdate = null;
-        RenderUpdatePanel();
-    }
-
     // ------------------------------------------------------------------ 更新与代理 / Updates and proxy
 
     /// <summary>把开关与代理框同步到存储值。程序化赋值会触发事件，用标志抑制</summary>
@@ -537,8 +396,12 @@ public sealed partial class SettingsPage : Page
             {
                 available = true;
                 ToastService.Clear();
-                SetPendingUpdate(outcome.Info);
-                ShowUpdateToast(outcome.Info.Latest, outcome.Info.Current);
+                // 手动检查的结果同样走更新弹窗，只是不带「不再提醒更新」
+                // 手动检查本就是用户主动要看结果，再问他要不要"别再提醒"是答非所问
+                //
+                // A manual check opens the same dialog, minus the "do not remind me again" link
+                // The user asked for this result, so asking whether to stop telling them misses the point
+                _ = UpdateNotifier.ShowAsync(outcome.Info, manual: true);
             }
             else if (!outcome.Ok)
             {
@@ -614,42 +477,6 @@ public sealed partial class SettingsPage : Page
         };
     }
 
-    private void OnUpdateAvailable(UpdateInfo info) => AppServices.RunOnUi(() =>
-    {
-        ToastService.Clear();
-        SetPendingUpdate(info);
-        ShowUpdateToast(info.Latest, info.Current);
-    });
-
-    private void ShowUpdateToast(string latest, string current)
-    {
-        // 有可用版本时展开更新区：浮窗提示"有新版本"，真正的操作在设置页里完成
-        // 浮窗只负责把人引过来（并且仍然可以点它直接去 Releases 页面）
-        //
-        // An available version expands the update panel
-        // The toast announces it and the real work happens here, while still offering the direct route to the Releases page
-        ToastService.Show(
-            AppServices.I18n.T("update.available", ("latest", latest), ("current", current)),
-            severity: Core.Notifications.ToastSeverity.Info,
-            actionLabel: AppServices.I18n.T("update.releasesBtn"),
-            action: () => AppServices.Backend.OpenUrl(Core.Update.UpdateChecker.ReleasesUrl));
-    }
-
-    /// <summary>记录待更新信息并刷新面板（由更新检查路径调用）</summary>
-    private void SetPendingUpdate(UpdateInfo info)
-    {
-        // 版本没变时保留已有的暂存状态（例如用户已下载完，界面重绘不该把它抹掉）
-        //
-        // Keeps the staged state when the version is unchanged
-        // So a repaint does not wipe out an already-completed download
-        if (_pendingUpdate?.Latest != info.Latest)
-        {
-            _staged = false;
-        }
-        _pendingUpdate = info;
-        RenderUpdatePanel();
-    }
-
     // ------------------------------------------------------------------ i18n
 
     public void RefreshTexts()
@@ -705,8 +532,6 @@ public sealed partial class SettingsPage : Page
         UpdateProxyHint();
         SyncLogToggle();
         SyncUpdateControls();
-        UpdateDismissBtn.Content = t("update.later");
-        RenderUpdatePanel();
         AboutCard.Header = t("settings.about");
         // 版本与协议合成卡片的一行说明：两者同属"关于本程序"的事实，各占一张卡会多出一块空白
         //

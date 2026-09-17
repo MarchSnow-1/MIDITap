@@ -52,6 +52,22 @@
          Those assemblies are dead weight
  -->
     <PackageReference Include="NAudio.Midi" Version="2.4.0" />
+    <!-- 更新弹窗里渲染发布说明（markdown）
+         为什么用成熟库：markdown 的边界情况多（嵌套列表、转义、行内代码、链接），自行实现容易在细节上出错
+         为什么是这个包：社区工具包里唯一的 WinUI 3 markdown 控件
+         Markdig.Wpf 与 MdXaml 都基于 WPF，本应用是 WinUI 3，用不了
+         它编入时针对 WindowsAppSDK 1.0.0，而本项目用 2.5.1，因此运行时兼容性需实机确认
+         许可证 MIT
+
+         Renders the release notes (markdown) inside the update dialog
+         Why a mature library: markdown has many edge cases (nested lists, escapes, inline code, links)
+         and a hand-written implementation tends to get the details wrong
+         Why this package: it is the only WinUI 3 markdown control in the community toolkit
+         Markdig.Wpf and MdXaml are WPF-based, and this app is WinUI 3
+         It was compiled against WindowsAppSDK 1.0.0 while this project uses 2.5.1
+         so runtime compatibility needs a real-machine check
+         Licence: MIT -->
+    <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.Markdown" Version="7.1.2" />
   </ItemGroup>
 
   <ItemGroup>

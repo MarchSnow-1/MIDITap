@@ -3,13 +3,13 @@
 // 调用方因此永远不需要 try/catch
 // 请求固定带 User-Agent / Accept 头，超时为 8 秒
 //
-// 除版本号外还发现发布资产，并支持可选的代理（用于"点击更新"）
+// 除版本号外还发现发布资产与发布说明，并支持可选的代理（用于"点击更新"）
 //
 // UpdateChecker.cs — queries the GitHub Releases API for the latest version
 // Every failure (network, non-200, parse error) is swallowed and reported as null
 // Callers therefore never need try/catch
 // Requests always carry the User-Agent / Accept headers and a fixed 8s timeout
-// Beyond the version number it discovers release assets and supports an optional proxy (for click-to-update)
+// Beyond the version number it discovers release assets and release notes, and supports an optional proxy (for click-to-update)
 
 using System.Collections.Concurrent;
 using System.Text.Json;
@@ -18,14 +18,21 @@ using Semver;
 namespace MIDITap.Core.Update;
 
 /// <summary>
-/// 更新信息：新版本号、当前版本、Release 页面地址，以及可下载资产（可能为 null）
-/// 例如资产尚未上传完成，此时调用方退回"打开 Releases 页面"
+/// 更新信息：新版本号、当前版本、Release 页面地址、可下载资产、发布说明
+/// 资产可能为 null（尚未上传完成），此时调用方退回"打开 Releases 页面"
+/// 发布说明是**原始 markdown**，只有 API 路径拿得到，网页回退路径为 null
 ///
-/// Update information: the new version, current version, release page URL, and the downloadable asset
-/// That asset may be null, e.g. when it has not been uploaded yet
-/// In that case the caller falls back to opening the Releases page
+/// Update information: the new version, current version, release page URL, the downloadable asset, and the release notes
+/// The asset may be null, e.g. when it has not been uploaded yet
+/// The caller then falls back to opening the Releases page
+/// The notes are RAW markdown, available on the API path alone and null on the web fallback
 /// </summary>
-public sealed record UpdateInfo(string Latest, string Current, string Url, UpdateAsset? Asset = null);
+public sealed record UpdateInfo(
+    string Latest,
+    string Current,
+    string Url,
+    UpdateAsset? Asset = null,
+    string? Notes = null);
 
 /// <summary>
 /// 检查失败的**可归因原因**。为什么要分类而不是只给一个 bool
@@ -289,6 +296,7 @@ public static class UpdateChecker
 
             var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             string? tagName;
+            string? notes = null;
             UpdateAsset? asset = null;
             using (var document = JsonDocument.Parse(body))
             {
@@ -296,6 +304,17 @@ public static class UpdateChecker
                 tagName = root.TryGetProperty("tag_name", out var tag)
                     && tag.ValueKind == JsonValueKind.String
                         ? tag.GetString()
+                        : null;
+                // 发布说明的 markdown 原文只在 API 的 body 字段里
+                // 网页路径拿不到它：release 页面与 atom 给出的都是 GitHub 渲染后的 HTML
+                // 因此这里缺失或类型不符时留 null，由界面按"没有发布说明"处理，而不是当成失败
+                //
+                // The raw markdown of the release notes lives in the API's body field alone
+                // The web path cannot obtain it, since the release page and the atom feed both carry GitHub's rendered HTML
+                // A missing or mistyped value therefore stays null, and the UI treats it as "no release notes" rather than a failure
+                notes = root.TryGetProperty("body", out var bodyElement)
+                    && bodyElement.ValueKind == JsonValueKind.String
+                        ? bodyElement.GetString()
                         : null;
                 asset = ParseAsset(root);
             }
@@ -320,7 +339,7 @@ public static class UpdateChecker
             if (latestVersion.ComparePrecedenceTo(current) > 0)
             {
                 return new UpdateCheckOutcome(
-                    new UpdateInfo(tagName!, currentVersion, ReleasesUrl, asset), true);
+                    new UpdateInfo(tagName!, currentVersion, ReleasesUrl, asset, notes), true);
             }
             return new UpdateCheckOutcome(null, true);
         }
@@ -411,6 +430,15 @@ public static class UpdateChecker
             //
             // Still null can only mean the release really has no Windows build
             // The caller then points the user at the Releases page
+            //
+            // 这条路径**不带发布说明**：expanded_assets 只给资源列表，release 页面与 atom 给的是渲染后的 HTML
+            // 三者都不含 markdown 原文，因此 Notes 留 null，界面据此收起"更新内容"一节
+            // 这是数据来源的限制，不是解析漏掉了什么
+            //
+            // This path carries NO release notes: expanded_assets yields the asset list only
+            // The release page and the atom feed yield rendered HTML, and none of the three carries the markdown source
+            // Notes therefore stays null, and the UI hides the "what's new" section accordingly
+            // That is a limitation of the sources, not something the parsing missed
             return new UpdateCheckOutcome(
                 new UpdateInfo(tag, currentVersion, ReleasesUrl, asset), true);
         }

@@ -164,13 +164,12 @@ public sealed class BackendService
 
     // 页面是按导航重建的（NavigationCacheMode=Disabled）
     // 而启动序列在页面创建之前就广播过一次
-    // 缓存 configLoaded / updateAvailable 负载，供页面 OnLoaded 时重放
+    // 缓存 configLoaded 负载，供页面 OnLoaded 时重放
     //
     // Pages are rebuilt by navigation (NavigationCacheMode=Disabled)
     // The startup sequence already broadcast once before the page was created
-    // The configLoaded and updateAvailable payloads are cached, so a page can replay them in OnLoaded
+    // The configLoaded payload is cached, so a page can replay it in OnLoaded
     private ConfigLoadedInfo? _lastConfigLoaded;
-    private UpdateInfo? _lastUpdate;
 
     // 设备热插拔轮询：定期枚举 WinMM 设备，变化时刷新列表并自动启停监听
     // （插入设备自动选择并启动；拔出自动停止/热切换），无需手动刷新或启动
@@ -1212,18 +1211,7 @@ public sealed class BackendService
             .ConfigureAwait(false);
         if (info is not null)
         {
-            _lastUpdate = info;
             UpdateAvailable?.Invoke(info);
-        }
-    }
-
-    /// <summary>向（重新创建的）页面重放最近一次 updateAvailable</summary>
-    /// <remarks>Replays the most recent updateAvailable to a (recreated) page</remarks>
-    public void ReemitUpdateAvailable()
-    {
-        if (_lastUpdate is not null)
-        {
-            UpdateAvailable?.Invoke(_lastUpdate);
         }
     }
 

@@ -136,10 +136,12 @@
   "update.apply.other": "The update did not finish (code {code})",
   "update.apply.rolledBack": "Rolled back to the version you had before",
   "update.apply.staging": "The package was incomplete, so nothing was changed",
-  "update.available": "Version {latest} is available (current {current})",
   "update.checksum.notProvided": "No checksum file published for this release; verified integrity was not possible",
+  "update.close": "Close",
+  "update.current": "Current version",
   "update.download": "Download & install",
   "update.downloading": "Downloading update...",
+  "update.downloading.pct": "Downloading update... {pct}%",
   "update.extracting": "Extracting...",
   "update.failed": "Update failed",
   "update.failed.http": "GitHub returned HTTP {status}",
@@ -148,8 +150,11 @@
   "update.failed.other": "Update check failed: {detail}",
   "update.failed.parse": "Could not read GitHub's response (unexpected format)",
   "update.failed.rateLimited": "GitHub request limit reached. Try again after {time}",
-  "update.later": "Later",
+  "update.ignoreVersion": "Ignore this version",
+  "update.latest": "Latest version",
+  "update.neverRemind": "Don't remind me about updates",
+  "update.notes": "What's new",
   "update.ready.hint": "MIDITap will close, apply the update and restart. Save your work first.",
-  "update.releasesBtn": "GitHub Releases",
-  "update.restart": "Restart & update"
+  "update.restart": "Restart & update",
+  "update.title": "Update available"
 }

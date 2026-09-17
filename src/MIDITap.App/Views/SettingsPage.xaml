@@ -112,25 +112,6 @@
                     </controls:SettingsCard.Action>
                 </controls:SettingsCard>
 
-                <!-- 更新进度面板：内容是多行的（状态 + 进度条 + 按钮）
-                     因此不用 SettingsCard 的「一行一控件」结构，而是同款外观的竖排卡片
-                     The update progress panel is multi-line (status, progress bar, buttons)
-                     So it does not use SettingsCard's "one row, one control" shape but a vertical card with the same look -->
-                <Border x:Name="UpdatePanel" CornerRadius="8" Padding="16,12" Visibility="Collapsed"
-                        Background="{ThemeResource MiditapSurfaceBrush}"
-                        BorderBrush="{ThemeResource MiditapSubtleBorderBrush}" BorderThickness="1">
-                    <StackPanel Spacing="10">
-                        <TextBlock x:Name="UpdateStatusText" Style="{ThemeResource MiditapBodyStyle}"
-                                   TextWrapping="Wrap" />
-                        <ProgressBar x:Name="UpdateProgressBar" Minimum="0" Maximum="100" Value="0"
-                                     Visibility="Collapsed" />
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button x:Name="UpdateActionBtn" Click="OnUpdateAction"
-                                    Style="{ThemeResource AccentButtonStyle}" />
-                            <Button x:Name="UpdateDismissBtn" Click="OnUpdateDismiss" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
 
                 <!-- ===== 代理 / Proxy ===== -->
                 <controls:SettingsCard x:Name="ProxyCard" Glyph="&#xE774;">

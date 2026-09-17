@@ -13,7 +13,6 @@ using MIDITap.App.Dialogs;
 using MIDITap.App.Helpers;
 using MIDITap.App.Services;
 using MIDITap.Core.Midi;
-using MIDITap.Core.Update;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -41,9 +40,6 @@ public sealed partial class HomePage : Page
     // Otherwise every refresh would lose the selection
     // A restart would also be triggered while listening
     private bool _suppressDeviceSelection;
-    // 用户已在浮窗上点过操作（或关闭）的更新版本：重放不再弹出
-    // The update version the user has already acted on (or closed) in the toast: a replay does not show it again
-    private string? _dismissedUpdateLatest;
 
     public HomePage()
     {
@@ -75,16 +71,15 @@ public sealed partial class HomePage : Page
         backend.HeldNotesRestored += OnHeldNotesRestored;
         backend.ConfigLoaded += OnConfigLoaded;
         backend.ConfigStateRestored += OnConfigLoaded; // 状态重放走同一处理器
-        backend.UpdateAvailable += OnUpdateAvailable;
         AppServices.I18n.LanguageChanged += RefreshTexts;
         NoteBoard.NoteClicked += OnNoteBoardNoteClicked;
 
-        // 页面按导航重建，会错过启动时的广播：重新拉取设备列表并重放最近一次 configLoaded / updateAvailable
+        // 页面按导航重建，会错过启动时的广播：重新拉取设备列表并重放最近一次 configLoaded
+        //
         // The page is rebuilt on navigation and misses the broadcasts made at startup
-        // Re-fetch the port list and replay the most recent configLoaded / updateAvailable
+        // Re-fetch the port list and replay the most recent configLoaded
         AppServices.Backend.ListPorts();
         AppServices.Backend.ReemitConfigLoaded();
-        AppServices.Backend.ReemitUpdateAvailable();
         // 仍被按住的音符同样要重放：站在别的页面时按下的那些，这一页没有任何来源知道
         //
         // The notes still held are replayed as well
@@ -117,7 +112,6 @@ public sealed partial class HomePage : Page
         backend.HeldNotesRestored -= OnHeldNotesRestored;
         backend.ConfigLoaded -= OnConfigLoaded;
         backend.ConfigStateRestored -= OnConfigLoaded;
-        backend.UpdateAvailable -= OnUpdateAvailable;
         AppServices.I18n.LanguageChanged -= RefreshTexts;
         _feed.Detach();
         NoteBoard.NoteClicked -= OnNoteBoardNoteClicked;
@@ -281,30 +275,6 @@ public sealed partial class HomePage : Page
         ConfigCountText.Visibility = Visibility.Visible;
     });
 
-    private void OnUpdateAvailable(UpdateInfo info) => AppServices.RunOnUi(() =>
-    {
-        // 用户已经忽略过同一版本时不再弹出
-        // It is not shown once the user has already dismissed the same version
-        if (info.Latest == _dismissedUpdateLatest)
-        {
-            return;
-        }
-
-        // 右上角浮窗，带操作按钮 => 不自动消失，等用户点"GitHub Releases"或关闭
-        // The toast in the top-right corner carries an action button
-        // So it does not disappear on its own and waits for the user to click "GitHub Releases" or close it
-        ToastService.Show(
-            AppServices.I18n.T("update.available", ("latest", info.Latest), ("current", info.Current)),
-            severity: Core.Notifications.ToastSeverity.Info,
-            actionLabel: AppServices.I18n.T("update.releasesBtn"),
-            action: () =>
-            {
-                // 用户点过操作后不再重复提示同一版本
-                // The same version is not prompted again once the user has acted on it
-                _dismissedUpdateLatest = info.Latest;
-                AppServices.Backend.OpenUrl(Core.Update.UpdateChecker.ReleasesUrl);
-            });
-    });
 
 
     // ------------------------------------------------------------------ interactions

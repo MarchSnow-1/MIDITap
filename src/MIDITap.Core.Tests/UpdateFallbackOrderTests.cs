@@ -47,6 +47,58 @@ public sealed class UpdateFallbackOrderTests
     }
 
     [Fact]
+    public async Task Carries_the_release_notes_from_the_api_verbatim()
+    {
+        // 发布说明的 markdown 原文只在 API 的 body 字段里
+        // 这里断言它被原样带出来：界面把它直接交给 markdown 控件，中途不做任何改写
+        // JSON 里的 \n 是换行转义，解析后应还原成实际的换行
+        //
+        // The raw markdown of the release notes lives in the API's body field alone
+        // This asserts it is carried through verbatim, since the UI hands it straight to the markdown control
+        // The \n in the JSON is the newline escape, so it must come back as actual newlines
+        const string markdown = "## Faster\n\n- one\n- two\n";
+        const string apiJson = """
+            {"tag_name":"v9.9.9","body":"## Faster\n\n- one\n- two\n","assets":[]}
+            """;
+
+        using var api = new MiniHttpServer(_ => (200, null, apiJson));
+        using var page = new MiniHttpServer(_ => (500, null, "should not be reached"));
+
+        var endpoints = new UpdateEndpoints(
+            api.BaseUrl + "/latest", page.BaseUrl + "/releases/latest", page.BaseUrl + "/releases");
+
+        var outcome = await UpdateChecker.CheckWithReasonAsync("1.0.0", NoProxy, endpoints);
+
+        Assert.True(outcome.Ok);
+        Assert.Equal(markdown, outcome.Info!.Notes);
+    }
+
+    [Theory]
+    // body 缺失、为空串、或类型不是字符串 —— 三种都不算检查失败
+    //
+    // A missing, empty or non-string body must not count as a failed check
+    [InlineData("""{"tag_name":"v9.9.9","assets":[]}""")]
+    [InlineData("""{"tag_name":"v9.9.9","body":"","assets":[]}""")]
+    [InlineData("""{"tag_name":"v9.9.9","body":123,"assets":[]}""")]
+    public async Task Reports_no_notes_when_the_api_does_not_supply_them(string apiJson)
+    {
+        using var api = new MiniHttpServer(_ => (200, null, apiJson));
+        using var page = new MiniHttpServer(_ => (500, null, "should not be reached"));
+
+        var endpoints = new UpdateEndpoints(
+            api.BaseUrl + "/latest", page.BaseUrl + "/releases/latest", page.BaseUrl + "/releases");
+
+        var outcome = await UpdateChecker.CheckWithReasonAsync("1.0.0", NoProxy, endpoints);
+
+        // 版本照常识别出来：没有发布说明只是少一段文字，不影响能不能更新
+        //
+        // The version is still recognised: missing notes only mean less text, not a broken update
+        Assert.True(outcome.Ok);
+        Assert.Equal("v9.9.9", outcome.Info!.Latest);
+        Assert.True(string.IsNullOrEmpty(outcome.Info.Notes));
+    }
+
+    [Fact]
     public async Task Falls_back_to_the_web_page_when_the_api_is_rate_limited()
     {
         // 实测中遇到的情形：API 返回 403（匿名配额用尽），并有 x-ratelimit-reset
@@ -78,6 +130,11 @@ public sealed class UpdateFallbackOrderTests
         Assert.Equal("v9.9.9", outcome.Info!.Latest);
         Assert.Equal("MIDITap-v9.9.9-win-x64.zip", outcome.Info.Asset!.Name);
         Assert.Contains("/releases/latest", page.Requests);
+        // 网页路径拿不到 markdown 原文，因此没有发布说明 —— 界面据此收起"更新内容"一节
+        //
+        // The web path cannot obtain the markdown source, so there are no notes
+        // The UI hides the "what's new" section accordingly
+        Assert.Null(outcome.Info.Notes);
     }
 
     [Fact]

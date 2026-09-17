@@ -234,11 +234,24 @@ public static class AppStorage
     /// </summary>
     public const string UpdateProxyStorageKey = "miditap_update_proxy";
 
+    /// <summary>
+    /// 用户选了「忽略此版本」的版本号存储键
+    /// 只影响**自动**弹出的更新窗口：从设置页手动检查仍然会显示
+    ///
+    /// Storage key for the version the user chose to ignore
+    /// It affects only the dialog raised automatically; a manual check on the settings page still shows it
+    /// </summary>
+    public const string IgnoredUpdateStorageKey = "miditap_ignored_update";
+
     private static string AutoCheckPath(string baseDir)
         => AppPaths.StorageFile(baseDir, AutoCheckUpdatesStorageKey);
 
     private static string UpdateProxyPath(string baseDir)
         => AppPaths.StorageFile(baseDir, UpdateProxyStorageKey);
+
+    private static string IgnoredUpdatePath(string baseDir)
+        => AppPaths.StorageFile(baseDir, IgnoredUpdateStorageKey);
+
 
     /// <summary>
     /// 是否在启动时自动检查更新
@@ -281,6 +294,41 @@ public static class AppStorage
             return false;
         }
     }
+
+    /// <summary>
+    /// 读取用户已忽略的版本号，没有记录时返回空串
+    /// 读失败一律按"没有记录"处理：一个坏文件不该让更新提示从此消失
+    ///
+    /// Reads the version the user ignored; empty when there is no record
+    /// A read failure counts as "no record": one bad file must not silence the update prompt for good
+    /// </summary>
+    public static string GetIgnoredUpdate(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(IgnoredUpdatePath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>记录用户忽略的版本号，空串表示清除记录 / Records the ignored version; an empty string clears it</summary>
+    public static bool SaveIgnoredUpdate(string baseDir, string version)
+    {
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(IgnoredUpdatePath(baseDir), version.Trim());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
 
     /// <summary>
     /// 读取更新代理地址

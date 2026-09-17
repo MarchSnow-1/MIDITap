@@ -136,10 +136,12 @@
   "update.apply.other": "更新未完成（代码 {code}）",
   "update.apply.rolledBack": "已回滚到更新前的版本",
   "update.apply.staging": "安装包不完整，未做任何改动",
-  "update.available": "发现新版本 {latest} (当前版本 {current})",
   "update.checksum.notProvided": "该版本未发布校验和文件，无法验证完整性",
+  "update.close": "关闭",
+  "update.current": "当前版本",
   "update.download": "下载并安装",
   "update.downloading": "正在下载更新...",
+  "update.downloading.pct": "正在下载更新... {pct}%",
   "update.extracting": "正在解压...",
   "update.failed": "更新失败",
   "update.failed.http": "GitHub 返回 HTTP {status}",
@@ -148,8 +150,11 @@
   "update.failed.other": "更新检查失败：{detail}",
   "update.failed.parse": "无法解析 GitHub 的返回内容（格式异常）",
   "update.failed.rateLimited": "GitHub 请求次数已达上限，请在 {time} 之后重试",
-  "update.later": "稍后",
+  "update.ignoreVersion": "忽略此版本",
+  "update.latest": "最新版本",
+  "update.neverRemind": "不再提醒更新",
+  "update.notes": "更新内容",
   "update.ready.hint": "MIDITap 将关闭、应用更新并重新启动。请先保存工作。",
-  "update.releasesBtn": "GitHub Releases",
-  "update.restart": "重启并更新"
+  "update.restart": "重启并更新",
+  "update.title": "发现新版本"
 }

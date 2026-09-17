@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="MIDITap.App.Dialogs.UpdateDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ct="using:CommunityToolkit.WinUI.UI.Controls"
+    Closing="OnClosing"
+    Style="{ThemeResource MiditapDialogStyle}">
+
+    <!-- 发现新版本的弹窗
+
+         为什么自己画标题与叉号：ContentDialog 没有右上角关闭按钮，只有底部按钮
+         而本弹窗要求"只能通过叉号关闭"，因此叉号必须由本文件提供
+
+         为什么不做成"只按 ESC 关不掉就够了"：点深灰遮罩本来就关不掉（ContentDialog 无此行为）
+         但 ESC 与系统返回键会关，那两条走 OnClosing 里的拦截
+
+         Update dialog
+
+         Why the title and the cross are hand-drawn: ContentDialog has no top-right close button
+         It ships bottom buttons only, and this dialog must close through the cross alone
+         The cross therefore has to come from this file
+
+         Why ESC is not simply ignored: clicking the scrim does not close it to begin with
+         ContentDialog has no such behaviour, but ESC and the system back button do close it
+         Those two are intercepted in OnClosing -->
+
+    <Grid MinWidth="460" Margin="0,8,0,0">
+        <StackPanel Spacing="14">
+
+            <!-- 标题行：标题 + 右上角叉号
+                 Title row: the heading plus the top-right cross -->
+            <Grid>
+                <TextBlock x:Name="TitleText" Style="{ThemeResource MiditapSubtitleStyle}"
+                           VerticalAlignment="Center" Margin="0,0,40,0" TextWrapping="Wrap" />
+                <!-- AutomationProperties.Name 由代码写成当前语言：叉号只有图标，
+                     没有可读名称时屏幕阅读器与自动化测试都无法定位它 -->
+                <Button x:Name="CloseBtn" Click="OnCloseClick"
+                        AutomationProperties.AutomationId="UpdateCloseBtn"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Background="Transparent" BorderThickness="0" Padding="6"
+                        Width="32" Height="32">
+                    <FontIcon Glyph="&#xE711;" FontSize="13" />
+                </Button>
+            </Grid>
+
+            <!-- 版本对照：当前 / 最新
+                 Version pair: current and latest -->
+            <Grid ColumnSpacing="16" RowSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="CurrentLabel" Grid.Row="0" Grid.Column="0"
+                           Style="{ThemeResource MiditapCaptionStyle}" VerticalAlignment="Center" />
+                <TextBlock x:Name="CurrentValue" Grid.Row="0" Grid.Column="1"
+                           Style="{ThemeResource MiditapBodyStyle}" VerticalAlignment="Center" />
+                <TextBlock x:Name="LatestLabel" Grid.Row="1" Grid.Column="0"
+                           Style="{ThemeResource MiditapCaptionStyle}" VerticalAlignment="Center" />
+                <TextBlock x:Name="LatestValue" Grid.Row="1" Grid.Column="1"
+                           Style="{ThemeResource MiditapBodyStyle}" VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- 更新内容：默认折叠
+                 展开后给高度上限并允许滚动，否则一份长发布说明会把弹窗撑得超出屏幕
+                 没有发布说明时整个 Expander 收起（见 UpdateDialog.xaml.cs）
+
+                 What is new, collapsed by default
+                 Once expanded it gets a height cap and scrolls
+                 A long release note would otherwise push the dialog past the screen
+                 The whole Expander is collapsed when there are no notes (see UpdateDialog.xaml.cs) -->
+            <Expander AutomationProperties.AutomationId="UpdateNotesExpander" x:Name="NotesExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollMode="Disabled" Padding="0,4,8,4">
+                    <ct:MarkdownTextBlock x:Name="NotesMd" />
+                </ScrollViewer>
+            </Expander>
+
+            <!-- 进度区：只在下载/解压阶段出现
+                 Progress area: shown only while downloading or extracting -->
+            <StackPanel x:Name="ProgressArea" Spacing="6" Visibility="Collapsed">
+                <TextBlock x:Name="StatusText" Style="{ThemeResource MiditapBodyStyle}" TextWrapping="Wrap" />
+                <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Value="0" />
+            </StackPanel>
+
+            <!-- 操作按钮
+                 破坏性/放弃性的操作放在主操作左侧，与日志页工具栏、映射编辑弹窗同一条约定
+                 Action buttons
+                 The dismissive action sits to the LEFT of the primary one, matching the log toolbar
+                 and the mapping editor dialog -->
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button AutomationProperties.AutomationId="UpdateActionBtn" x:Name="ActionBtn" Click="OnActionClick" Style="{ThemeResource AccentButtonStyle}" />
+                <Button AutomationProperties.AutomationId="UpdateIgnoreBtn" x:Name="IgnoreBtn" Click="OnIgnoreClick" />
+            </StackPanel>
+
+            <!-- 不再提醒：刻意做成小字而不是按钮，与两个主操作区分开
+                 仅在启动时自动弹出的那个窗口里出现（由构造参数控制）
+
+                 Do not remind me again: deliberately small text rather than a button
+                 So it reads differently from the two main actions
+                 It appears only in the dialog shown automatically at startup (controlled by a constructor argument) -->
+            <HyperlinkButton AutomationProperties.AutomationId="UpdateNeverRemindBtn" x:Name="NeverRemindBtn" Click="OnNeverRemindClick"
+                             Padding="0" MinHeight="0" FontSize="12"
+                             Foreground="{ThemeResource MiditapTextTertiaryBrush}" />
+        </StackPanel>
+    </Grid>
+</ContentDialog>
