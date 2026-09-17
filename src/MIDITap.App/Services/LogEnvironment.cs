@@ -54,7 +54,8 @@ public static class LogEnvironment
            $"{RuntimeInformation.ProcessArchitecture} | lang={AppServices.I18n.Current} | " +
            $"theme={ThemeService.Mode}/{ThemeService.EffectiveTheme} | " +
            $"highContrast={ThemeService.IsHighContrast} | logToFile={LogPersistence.Enabled} | " +
-           $"memAvailable={AvailableMemoryText()} | diskFree={FreeSpaceText()}";
+           $"memAvailable={AvailableMemoryText()} | memLimit={ProcessLimitText()} | " +
+           $"diskFree={FreeSpaceText()}";
 
     /// <summary>可用的物理内存，取不到时返回 unknown
     /// 内存不足是按键注入偶发丢失这类反馈的一个常见解释，它与版本和系统都无关，因此单独占一项
@@ -65,6 +66,17 @@ public static class LogEnvironment
     /// </summary>
     private static string AvailableMemoryText()
         => NativeMemory.TryAvailableBytes(out var bytes) ? Format(bytes) : Unknown;
+
+    /// <summary>本进程可用的内存上限，取不到时返回 unknown
+    /// 与上一项合起来看才完整：可用量说机器还剩多少，上限说这个进程最多能用多少
+    /// 两者接近时说明受限的是系统，上限远小于可用量则说明进程被配额卡住
+    ///
+    /// The memory limit available to this process, or unknown when it cannot be read
+    /// It pairs with the entry above: the available figure says what is left on the machine, and the limit says what this process may use at most
+    /// When the two are close the machine is the constraint, while a limit far below the available figure means a quota is capping the process
+    /// </summary>
+    private static string ProcessLimitText()
+        => NativeMemory.TryProcessLimitBytes(out var bytes) ? Format(bytes) : Unknown;
 
     /// <summary>应用所在分区的可用空间，取不到时返回 unknown
     /// 自更新要先下载再解压，两者都要空间，因此分区满了是更新失败的一个直接原因
