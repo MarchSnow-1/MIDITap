@@ -56,7 +56,7 @@ If you encounter any issues, please feel free to submit feedback via [Issues](..
 
 3. Open MIDITap and start using it
 
-- [Preset configurations](/preset-configs) are provided here for reference or direct use
+- [Preset configurations](/preset-configs/README.md) are provided here for reference or direct use
 
 ## 📚 UI Guide
 

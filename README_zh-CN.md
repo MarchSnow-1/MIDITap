@@ -56,7 +56,7 @@ MIDITap 是一个调用 Windows 原生 API 的低延迟 MIDI → 键盘映射工
 
 3. 打开 MIDITap 程序，即可开始使用
 
-- [此处](/preset-configs) 提供了一些预设供参考或使用，可下载查看
+- [此处](/preset-configs/README_zh-CN.md) 提供了一些预设供参考或使用，可下载查看
 
 ## 📚 UI 介绍
 
