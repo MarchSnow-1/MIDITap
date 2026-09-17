@@ -2,7 +2,7 @@
   "name": "miditap",
   "version": "1.7.1",
   "scripts": {
-    "version": "auto-changelog -p && node scripts/sync-version.js && git add CHANGELOG.md && git add -u -- src"
+    "version": "auto-changelog -p --commit-limit false --append-git-tag \"--merged HEAD\" && node scripts/sync-version.js && git add CHANGELOG.md && git add -u -- src"
   },
   "keywords": [],
   "author": "MarchSnow",
