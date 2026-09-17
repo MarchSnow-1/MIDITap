@@ -221,7 +221,17 @@ function Assert-Key([bool]$down, [string]$name, [string]$what) {
 # 用脚本自己的配置名，而不是默认配置名：后者跟随界面语言，脚本无从预知
 #
 # A config name of the script's own rather than the default one, which follows the UI language and cannot be predicted here
-$configPath = Join-Path $AppDir "config/e2e-config.json"
+#
+# 取**绝对路径**：last_config 里存相对路径时，应用会把它拼到 config/ 之下
+# （ResolveConfigPath 对非绝对路径就是这么做的），于是指向一个不存在的文件
+# 后果很隐蔽：last_config 解析成 null，应用退回去加载默认配置（那份是空的），
+# 测试随后以一堆"应按下却未绑定"的形式失败 —— 看起来像应用坏了
+#
+# An ABSOLUTE path is taken: with a relative one in last_config, the app joins it onto config/
+# (that is what ResolveConfigPath does with a non-rooted path) and points at a file that is not there
+# The failure is subtle: last_config resolves to null, the app falls back to the default config (an empty one),
+# and the test then fails as a wall of "expected a mapping but found none" -- which looks like a broken app
+$configPath = [System.IO.Path]::GetFullPath((Join-Path $AppDir "config/e2e-config.json"))
 $lastConfigPath = Join-Path $AppDir ".storage/last_config"
 $backup = $null
 if (Test-Path $configPath) { $backup = Get-Content $configPath -Raw }
@@ -281,11 +291,20 @@ try {
         $c = New-Object System.Windows.Automation.PropertyCondition($AE::AutomationIdProperty, $id)
         return $win.FindFirst($TS::Descendants, $c)
     }
+    # 日志在界面上是**一整块文本**（LogText），不是一个逐行的列表
+    # 早先这里读的是 LogList —— LogPage.xaml 里并没有这个元素
+    # 于是本函数永远返回空数组，脚本从写下起就没有真正跑通过（等待就绪必然超时）
+    #
+    # The log is ONE block of text on screen (LogText), not a row-by-row list
+    # This used to read LogList, an element LogPage.xaml does not contain
+    # The function therefore always returned an empty array, and the script never actually ran
+    # Waiting for readiness was bound to time out
     function Read-LogRows {
-        $list = Find-ById 'LogList'
-        if (-not $list) { return @() }
-        $cond = New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
-        return @($list.FindAll($TS::Descendants, $cond) | ForEach-Object { $_.Current.Name })
+        $tb = Find-ById 'LogText'
+        if (-not $tb) { return @() }
+        $text = $tb.Current.Name
+        if (-not $text) { return @() }
+        return @($text -split "`r?`n" | Where-Object { $_.Trim() })
     }
 
     function Select-NavItem([string]$id) {
