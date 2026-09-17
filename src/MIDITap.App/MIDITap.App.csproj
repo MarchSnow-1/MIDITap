@@ -18,14 +18,6 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <!-- 语言版本显式钉在 14，不用 latest：latest 会随机器上最高的 SDK 浮动，
-         同一份源码在不同机器上可能编译出不同结果
-
-         The language version is pinned to 14 rather than latest: latest floats with the highest
-         SDK on the machine, so the same source may compile to different results on different machines -->
-    <LangVersion>14</LangVersion>
     <!-- 版本号与根目录 package.json 保持一致：npm version 改的是 package.json，这里不会自动跟着变
          发布时 release.yml 会用标签版本注入 -p:Version 覆盖它
 

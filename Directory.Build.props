@@ -1,0 +1,19 @@
+<Project>
+
+  <!-- 四个子项目共用的编译设置集中在这里，同一项不再在四处各写一遍
+       语言版本集中在此尤其重要：它一旦写成 latest，就会随机器上最高的 SDK 浮动，
+       同一份源码在不同机器上可能编译出不同结果
+       TargetFramework 不放在这里，因为各项目并不相同（App 需要指定 Windows SDK 版本）
+
+       Compiler settings shared by all four projects live here, so one value is not written out in four places
+       Keeping the language version here matters especially: written as latest it would float with the highest
+       SDK on the machine, so the same source may compile to different results on different machines
+       TargetFramework is not here because the projects differ (App pins a Windows SDK version) -->
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>14</LangVersion>
+  </PropertyGroup>
+
+</Project>

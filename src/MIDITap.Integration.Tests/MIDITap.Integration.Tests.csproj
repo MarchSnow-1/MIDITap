@@ -2,14 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <!-- 语言版本显式钉在 14，不用 latest：latest 会随机器上最高的 SDK 浮动，
-         同一份源码在不同机器上可能编译出不同结果
-
-         The language version is pinned to 14 rather than latest: latest floats with the highest
-         SDK on the machine, so the same source may compile to different results on different machines -->
-    <LangVersion>14</LangVersion>
     <IsPackable>false</IsPackable>
     <!-- 集成测试需要真实 MIDI 端口，因此**不在 CI 上失败**
          端口不存在时用例自动跳过（见 MidiFactAttribute）
