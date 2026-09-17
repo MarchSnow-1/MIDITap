@@ -82,6 +82,12 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      # 语言文件的键集与排序：发布前必须成立，缺键会让某种语言的界面上出现原始键名
+      #
+      # The language files' key set and order must hold before a release; a missing key shows the raw key name in that language
+      - name: Validate language files
+        run: node scripts/sort-i18n.js --check
+
       # --------------------------------------------------- 测试 / Tests
 
       # 发布前重跑测试，因为标签可能打在未验证的提交上，而产物会进入用户的自动更新通道

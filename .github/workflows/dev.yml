@@ -26,6 +26,14 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # 语言文件的排序检查用 Node 脚本完成（scripts/sort-i18n.js）
+      #
+      # The language-file ordering check runs as a Node script (scripts/sort-i18n.js)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       # ------------------------------------------------------- 测试 / Tests
 
       - name: Core tests (pure logic, no hardware)
@@ -50,6 +58,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Integration test run failed" }
           if ($output -match "(失败|Failed):\s*[1-9]") { throw "Integration tests reported failures" }
           Write-Host "MIDI loopback port unavailable on this runner: integration cases skipped as designed."
+
+      # 语言文件是界面文案的唯一来源，两份文件的键必须一一对应
+      # 缺键不会报错，只会让该语言的界面上出现原始键名，因此这里必须挡住
+      # 同时要求按键名排序：顺序一致才能逐行对照两份文件，新键也不会挤在分组中间
+      #
+      # The language files are the only source of UI copy, and the two must carry matching keys
+      # A missing key raises no error; it merely shows the raw key name in that language, so it has to be caught here
+      # Key order is required as well: the same order lets the two files be compared line by line, and a new key cannot land in the middle of a group
+      - name: Validate language files
+        run: node scripts/sort-i18n.js --check
 
       # E2E 脚本无法在 CI 上运行（需要回环端口、交互式桌面与 GetAsyncKeyState）
       # 但语法可以在 CI 上验证
