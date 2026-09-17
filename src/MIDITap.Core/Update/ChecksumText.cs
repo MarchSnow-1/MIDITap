@@ -46,29 +46,45 @@ public static class ChecksumText
     }
 
     /// <summary>
-    /// 从网页 HTML 中取摘要。取**第一个** 64 位十六进制串
-    /// 实测该片段里只包含本资产的摘要（虽出现多次，但值相同），因此第一个即可
+    /// 从网页 HTML 中取摘要。取整段文本里**第一个** 64 位十六进制串
+    /// 片段里含多个资产的摘要时，这样取到的是排在最前的那个，未必是调用方要的那个
+    /// 因此需要指定资产时改用带区间的重载
     ///
-    /// Extracts the digest from the web HTML, i.e. the first 64-hex sequence
-    /// Measured, the fragment contains only this asset's digest (repeated with the same value)
-    /// The first one therefore suffices
+    /// Extracts the digest from the web HTML, i.e. the first 64-hex sequence in the whole text
+    /// When the fragment carries digests for several assets this returns whichever comes first
+    /// That is not necessarily the one the caller wants
+    /// Use the range-bounded overload when a specific asset's digest is needed
     /// </summary>
     public static string? FromHtml(string? html)
+        => html is null ? null : FromHtml(html, 0, html.Length);
+
+    /// <summary>
+    /// 在 [startIndex, endIndex) 区间内取**第一个** 64 位十六进制摘要
+    /// expanded_assets 的片段里每个资产各带一份摘要，且排在各自链接之后
+    /// 因此把区间划在"本链接起、下一个链接止"，取到的就是该资产自己的摘要
+    /// 越界或区间为空时返回 null，由调用方按"未提供校验和"处理
+    ///
+    /// Extracts the first 64-hex digest inside [startIndex, endIndex)
+    /// The expanded_assets fragment carries one digest per asset, placed after that asset's own link
+    /// Bounding the range from one link to the next therefore yields that asset's own digest
+    /// An out-of-range or empty range returns null, which the caller treats as "no checksum provided"
+    /// </summary>
+    public static string? FromHtml(string? html, int startIndex, int endIndex)
     {
-        if (string.IsNullOrWhiteSpace(html))
+        if (string.IsNullOrWhiteSpace(html)
+            || startIndex < 0 || endIndex > html.Length || startIndex >= endIndex)
         {
             return null;
         }
+        var window = html[startIndex..endIndex];
         foreach (System.Text.RegularExpressions.Match match in
                  System.Text.RegularExpressions.Regex.Matches(
-                     html, "\\b[0-9a-fA-F]{" + HexLength + "}\\b"))
+                     window, "\\b[0-9a-fA-F]{" + HexLength + "}\\b"))
         {
             var value = match.Value;
-            // 排除明显不是摘要的其它 64 位十六进制串难度很高，但该片段中实测只有摘要
-            // 因此这里只做格式确认
+            // 排除明显不是摘要的其它 64 位十六进制串难度很高，因此这里只做格式确认
             //
-            // Ruling out other 64-hex runs that are clearly not the digest is hard
-            // In practice this fragment contains only the digest, so only the format is confirmed here
+            // Ruling out other 64-hex runs that are clearly not the digest is hard, so only the format is confirmed
             if (IsSha256Hex(value))
             {
                 return value.ToLowerInvariant();

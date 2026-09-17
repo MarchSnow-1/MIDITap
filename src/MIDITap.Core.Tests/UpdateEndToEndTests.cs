@@ -510,6 +510,38 @@ public sealed class UpdateEndToEndTests : IDisposable
         Assert.Null(ChecksumText.FromHtml(html));
     }
 
+    [Fact]
+    public void A_bounded_range_picks_the_digest_inside_it()
+    {
+        // 片段里每个资产各带一份摘要，靠区间把"哪个摘要属于谁"定下来
+        // 区间外即便有摘要也不算数，否则后面的资产会拿到前面资产的摘要
+        //
+        // Each asset brings its own digest, and the range decides which digest belongs to whom
+        // A digest outside the range does not count, otherwise a later asset would take an earlier asset's digest
+        const string first = "1111111111111111111111111111111111111111111111111111111111111111";
+        const string second = "2222222222222222222222222222222222222222222222222222222222222222";
+        var html = "head " + first + " middle " + second;
+        var split = html.IndexOf("middle", StringComparison.Ordinal);
+
+        Assert.Equal(first, ChecksumText.FromHtml(html, 0, split));
+        Assert.Equal(second, ChecksumText.FromHtml(html, split, html.Length));
+    }
+
+    [Theory]
+    [InlineData(-1, 10)]      // 起点越界 / start out of range
+    [InlineData(0, 100000)]   // 终点越界 / end past the string
+    [InlineData(5, 5)]        // 空区间 / empty range
+    [InlineData(8, 3)]        // 起止颠倒 / reversed
+    public void An_unusable_window_yields_null(int start, int end)
+    {
+        // 区间不成立时返回 null 而不是抛异常：这里处理的是远端内容，任何取值都可能出现
+        // 下游按"未提供校验和"处理（ChecksumVerdict.NotProvided），而不是让更新流程崩掉
+        //
+        // An unusable range returns null rather than throwing: this handles remote content, where any value can turn up
+        // Downstream treats it as "no checksum provided" (ChecksumVerdict.NotProvided) instead of failing the update flow
+        Assert.Null(ChecksumText.FromHtml("0123456789", start, end));
+    }
+
     // ================================================================ 两条路径给出同一摘要
     //
     // Both paths yield the same digest

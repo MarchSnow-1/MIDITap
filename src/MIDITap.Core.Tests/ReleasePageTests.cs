@@ -173,6 +173,95 @@ public sealed class ReleasePageParserAssetTests
         Assert.Equal("MIDITap-v2.0.0-win-x64.zip", selected!.Name);
     }
 
+    // ================================================================ 摘要按资产配对
+    //
+    // One digest per asset
+
+    // 本组复刻 v2.0.0 的真实形状：同一发布里既有安装包又有绿色包
+    // 片段为每个资产各嵌一份摘要，且排在各自链接之后
+    // 整页只取第一个摘要时，绿色包会拿到安装包的摘要，校验必然不通过 —— 而包本身是好的
+    //
+    // This group reproduces v2.0.0's real shape: one release shipping both an installer and a portable zip
+    // The fragment embeds one digest per asset, placed after each asset's own link
+    // A single page-wide digest would give the portable zip the installer's digest
+    // Verification would then fail although the package itself is fine
+
+    private const string TwoAssetFragment = """
+        <li>
+          <a href="/username/repository/releases/download/v2.0.0/MIDITap-v2.0.0-win-x64-setup.exe">setup</a>
+          <span>sha256:1111111111111111111111111111111111111111111111111111111111111111</span>
+        </li>
+        <li>
+          <a href="/username/repository/releases/download/v2.0.0/MIDITap-v2.0.0-win-x64.zip">portable</a>
+          <span>sha256:2222222222222222222222222222222222222222222222222222222222222222</span>
+        </li>
+        """;
+
+    [Fact]
+    public void Each_asset_carries_its_own_digest_when_a_release_has_several()
+    {
+        var assets = ReleasePageParser.ParseAssets(TwoAssetFragment);
+
+        Assert.Equal(2, assets.Count);
+        Assert.Equal(new string('1', 64), assets.Single(a => a.Name.Contains("setup", StringComparison.Ordinal)).Sha256);
+        Assert.Equal(new string('2', 64), assets.Single(a => a.Name.Contains("win-x64.zip", StringComparison.Ordinal)).Sha256);
+    }
+
+    [Fact]
+    public void The_selected_asset_carries_its_own_digest()
+    {
+        // 端到端衔接：选择器挑中的那个资产必须同时带上它自己的摘要
+        // 二者错配正是"包是好的却报校验失败"的成因
+        //
+        // End-to-end join: the asset the selector picks must carry its own digest
+        // A mismatch between the two is exactly what makes a good package report a checksum failure
+        var selected = UpdateAssetSelector.Select(ReleasePageParser.ParseAssets(TwoAssetFragment));
+
+        Assert.NotNull(selected);
+        Assert.Equal("MIDITap-v2.0.0-win-x64.zip", selected!.Name);
+        Assert.Equal(new string('2', 64), selected.Sha256);
+    }
+
+    [Fact]
+    public void An_asset_without_a_digest_does_not_borrow_the_next_one()
+    {
+        // 区间按"本链接起、下一个链接止"划分，第一个资产因此取不到第二个资产的摘要
+        // 取不到就是 null，下游按"未提供校验和"处理（ChecksumVerdict.NotProvided）
+        //
+        // The slice runs from one link to the next, so the first asset cannot reach the second asset's digest
+        // Nothing found yields null, which downstream treats as "no checksum provided" (ChecksumVerdict.NotProvided)
+        const string html = """
+            <li><a href="/username/repository/releases/download/v2.0.0/other-win-x64.zip">a</a></li>
+            <li>
+              <a href="/username/repository/releases/download/v2.0.0/MIDITap-v2.0.0-win-x64.zip">b</a>
+              <span>sha256:2222222222222222222222222222222222222222222222222222222222222222</span>
+            </li>
+            """;
+
+        var assets = ReleasePageParser.ParseAssets(html);
+
+        Assert.Equal(2, assets.Count);
+        Assert.Null(assets.Single(a => a.Name.StartsWith("other", StringComparison.Ordinal)).Sha256);
+        Assert.Equal(new string('2', 64), assets.Single(a => a.Name.Contains("MIDITap-v2.0.0", StringComparison.Ordinal)).Sha256);
+    }
+
+    [Fact]
+    public void A_single_asset_still_gets_its_digest()
+    {
+        // 只有一个资产时行为不变：整段里唯一的摘要就是它的
+        //
+        // With a single asset the behaviour is unchanged: the only digest in the text is its own
+        const string html = """
+            <a href="/username/repository/releases/download/v1.0.0/MIDITap-v1.0.0-win-x64.zip">d</a>
+            <span>sha256:3333333333333333333333333333333333333333333333333333333333333333</span>
+            """;
+
+        var assets = ReleasePageParser.ParseAssets(html);
+
+        Assert.Single(assets);
+        Assert.Equal(new string('3', 64), assets[0].Sha256);
+    }
+
     [Fact]
     public void Underscore_asset_name_is_not_selected()
     {

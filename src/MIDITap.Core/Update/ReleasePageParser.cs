@@ -109,20 +109,30 @@ public static class ReleasePageParser
             return result;
         }
 
-        // 该片段里还嵌着 GitHub 提供的 SHA-256（实测与 API 的 assets[].digest 完全一致）
+        // 片段里还嵌着 GitHub 提供的 SHA-256（实测与 API 的 assets[].digest 完全一致）
         // 因此一次请求就能同时拿到"文件名"和"完整性依据"，不必再下载 .sha256 文件
         //
         // The fragment also embeds GitHub's SHA-256, measured identical to the API's assets[].digest
         // So one request yields both the file name and the integrity value
         // No separate .sha256 download is needed
-        var digest = ChecksumText.FromHtml(html);
+        //
+        // 但**每个资产各有一份**摘要，整页只取一个是不成立的
+        // 同一发布里既有安装包又有绿色包时，整页第一个摘要属于排在最前的那个资产
+        // 后面的资产于是拿着别人的摘要去比对，校验必然不通过 —— 而包本身是好的
+        // 因此先收集全部链接，再按"本链接起、下一个链接止"给每个资产单独取摘要
+        //
+        // Each asset carries its OWN digest, so one digest for the whole page does not hold
+        // A release shipping both an installer and a portable zip puts the first digest on whichever asset comes first
+        // Every later asset would then be compared against someone else's digest and fail verification although the file is fine
+        // The links are therefore collected first, and each asset's digest comes from its own slice
+        var matches = System.Text.RegularExpressions.Regex.Matches(
+            html, "href=\"([^\"]*" + DownloadPathMarker + "[^\"]+)\"",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (System.Text.RegularExpressions.Match match in
-                 System.Text.RegularExpressions.Regex.Matches(
-                     html, "href=\"([^\"]*" + DownloadPathMarker + "[^\"]+)\"",
-                     System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        for (var i = 0; i < matches.Count; i++)
         {
+            var match = matches[i];
             var href = match.Groups[1].Value.Trim();
             if (href.Length == 0)
             {
@@ -164,10 +174,16 @@ public static class ReleasePageParser
                 continue;
             }
 
-            // 大小在网页上不可得（API 才有）；下载流程不依赖它，缺失时由调用方按未知处理
+            // 大小在网页上不可得（API 才有），下载流程不依赖它，缺失时由调用方按未知处理
+            // 摘要是本资产自己的：区间从本链接起、到下一个链接止（最后一个到文末）
+            // 该区间内没有摘要时得到 null，下游按"未提供校验和"处理（ChecksumVerdict.NotProvided）
             //
-            // The size is not available on the web page (only the API carries it)
-            // The download flow does not depend on it, and the caller treats a missing value as unknown
+            // The size is not available on the web page (only the API carries it), and the download flow does not depend on it
+            // The digest belongs to this asset alone: the slice runs from its link to the next one, or to the end for the last
+            // No digest in that slice yields null, which downstream treats as "no checksum provided" (ChecksumVerdict.NotProvided)
+            var digestEnd = i + 1 < matches.Count ? matches[i + 1].Index : html.Length;
+            var digest = ChecksumText.FromHtml(html, match.Index, digestEnd);
+
             result.Add(new UpdateAsset(name, absolute, 0, digest));
         }
         return result;
