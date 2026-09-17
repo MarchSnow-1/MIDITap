@@ -14,6 +14,7 @@
   "monitor.notes.empty": "No active notes",
   "monitor.notes.unbound": "unbound",
   "monitor.log.label": "Activity Log",
+  "config.defaultName": "Default Config",
   "config.label": "Config",
   "config.refresh": "Refresh",
   "config.browse": "Open Folder",

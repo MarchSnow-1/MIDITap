@@ -218,7 +218,10 @@ function Assert-Key([bool]$down, [string]$name, [string]$what) {
 
 # --------------------------------------------------------------------------- 测试配置 / Test config
 
-$configPath = Join-Path $AppDir "config/mapping.json"
+# 用脚本自己的配置名，而不是默认配置名：后者跟随界面语言，脚本无从预知
+#
+# A config name of the script's own rather than the default one, which follows the UI language and cannot be predicted here
+$configPath = Join-Path $AppDir "config/e2e-config.json"
 $lastConfigPath = Join-Path $AppDir ".storage/last_config"
 $backup = $null
 if (Test-Path $configPath) { $backup = Get-Content $configPath -Raw }
@@ -227,7 +230,6 @@ $lastBackup = if (Test-Path $lastConfigPath) { Get-Content $lastConfigPath -Raw 
 $testConfig = @'
 {
   // E2E 测试配置（脚本自动写入，结束时还原）/ E2E test config: written by the script, restored when it ends
-  "name": "E2E Test Config",
   "60": "f13",          // C4  -> f13
   "0": "f14",           // 下边界音符 / lowest boundary note
   "127": "f15",         // 上边界音符 / highest boundary note
@@ -237,10 +239,16 @@ $testConfig = @'
 '@
 New-Item -ItemType Directory -Force -Path (Split-Path $configPath) | Out-Null
 Set-Content -Path $configPath -Value $testConfig -NoNewline
-# 清掉"上次配置"记录，确保启动时加载我们刚写的 mapping.json
+# 把"上次配置"记录指向刚写的那份，启动时必定加载它
+# 早先的做法是删掉这条记录再依赖"随便挑一份能读的"，那要求目录里只有这一份配置
+# 而应用首次启动会自己生成一份默认配置，因此那条路不再确定
 #
-# Clear the "last config" record so that start-up loads the mapping.json we just wrote
-Remove-Item $lastConfigPath -Force -ErrorAction SilentlyContinue
+# Point the "last config" record at the file just written, so start-up loads it for certain
+# The earlier approach deleted the record and relied on picking any readable config,
+# which assumed this was the only one in the directory
+# The app now creates a default config on first launch, so that route is no longer deterministic
+New-Item -ItemType Directory -Force -Path (Split-Path $lastConfigPath) | Out-Null
+Set-Content -Path $lastConfigPath -Value $configPath -NoNewline
 
 # --------------------------------------------------------------------------- 启动应用 / Launch the app
 

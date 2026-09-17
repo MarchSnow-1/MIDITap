@@ -46,8 +46,6 @@ public static class AppPaths
     /// App-settings directory name next to the exe; the leading dot marks it as not a program file</summary>
     public const string StorageDirectoryName = ".storage";
 
-    /// <summary>默认映射配置的文件名 / File name of the default mapping config</summary>
-    public const string DefaultConfigFileName = "mapping.json";
 
     /// <summary>.storage 下存放日志文件的子目录名 / Sub-directory of .storage holding log files</summary>
     public const string LogDirectoryName = "logs";
@@ -94,9 +92,6 @@ public static class AppPaths
     public static string StorageFile(string baseDir, string fileName)
         => Path.Combine(StorageDir(baseDir), fileName);
 
-    /// <summary>默认映射配置的完整路径 / Full path of the default mapping config</summary>
-    public static string DefaultConfigPath(string baseDir)
-        => Path.Combine(ConfigDir(baseDir), DefaultConfigFileName);
 
     /// <summary>日志目录的完整路径 / Full path of the log directory</summary>
     public static string LogDir(string baseDir) => Path.Combine(StorageDir(baseDir), LogDirectoryName);

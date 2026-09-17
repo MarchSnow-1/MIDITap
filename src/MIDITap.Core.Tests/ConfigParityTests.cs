@@ -34,8 +34,15 @@ public sealed class ConfigParityTests : IDisposable
     {
         var configDir = Path.Combine(BaseDir, "config");
         Directory.CreateDirectory(configDir);
-        File.WriteAllText(Path.Combine(configDir, "mapping.json"), content);
-        return ConfigLoader.LoadConfig(BaseDir, new LoadOptions(Silent: true));
+        // 显式传路径：本类验证的是解析，而不传路径要走按语言取默认名那条分支
+        // 后者由 ConfigTests 覆盖，命名规则不该让这些用例失败
+        //
+        // The path is passed explicitly: this class verifies parsing
+        // Omitting it takes the branch that resolves the language-based default name, which ConfigTests covers
+        // Naming should not be able to break these cases
+        var path = Path.Combine(configDir, "mapping.json");
+        File.WriteAllText(path, content);
+        return ConfigLoader.LoadConfig(BaseDir, new LoadOptions(Silent: true, ConfigPath: path));
     }
 
     private List<byte> NotesOf(string content)

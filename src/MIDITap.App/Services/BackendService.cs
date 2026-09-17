@@ -1027,7 +1027,7 @@ public sealed class BackendService
             return;
         }
 
-        var configFilename = string.IsNullOrEmpty(filename) ? Core.Settings.AppPaths.DefaultConfigFileName : filename;
+        var configFilename = string.IsNullOrEmpty(filename) ? ConfigLoader.DefaultConfigFileName(_baseDir) : filename;
         if (!configFilename.EndsWith(".json", StringComparison.Ordinal))
         {
             configFilename += ".json";

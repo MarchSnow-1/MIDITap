@@ -314,13 +314,13 @@ public static class ConfigLocator
 
     /// <summary>
     /// 确保配置目录存在且至少有一个 .json 配置文件
-    /// 目录为空时生成默认 mapping.json
-    /// 内容是一个空对象，映射由用户自行添加
+    /// 目录为空时生成默认配置，文件名按**当前语言**取名：中文得到「默认配置.json」，英文得到「Default Config.json」
+    /// 内容与手动新增配置完全相同（同一个模板），用户看到的两者长得一样
     /// 目录只读/受限时不应崩溃：失败仅告警并返回 null
     ///
     /// Makes sure the config directory exists and holds at least one .json config
-    /// An empty directory gets a default mapping.json
-    /// Its contents are an empty object; the user adds the mappings
+    /// An empty directory gets a default config named after the **current language**: 默认配置.json in Chinese, Default Config.json in English
+    /// Its contents are identical to a hand-created config (the same template), so the two look alike to the user
     /// A read-only or restricted directory must not crash: failure only warns and returns null
     /// </summary>
     public static string? EnsureConfigDir(string baseDir)
@@ -334,12 +334,13 @@ public static class ConfigLocator
             }
             var hasJson = Directory
                 .EnumerateFileSystemEntries(configDir)
-                .Any(entry => Path.GetFileName(entry).EndsWith(".json", StringComparison.Ordinal));
+                .Any(entry => Path.GetFileName(entry).EndsWith(".json", StringComparison.OrdinalIgnoreCase));
             if (!hasJson)
             {
-                const string defaultConfig = "{\n}";
-                var defaultPath = Path.Combine(configDir, AppPaths.DefaultConfigFileName);
-                File.WriteAllText(defaultPath, defaultConfig);
+                var defaultPath = Path.Combine(
+                    configDir,
+                    BuildConfigFileName(LanguageCatalog.DefaultConfigStem(baseDir)));
+                File.WriteAllText(defaultPath, ConfigEditor.TemplateContent);
                 return defaultPath;
             }
         }

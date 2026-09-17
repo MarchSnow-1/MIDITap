@@ -12,7 +12,6 @@
 //
 
 using System.ComponentModel;
-using System.Globalization;
 using System.Text.Json;
 using MIDITap.Core.Settings;
 
@@ -42,8 +41,13 @@ public sealed class I18nService : INotifyPropertyChanged
     {
         _baseDir = baseDir;
         AvailableLanguages = LanguageCatalog.Discover(baseDir);
-        var saved = Core.Settings.AppStorage.GetLocale(baseDir);
-        Load(saved ?? PreferredLocale());
+        // 语言解析已下沉到 Core：首次启动生成默认配置文件时也要用同一套判断（见 LanguageCatalog.DefaultConfigStem）
+        // 因此这里调用而不是自己再实现一份，两处不会选出不同的语言
+        //
+        // Locale resolution lives in Core now: creating the default config on first launch needs the same decision
+        // See LanguageCatalog.DefaultConfigStem
+        // This calls in rather than keeping a second copy, so the two cannot pick different languages
+        Load(LanguageCatalog.ResolveLocale(baseDir));
     }
 
     /// <summary>
@@ -151,53 +155,4 @@ public sealed class I18nService : INotifyPropertyChanged
         }
     }
 
-    // 按系统 UI 文化自动选择最接近的可用语言
-    // 匹配顺序：完全一致 -> 仅语言部分一致 -> 中文再按简繁偏好 -> 默认
-    //
-    // The closest AVAILABLE language to the system UI culture is chosen
-    // Order: exact match, then language-only match, then Simplified/Traditional preference for Chinese, default
-    private string PreferredLocale()
-    {
-        var available = AvailableLanguages.Select(l => l.Code).ToList();
-        var culture = CultureInfo.CurrentUICulture.Name;
-        if (string.IsNullOrEmpty(culture))
-        {
-            return LanguageCatalog.DefaultCode;
-        }
-
-        // 文化名用 '-'（zh-Hans-CN），语言代码用 '_'（zh_CN），统一后再比较
-        //
-        // Culture names use '-' (zh-Hans-CN) while language codes use '_' (zh_CN); the two are normalised before being compared
-        var normalized = culture.Replace('-', '_');
-
-        var exact = available.FirstOrDefault(code => string.Equals(code, normalized, StringComparison.OrdinalIgnoreCase));
-        if (exact is not null)
-        {
-            return exact;
-        }
-
-        // 简体/繁体：系统给出 zh-Hans / zh-Hant 或 zh-CN / zh-TW 时挑对应写法
-        //
-        // Simplified/Traditional: when the system reports zh-Hans / zh-Hant or zh-CN / zh-TW, the matching spelling is picked
-        var language = normalized.Split('_')[0];
-        if (string.Equals(language, "zh", StringComparison.OrdinalIgnoreCase))
-        {
-            var wantsTraditional = normalized.Contains("Hant", StringComparison.OrdinalIgnoreCase)
-                || normalized.Contains("TW", StringComparison.OrdinalIgnoreCase)
-                || normalized.Contains("HK", StringComparison.OrdinalIgnoreCase)
-                || normalized.Contains("MO", StringComparison.OrdinalIgnoreCase);
-            var preferred = wantsTraditional ? "zh_TW" : "zh_CN";
-            if (available.Contains(preferred))
-            {
-                return preferred;
-            }
-        }
-
-        // 仅语言部分一致（如 ja_JP 可用而系统是 ja-JP-...）
-        //
-        // Language-only match (the system culture is ja-JP-... while only ja_JP is available)
-        var byLanguage = available.FirstOrDefault(
-            code => code.StartsWith(language + "_", StringComparison.OrdinalIgnoreCase));
-        return byLanguage ?? LanguageCatalog.DefaultCode;
-    }
 }

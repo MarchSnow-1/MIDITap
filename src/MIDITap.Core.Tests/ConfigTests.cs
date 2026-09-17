@@ -9,6 +9,7 @@
 // Binding parsing, port parsing and config listing
 
 using MIDITap.Core.Config;
+using MIDITap.Core.Settings;
 using Xunit;
 
 namespace MIDITap.Core.Tests;
@@ -478,15 +479,41 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
-    public void Ensure_config_dir_creates_default_mapping_when_empty()
+    public void Ensure_config_dir_creates_a_default_config_named_after_the_language()
     {
         using var temp = new TempBaseDir();
         var created = ConfigLocator.EnsureConfigDir(temp.BaseDir);
         Assert.NotNull(created);
-        Assert.Equal("{\n}", File.ReadAllText(created!));
+        // 没有 i18n/ 时跟随默认语言，因此名字取自 FallbackConfigStem
+        //
+        // With no i18n/ directory the default language applies, so the name comes from FallbackConfigStem
+        Assert.Equal(LanguageCatalog.FallbackConfigStem + ".json", Path.GetFileName(created!));
+        // 与手动新增配置共用同一个模板，两者打开后长得一样
+        //
+        // It shares the template a hand-created config uses, so the two look alike when opened
+        Assert.Equal(ConfigEditor.TemplateContent, File.ReadAllText(created!));
         var loaded = ConfigLoader.LoadConfig(temp.BaseDir, new LoadOptions(Silent: true));
         Assert.NotNull(loaded);
         Assert.Empty(loaded!.NoteMap);
+    }
+
+    [Fact]
+    public void Ensure_config_dir_follows_the_saved_language()
+    {
+        using var temp = new TempBaseDir();
+        // 放一份中文语言包并选中它，默认配置名应当随之变成中文
+        //
+        // A Chinese pack is dropped in and selected, and the default config name follows it
+        var i18nDir = Path.Combine(temp.BaseDir, LanguageCatalog.DirectoryName);
+        Directory.CreateDirectory(i18nDir);
+        File.WriteAllText(
+            Path.Combine(i18nDir, "zh_CN.json"),
+            "{\n  \"" + LanguageCatalog.DefaultConfigStemKey + "\": \"默认配置\"\n}\n");
+        Assert.True(AppStorage.SaveLocale(temp.BaseDir, "zh_CN"));
+
+        var created = ConfigLocator.EnsureConfigDir(temp.BaseDir);
+        Assert.NotNull(created);
+        Assert.Equal("默认配置.json", Path.GetFileName(created!));
     }
 
     [Fact]
@@ -497,26 +524,6 @@ public sealed class ConfigTests : IDisposable
         Assert.Null(created); // 已经有 .json 配置 / already has a .json config
     }
 
-    [Fact]
-    public void Shipped_default_config_is_loadable()
-    {
-        // 仓库根目录下的默认配置必须能被加载（工作目录 = 仓库根）
-        //
-        // The default config at the repository root must be loadable
-        // The working directory is the repository root
-        var repoRoot = Directory.GetCurrentDirectory();
-        while (repoRoot is not null && !File.Exists(Path.Combine(repoRoot, "config", "mapping.json")))
-        {
-            repoRoot = Path.GetDirectoryName(repoRoot);
-        }
-        if (repoRoot is null)
-        {
-            return; // 非完整仓库布局时跳过 / Skip when the repository layout is incomplete
-        }
-        var result = ConfigLoader.LoadConfig(repoRoot, new LoadOptions(Silent: true));
-        Assert.NotNull(result);
-        Assert.Empty(result!.NoteMap);
-    }
 
     // --- v1 name 字段迁移 ----------------------------------------------------
     //

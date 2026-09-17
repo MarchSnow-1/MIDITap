@@ -17,19 +17,29 @@ namespace MIDITap.Core.Config;
 public static class ConfigLoader
 {
     /// <summary>
+    /// 默认配置的文件名（含 .json），按当前语言取名
+    /// 与 ConfigLocator.EnsureConfigDir 生成的那一份保持同一套命名，两者不会各写各的
+    ///
+    /// The default config's file name (with .json), named after the current language
+    /// It follows the same naming as the file ConfigLocator.EnsureConfigDir creates, so the two cannot drift apart
+    /// </summary>
+    public static string DefaultConfigFileName(string baseDir)
+        => ConfigLocator.BuildConfigFileName(LanguageCatalog.DefaultConfigStem(baseDir));
+
+    /// <summary>
     /// 加载并校验映射配置
-    /// options.ConfigPath 为 null 时加载 config/mapping.json
+    /// options.ConfigPath 为 null 时加载**默认配置**，即按当前语言命名的那一份（见 LanguageCatalog.DefaultConfigStem）
     /// 失败返回 null（文件不存在、解析失败、结构非法）
     ///
     /// Loads and validates a mapping config
-    /// A null options.ConfigPath means config/mapping.json
+    /// A null options.ConfigPath means the **default config**, the one named after the current language (see LanguageCatalog.DefaultConfigStem)
     /// Returns null on failure (missing file, parse failure, invalid structure)
     /// </summary>
     public static MappingConfig? LoadConfig(string baseDir, LoadOptions options)
     {
         var configPath = options.ConfigPath is not null
             ? ConfigLocator.ResolveConfigPath(baseDir, options.ConfigPath)
-            : ConfigLocator.ResolveConfigPath(baseDir, AppPaths.DefaultConfigPath(baseDir));
+            : ConfigLocator.ResolveConfigPath(baseDir, DefaultConfigFileName(baseDir));
         if (configPath is null)
         {
             return null;

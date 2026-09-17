@@ -101,14 +101,14 @@ public static class ConfigEditor
     }
 
     // 新配置文件的内容模板
-    // 与仓库里 config/mapping.json 的写法一致，因此两者打开后长得一样
+    // 首次启动自动生成的那份与手动新增的走同一个模板，因此两者打开后长得一样
     // 注释是中英两行而不是按界面语言取一条：文件在手写编辑时并不知道界面语言，写死两行才不会因切语言而变
     //
     // The template a new config file starts from
-    // It matches how config/mapping.json in the repository is written, so the two look alike when opened
+    // The file created on first launch and one created by hand both start from it, so the two look alike when opened
     // The comments carry both languages rather than following the UI locale
     // A hand-edited file has no UI locale, and fixing both lines keeps the file from changing with the language
-    private const string TemplateContent =
+    public const string TemplateContent =
         "{\n"
         + "  // MIDITap 配置文件\n"
         + "  // MIDITap Config File\n"
