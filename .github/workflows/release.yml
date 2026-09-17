@@ -147,8 +147,12 @@ jobs:
           Get-ChildItem publish -Force | Where-Object { $_.Name -ne ".storage" } |
             ForEach-Object { Copy-Item $_.FullName $stage -Recurse -Force }
           Copy-Item README.md, README_zh-CN.md, CHANGELOG.md, LICENSE $stage/ -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path "$stage/config" | Out-Null
-          Copy-Item config/mapping.json "$stage/config/"
+          # config/ 不打进包：首次启动由应用按界面语言生成（见 LanguageCatalog.DefaultConfigStem）
+          # 包里不带它，用户的配置就不会被任何一次更新覆盖，这比事后排除更彻底
+          #
+          # config/ is not packaged: the app creates it on first launch, named after the UI language
+          # See LanguageCatalog.DefaultConfigStem
+          # Leaving it out means no update can overwrite a user's config, which is stronger than excluding it afterwards
           # E2E 脚本随包发布：用户与维护者都能用同一份脚本对真实设备做验证
           #
           # The E2E script ships with the package so users and maintainers validate against real hardware with exactly the same script

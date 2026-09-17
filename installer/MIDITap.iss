@@ -13,8 +13,8 @@
 ;   config/ 与 .storage/ 就在 exe 旁边，与便携包一致（见 AGENTS.md §2.4）
 ;
 ; 用户数据保护：
-;   config\mapping.json 标了 uninsneveruninstall，卸载不会删掉用户改过的配置
-;   .storage/ 由应用自己创建，安装器不曾写入，因此卸载也不会碰它
+;   载荷里不带 config\，它由应用首次启动时按界面语言创建，卸载因此碰不到用户写的配置
+;   .storage/ 同样由应用自己创建，安装器不曾写入，卸载也不会碰它
 ;
 ; 构建方式（版本与载荷目录都由命令行传入）：
 ;   ISCC.exe /DAppVersion=2.0.1 /DAssetTag=v2.0.1 /DSourceDir=..\stage\MIDITap installer\MIDITap.iss
@@ -37,8 +37,8 @@
 ;   config/ and .storage/ then sit next to the exe exactly as in the portable package (AGENTS.md §2.4)
 ;
 ; Protecting user data:
-;   config\mapping.json carries uninsneveruninstall, so uninstalling keeps a config the user edited
-;   .storage/ is created by the app and never written by this installer, so uninstall does not touch it
+;   config\ is not in the payload; the app creates it on first launch, named after the UI language, so uninstall never touches it
+;   .storage/ is likewise created by the app and never written by this installer
 ;
 ; How it is built (version and payload directory both come from the command line):
 ;   ISCC.exe /DAppVersion=2.0.1 /DAssetTag=v2.0.1 /DSourceDir=..\stage\MIDITap installer\MIDITap.iss
@@ -113,15 +113,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; 载荷 = stage/MIDITap 全量，config 单独排除后按下面的规则再放一次
-; The payload is the whole stage/MIDITap; config is excluded here and added again by its own rule below
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "config\mapping.json"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; 默认配置只在**首次**安装时写入（onlyifdoesntexist），且永不随卸载删除
-; 覆盖已有的会让用户改过的映射凭空消失
-; The example config is written only on a FIRST install (onlyifdoesntexist) and survives uninstall
-; Overwriting an existing one would make a user-edited mapping vanish
-Source: "{#SourceDir}\config\mapping.json"; DestDir: "{app}\config"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall
+; 载荷 = stage/MIDITap 全量
+; 其中不含 config\：首次启动由应用按界面语言生成，安装器不必也不该预先塞一份
+; 因此升级安装时，用户的配置不可能被载荷覆盖
+;
+; The payload is the whole stage/MIDITap
+; It carries no config\: the app creates it on first launch, named after the UI language
+; The installer neither needs nor should place one in advance
+; An upgrade install therefore cannot overwrite a user's config with the payload
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\MIDITap"; Filename: "{app}\MIDITap.exe"

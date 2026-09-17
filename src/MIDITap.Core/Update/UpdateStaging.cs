@@ -1,17 +1,17 @@
 // UpdateStaging.cs — 更新包解压时的路径规则
 // **最关键的一条：解压不得写入用户的 config/ 与 .storage/（IsExcluded 对这两棵子树返回 true，由 UpdateExtractor 逐步校验）**
-// CI 打出的 zip 里带一份默认 config/mapping.json
-// 若原样覆盖，用户自己的映射配置会被出厂默认值替换掉
-// 那是数据丢失，不是"更新"
-// 因此解压到暂存区时就把这两棵子树排除，更新只替换程序文件
+// 用户在那两棵子树里的东西必须原样留下：映射配置是他自己写的，应用设置是他自己的选择
+// 因此解压到暂存区时就把它们排除，更新只替换程序文件
+// 这条规则不依赖包里带不带 config/ —— 发布包已经不带（由应用首次启动生成），
+// 但旧版本用户手上的包、以及别人自己打的包都可能带，因此这里依旧必须排除
 //
 // Path rules for unpacking an update archive
 // The critical rule: unpacking must not write into the user's config/ or .storage/
 // IsExcluded returns true for those two subtrees, and UpdateExtractor checks each entry against it
-// The CI zip ships a default config/mapping.json
-// Copying it over would replace the user's own mappings with factory defaults
-// That is data loss, not an update
+// Whatever the user put in those two subtrees has to stay: the mappings are his own work and the settings his own choices
 // Both subtrees are therefore excluded while staging, so only program files are replaced
+// The rule does not depend on whether a package carries config/ — the release package no longer does (the app creates it on first launch)
+// Yet packages already in users' hands, and packages built by others, may carry one, so the exclusion stays
 
 using MIDITap.Core.Settings;
 

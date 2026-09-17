@@ -87,8 +87,8 @@ body:
       label: "📄 Mapping Config / 映射配置"
       description: "Drag the affected file from the config folder here, or paste its contents / 从 config 目录把相关文件拖到此处，或粘贴内容"
       placeholder: |
-        e.g. config/mapping.json
-        例如 config/mapping.json
+        e.g. config/Default Config.json
+        例如 config/默认配置.json
     validations:
       required: false
 

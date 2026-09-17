@@ -49,8 +49,8 @@ body:
     attributes:
       label: "📄 Mapping Config / 映射配置"
       placeholder: |
-        Paste config or drag the file here (e.g. config/mapping.json)
-        请粘贴配置或把文件拖到此处（例如 config/mapping.json）
+        Paste config or drag the file here (e.g. config/Default Config.json)
+        请粘贴配置或把文件拖到此处（例如 config/默认配置.json）
     validations:
       required: false
 

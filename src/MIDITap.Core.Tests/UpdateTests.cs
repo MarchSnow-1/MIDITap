@@ -166,10 +166,11 @@ public sealed class UpdateStagingTests
     [InlineData(".storage/logs/miditap.log")]
     public void Configured_paths_are_all_excluded(string path)
     {
-        // **最重要的一条。** CI 的包里带默认 config/mapping.json，原样覆盖就是数据丢失
+        // **最重要的一条。** 这两棵子树里的东西属于用户，原样覆盖就是数据丢失
+        // 发布包如今不带 config/，但用户手上的旧包与别人自打的包都可能带，因此规则保持不变
         //
-        // **The most important one.** The CI package carries a default config/mapping.json
-        // Overwriting it as-is is data loss
+        // **The most important one.** What lives in these two subtrees belongs to the user, and copying over it is data loss
+        // The release package no longer carries config/, yet packages already in users' hands and packages built by others may, so the rule is unchanged
         Assert.True(UpdateStaging.IsExcluded(path), path + " 必须被排除");
     }
 

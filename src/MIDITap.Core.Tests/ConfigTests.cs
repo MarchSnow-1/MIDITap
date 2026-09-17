@@ -524,6 +524,32 @@ public sealed class ConfigTests : IDisposable
         Assert.Null(created); // 已经有 .json 配置 / already has a .json config
     }
 
+    [Fact]
+    public void Repository_ships_no_config_file()
+    {
+        // 仓库与发布包都不带配置文件：它由应用首次启动生成，名字跟随界面语言
+        // 一旦有人把配置文件放了回来，打包产物就会带上它，用户改过的配置就可能被更新覆盖
+        // 因此这条断言守的是「别把它加回来」
+        //
+        // Neither the repository nor the package carries a config file
+        // The app creates it on first launch, named after the UI language
+        // If someone added one back, it would end up in the package and an update could overwrite a user's config
+        // This assertion therefore guards against putting it back
+        var repoRoot = Directory.GetCurrentDirectory();
+        while (repoRoot is not null && !File.Exists(Path.Combine(repoRoot, "MIDITap.sln")))
+        {
+            repoRoot = Path.GetDirectoryName(repoRoot);
+        }
+        if (repoRoot is null)
+        {
+            return; // 非完整仓库布局时跳过 / Skip when the repository layout is incomplete
+        }
+        var configDir = Path.Combine(repoRoot, "config");
+        var shipped = Directory.Exists(configDir)
+            ? Directory.GetFiles(configDir, "*.json")
+            : [];
+        Assert.Empty(shipped);
+    }
 
     // --- v1 name 字段迁移 ----------------------------------------------------
     //
