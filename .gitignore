@@ -35,3 +35,8 @@ scripts/.tmp-*
 # Throwaway development scripts.
 # They are investigation tools, not product code, and do not belong in the user's package.
 .dev/
+
+# 会话中粘贴给 Agent 的日志与说明片段
+#
+# Log and note fragments pasted into the session for the agent.
+.dsh-drop/
