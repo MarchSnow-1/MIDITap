@@ -332,6 +332,18 @@ public sealed partial class HomePage : Page
     {
         var index = _devices.ToList().FindIndex(d => d.Index == _selectedPortIndex);
         DeviceBox.SelectedIndex = index; // -1 时清除选择
+
+        // 把当前设备名交给无障碍层：屏幕阅读器要能读出"现在听的是哪台设备"
+        // 下拉框本身没有可见标签（设备条上只有一个图标），不设这一项它的可访问名就是空的
+        // 这也是 UIA 能观察到的读点，端到端测试因此可以直接读出在听哪个端口，不必从日志文字里猜
+        //
+        // The current device name is handed to the accessibility layer
+        // A screen reader has to be able to say which device is being listened to
+        // The drop-down has no visible label (the device bar carries only an icon), so without this its accessible name is empty
+        // It is also the read point UIA can observe, so the end-to-end test reads the port rather than guessing it from log text
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+            DeviceBox,
+            index >= 0 ? _devices[index].Name : AppServices.I18n.T("devices.empty"));
     }
 
     private void UpdateDevicePlaceholder()
