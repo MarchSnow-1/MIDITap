@@ -186,7 +186,12 @@ public sealed class ToastHost : UserControl
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0),
             Padding = new Thickness(6, 2, 6, 2),
-            VerticalAlignment = VerticalAlignment.Top,
+            // 关闭按钮与左侧文字**同高**：垂直居中而不是顶到上沿
+            // 顶到上沿时，两行文字的浮窗里它会飘在标题右侧、与正文没有任何对齐关系
+            //
+            // The close button sits level with the text on the left: centred rather than pinned to the top
+            // Pinned to the top it floats beside the title in a two-line toast, aligned with nothing
+            VerticalAlignment = VerticalAlignment.Center,
         };
 
         var grid = new Grid();
