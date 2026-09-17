@@ -134,6 +134,10 @@ jobs:
 
       - name: Stage portable layout
         shell: pwsh
+        # VERSION comes through env rather than being written into the script text
+        # ${{ }} is a TEXT substitution, so in expression position the - and + of 1.7.1-dev.2+g... parse as PowerShell syntax
+        env:
+          VERSION: ${{ steps.ver.outputs.VERSION }}
         run: |
           $stage = "stage/MIDITap"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -165,7 +169,7 @@ jobs:
           # No self-published checksum file
           # GitHub already provides a SHA-256 per asset: the API's assets[].digest, and the same digest embedded in the expanded_assets HTML
           # The app reads it from there
-          Compress-Archive -Path $stage -DestinationPath ("MIDITap-" + ${{ steps.ver.outputs.VERSION }} + "-win-x64.zip") -Force
+          Compress-Archive -Path $stage -DestinationPath ("MIDITap-" + $env:VERSION + "-win-x64.zip") -Force
 
       # --------------------------------------------------- 安装包 / Installer
 
@@ -234,8 +238,11 @@ jobs:
       # Asserting it here prevents the hardest kind of failure to explain: the user can see the new version but cannot download it
       - name: Verify the asset name matches what the app looks for
         shell: pwsh
+        # Same as above: the version comes through env
+        env:
+          VERSION: ${{ steps.ver.outputs.VERSION }}
         run: |
-          $expected = "MIDITap-" + ${{ steps.ver.outputs.VERSION }} + "-win-x64.zip"
+          $expected = "MIDITap-" + $env:VERSION + "-win-x64.zip"
           if (-not (Test-Path $expected)) { throw "Expected asset not found: $expected" }
           $stage = "stage/MIDITap"
           $missing = @()

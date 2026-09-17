@@ -126,6 +126,13 @@ jobs:
 
       - name: Stage portable layout
         shell: pwsh
+        # 版本号经 env 传入，不写进脚本正文：${{ }} 是**文本替换**，
+        # 落在表达式位置时 1.7.1-dev.2+g... 里的 - 与 + 会被当成 PowerShell 语法
+        #
+        # The version comes through env rather than being written into the script text
+        # ${{ }} is a TEXT substitution, so in expression position the - and + of 1.7.1-dev.2+g... parse as syntax
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           $stage = "stage/MIDITap"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -157,7 +164,7 @@ jobs:
           # No self-published checksum file
           # GitHub already provides a SHA-256 per asset: the API's assets[].digest, and the same digest embedded in the expanded_assets HTML
           # The app reads it from there
-          Compress-Archive -Path $stage -DestinationPath ("MIDITap-" + ${{ steps.version.outputs.VERSION }} + "-win-x64.zip") -Force
+          Compress-Archive -Path $stage -DestinationPath ("MIDITap-" + $env:VERSION + "-win-x64.zip") -Force
 
       # 自更新依赖两件事：包里必须有 scripts/apply-update.ps1，且用户数据在替换时被排除
       # 这里显式校验包结构
@@ -176,8 +183,11 @@ jobs:
       # One warns early here, the other refuses to install at run time
       - name: Verify the package supports self-update
         shell: pwsh
+        # 同上：版本号经 env 传入 / Same as above: the version comes through env
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          $zip = "MIDITap-" + ${{ steps.version.outputs.VERSION }} + "-win-x64.zip"
+          $zip = "MIDITap-" + $env:VERSION + "-win-x64.zip"
           $stage = "stage/MIDITap"
           $missing = @()
           if (-not (Test-Path "$stage/scripts/apply-update.ps1")) { $missing += "scripts/apply-update.ps1" }
