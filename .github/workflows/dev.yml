@@ -199,12 +199,18 @@ jobs:
           # 解压替换必须跳过这两棵子树，否则用户的配置与状态会被出厂默认覆盖
           #
           # The replace step must skip both subtrees, or factory defaults would overwrite user data
-          $entries = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip)).Entries
+          # 保留 ZipArchive 本身：Entries 只是一个集合，对它调 Dispose 不会释放实际句柄
+          # 旧写法把 .Entries 直接赋给变量，于是压缩包句柄从未释放，且 Dispose 调在集合上会报错
+          #
+          # The ZipArchive itself is kept: Entries is only a collection, and disposing that releases nothing
+          # The old form assigned .Entries to the variable, so the archive handle was never released and Dispose on the collection failed
+          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
           try {
+            $entries = $archive.Entries
             $bad = @($entries | Where-Object { $_.FullName -match "^MIDITap/(config|\.storage)/" })
             Write-Host "包内条目数: $($entries.Count)"
             Write-Host "用户数据条目: $($bad.Count)（可存在，但替换时必须被排除）"
-          } finally { $entries.Dispose() }
+          } finally { $archive.Dispose() }
           Write-Host "自更新所需的脚本与可执行文件均在包内。"
 
       # 开发分支也打一个安装包，这样标签发布前就能验证 .iss 仍然可用
