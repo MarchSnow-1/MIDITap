@@ -432,6 +432,14 @@ public sealed partial class SettingsPage : Page
             // Leaving an editable box while none of that happens would suggest it still does something
             ProxyBox.IsEnabled = AppServices.UpdatesEnabled;
             ProxyBox.Text = AppStorage.GetUpdateProxy(AppServices.BaseDir);
+            // 禁用而不给原因，看起来像界面坏了：悬浮时补一句说明
+            // 发布构建里更新功能可用，这一项清除即可（SetToolTip 传 null 表示清除）
+            //
+            // Disabled without a reason reads as a broken control, so the explanation goes on hover
+            // In a release build the feature works and the tooltip is cleared (null clears it in SetToolTip)
+            ToolTipService.SetToolTip(
+                ProxyBox,
+                AppServices.UpdatesEnabled ? null : AppServices.I18n.T("settings.devTooltip"));
         }
         finally
         {
@@ -667,13 +675,16 @@ public sealed partial class SettingsPage : Page
         OpenLogDirBtn.Content = t("settings.openLogDir");
         UpdatesCard.Header = t("settings.updates");
         // 开发构建不参与更新，"启动时检查新版本"这句话对它是假的，换成如实的一句
+        // 与代理框、检查更新按钮的悬浮提示共用同一条文案：同一件事只写一份，改起来不会漏掉某处
         //
         // A development build takes no part in updates
         // So "checks for a new version at startup" would be false for it
         // An accurate line replaces it
+        // It is the same copy the proxy box and the check-for-updates button show on hover
+        // One sentence for one fact, so a change cannot miss one of the three places
         UpdatesCard.Description = AppServices.UpdatesEnabled
             ? t("settings.updates.hint")
-            : t("settings.updates.disabledInDev");
+            : t("settings.devTooltip");
         ProxyCard.Header = t("settings.proxy");
         ProxyBox.PlaceholderText = t("settings.proxy.placeholder");
         // 两个开关不再带可见标签（标题与说明已说清它们管什么），名字补给读屏
@@ -698,6 +709,12 @@ public sealed partial class SettingsPage : Page
         //
         // In a development build the button has nothing to do: disabled, rather than doing nothing when clicked
         CheckUpdateBtn.IsEnabled = AppServices.UpdatesEnabled;
+        // 同上：禁用按钮旁边补一句原因，鼠标悬浮即可看到
+        //
+        // Same as the proxy box: the reason sits on the disabled button, shown on hover
+        ToolTipService.SetToolTip(
+            CheckUpdateBtn,
+            AppServices.UpdatesEnabled ? null : t("settings.devTooltip"));
         GitHubBtn.Content = t("settings.github");
         SyncThemeSelection();
         SyncLanguageSelection();
