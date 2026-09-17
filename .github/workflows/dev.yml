@@ -1,0 +1,77 @@
+# dev.yml — 推送到 archive/v1 分支时构建
+#
+# Builds on a push to archive/v1 and produces a workflow artifact only
+
+name: Build Dev
+
+on:
+  push:
+    branches: ['archive/v1']
+  pull_request:
+  workflow_dispatch:
+
+# 只读权限：本工作流不再创建 Release，因此不需要写权限
+#
+# Read-only: this workflow no longer creates releases, so it needs no write access
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Install @neutralinojs/neu
+        run: npm install -g @neutralinojs/neu
+
+      - name: Download NeutralinoJS runtime
+        run: neu update
+
+      - name: Build
+        run: neu build
+
+      # 版本号来自 package.json：推分支没有标签，因此补 dev.<构建号>+g<短哈希>
+      # The version comes from package.json: a branch push has no tag, so dev.<run>+g<sha> is appended
+      - name: Compute version
+        id: version
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          if (-not $pkg.version) { throw 'package.json has no version' }
+          $base = $pkg.version.Trim()
+          $sha = '${{ github.sha }}'.Substring(0, 7)
+          $full = $base + '-dev.' + '${{ github.run_number }}' + '+g' + $sha
+          "VERSION=$full" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Version: $full"
+
+      - name: Package Windows x64
+        run: |
+          mkdir pkg\win_x64
+          copy dist\MIDITap\MIDITap-win_x64.exe pkg\win_x64\MIDITap.exe
+          copy dist\MIDITap\resources.neu pkg\win_x64\
+          copy package.json pkg\win_x64\
+          xcopy /E /I dist\MIDITap\extensions pkg\win_x64\extensions
+          xcopy /E /I libs pkg\win_x64\libs
+          xcopy /E /I node_modules pkg\win_x64\node_modules
+          Compress-Archive -Path pkg\win_x64\* -DestinationPath MIDITap-${{ steps.version.outputs.VERSION }}-win_x64.zip
+          Write-Host "Packaged MIDITap-${{ steps.version.outputs.VERSION }}-win_x64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MIDITap-v1-win_x64
+          path: MIDITap-*-win_x64.zip
+          retention-days: 30
