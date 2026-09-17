@@ -50,10 +50,76 @@ public static class LogEnvironment
     /// The exported environment.txt still carries the full key=value form when detail is needed
     /// </summary>
     public static string Summary()
-        => $"v{AppServices.AppVersion} | {RuntimeInformation.OSDescription} | " +
+        => $"Version: v{AppServices.AppVersion} | {RuntimeInformation.OSDescription} | " +
            $"{RuntimeInformation.ProcessArchitecture} | lang={AppServices.I18n.Current} | " +
            $"theme={ThemeService.Mode}/{ThemeService.EffectiveTheme} | " +
-           $"highContrast={ThemeService.IsHighContrast} | logToFile={LogPersistence.Enabled}";
+           $"highContrast={ThemeService.IsHighContrast} | logToFile={LogPersistence.Enabled} | " +
+           $"memAvailable={AvailableMemoryText()} | diskFree={FreeSpaceText()}";
+
+    /// <summary>可用的物理内存，取不到时返回 unknown
+    /// 内存不足是按键注入偶发丢失这类反馈的一个常见解释，它与版本和系统都无关，因此单独占一项
+    ///
+    /// The physical memory available, or unknown when it cannot be read
+    /// Low memory often explains reports of keys occasionally not being injected
+    /// It is independent of the version and the OS, so it gets an entry of its own
+    /// </summary>
+    private static string AvailableMemoryText()
+        => NativeMemory.TryAvailableBytes(out var bytes) ? Format(bytes) : Unknown;
+
+    /// <summary>应用所在分区的可用空间，取不到时返回 unknown
+    /// 自更新要先下载再解压，两者都要空间，因此分区满了是更新失败的一个直接原因
+    /// 只报可用量：盘符会暴露分区布局，总量则是与排查无关的机器信息
+    /// 而排查需要的只是"还够不够下载并解压"，一个可用数字就够
+    ///
+    /// The free space on the volume the app lives on, or unknown when it cannot be read
+    /// A self-update downloads and then extracts, both of which need room
+    /// A full volume is therefore a direct cause of update failures
+    ///
+    /// Only the **available amount** is reported: a drive letter exposes the partition layout, and the total size is machine detail triage does not need
+    /// What triage needs is whether there is room to download and extract, and one available figure answers that
+    /// </summary>
+    private static string FreeSpaceText()
+    {
+        try
+        {
+            // baseDir 就是应用目录，它所在的驱动器即更新下载与解压的落点
+            // 这个位置只用来查询，不写进输出
+            //
+            // baseDir is the application directory, so its drive is where an update downloads and extracts
+            // The location is used for the query only and never written to the output
+            var root = Path.GetPathRoot(Path.GetFullPath(AppServices.BaseDir));
+            if (string.IsNullOrEmpty(root))
+            {
+                return Unknown;
+            }
+            var drive = new DriveInfo(root);
+            if (!drive.IsReady)
+            {
+                return Unknown;
+            }
+            return Format(drive.AvailableFreeSpace);
+        }
+        catch (Exception)
+        {
+            // 驱动器瞬时不就绪（可移动盘被拔出）不该让整条摘要失败，记 unknown 后继续
+            //
+            // A transient drive state (a removable disk pulled out) must not fail the whole summary, so unknown is recorded and the rest carries on
+            return Unknown;
+        }
+    }
+
+    private const string Unknown = "unknown";
+
+    private const double GiB = 1024d * 1024d * 1024d;
+
+    private const double MiB = 1024d * 1024d;
+
+    /// <summary>字节数转成带单位的文本，GiB 以上用 GiB，否则用 MiB，保留一位小数</summary>
+    /// <remarks>Bytes as text with a unit: GiB above a gibibyte, otherwise MiB, one decimal place</remarks>
+    private static string Format(long bytes)
+    {
+        return bytes >= GiB ? $"{bytes / GiB:0.0}GiB" : $"{bytes / MiB:0.0}MiB";
+    }
 
     /// <summary>
     /// 生成 key=value 形式的多行摘要

@@ -90,12 +90,19 @@ public sealed partial class MainWindow : Window
         // 它对排查"启动就出问题"这类反馈几乎是必需的第一手信息，但对日常使用是噪音（每次启动都占一行）
         // 因此记录、默认不显示、导出时默认带上
         //
+        // 前缀**不走 i18n**，固定英文：这一行的读者是排查问题的人，不是使用者
+        // 界面语言换成中文时它若跟着变，同一份日志会因语言而异，比对两次运行时还要先查翻译
+        // 字段名同理，一律英文小写
+        //
         // The startup environment summary goes to the **debug** level
         // It is close to essential first-hand information when triaging "it broke on startup" reports
         // Yet it is noise for everyday use (one line per launch)
         // So it is recorded, hidden by default, and included in exports
-        AppServices.Log.Debug(
-            AppServices.I18n.T("log.debug.env", ("summary", LogEnvironment.Summary())));
+        //
+        // The prefix deliberately does **not** go through i18n and stays English: the reader of this line is whoever triages a report, not the end user
+        // Were it to follow the UI language, one log would read differently per language and comparing two runs would start with a lookup
+        // The field names follow the same rule and are lower-case English throughout
+        AppServices.Log.Debug("Environment: " + LogEnvironment.Summary());
         // 设备热插拔监视：插入设备自动选择并启动监听，拔出自动停止/热切换
         // 同时开启配置文件热更新（外部编辑 config/*.json 自动生效）
         //

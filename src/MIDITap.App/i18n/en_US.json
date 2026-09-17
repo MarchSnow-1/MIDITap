@@ -47,7 +47,6 @@
   "log.count": "{count} entries",
   "log.countFiltered": "{shown} / {total}",
   "log.debug.configs": "Config files enumerated: {count}",
-  "log.debug.env": "Environment: {summary}",
   "log.debug.ports": "MIDI ports enumerated: {count}",
   "log.debug.updateCheck": "Update check started (current {version})",
   "log.debug.updateFound": "Found new version {latest} (current {current})",

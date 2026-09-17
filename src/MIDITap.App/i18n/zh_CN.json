@@ -47,7 +47,6 @@
   "log.count": "{count} 条",
   "log.countFiltered": "{shown} / {total}",
   "log.debug.configs": "已枚举配置文件: {count} 个",
-  "log.debug.env": "运行环境: {summary}",
   "log.debug.ports": "已枚举 MIDI 端口: {count} 个",
   "log.debug.updateCheck": "开始检查更新 (当前 {version})",
   "log.debug.updateFound": "发现新版本 {latest} (当前 {current})",
