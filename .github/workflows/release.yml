@@ -327,8 +327,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          # --append-git-tag "--merged HEAD" 只取本分支可达的 tag
+          # v2 是对 v1 的完全重写，v2 的第一个提交是 root commit，两者没有共同祖先
+          # 而 v1 的 13 个 tag 仍被 fetch 到本地，git tag -l 会列出它们
+          # 不加这一项时，最新 tag 被当作前一版，v2.0.0 的对比链接会指向 v1.7.1
+          # 该链接上 GitHub 给出的是 "entirely different commit histories"
+          #
+          # --append-git-tag "--merged HEAD" keeps only tags reachable from this branch
+          # v2 is a complete rewrite of v1 and v2's first commit is a root commit, so the two share no ancestor
+          # The 13 v1 tags are still fetched locally and git tag -l lists them
+          # Without this option the newest tag is taken as the previous release, so the v2.0.0 compare link points at v1.7.1
+          # On that link GitHub reports "entirely different commit histories"
           npx auto-changelog-plus \
             --starting-version "${{ github.ref_name }}" \
+            --append-git-tag "--merged HEAD" \
             --handlebars-setup node_modules/auto-changelog-plus/settings/setup.cjs
 
           # 删掉前 4 行，也就是标题、说明与两者之间的空行
