@@ -112,6 +112,10 @@ To write a whole set of mappings by hand instead of through the GUI, see the for
 
 ## 📦 Build from Source
 
+> [!TIP]
+> Want to contribute code?
+> The recommended development and verification flow is in the [development workflow](docs/DEVELOPMENT.md)
+
 ### Prerequisites
 
 - [.NET SDK 10.0+](https://dotnet.microsoft.com/download)

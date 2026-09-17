@@ -112,6 +112,10 @@ MIDITap 是一个调用 Windows 原生 API 的低延迟 MIDI → 键盘映射工
 
 ## 📦 从源码构建
 
+> [!TIP]
+> 希望为项目提交代码?
+> 推荐的开发、验证流程详见 [开发流程](docs/DEVELOPMENT_zh-CN.md)
+
 ### 环境要求
 
 - [.NET SDK 10.0+](https://dotnet.microsoft.com/download)
