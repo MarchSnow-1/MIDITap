@@ -40,12 +40,12 @@ public sealed class UpdateOptionsTests
     [InlineData("  http://127.0.0.1:8080  ")]
     // socks 是**刻意支持**的：本机代理常见的就是 http 与 socks5 两种
     // 而界面文案对用户承诺了"可使用 socks5 及 http 代理"
-    // 这几条就是那句承诺的依据（.NET 8 支持 http/https/socks4/socks4a/socks5，实测）
+    // 这几条就是那句承诺的依据（运行时支持 http/https/socks4/socks4a/socks5，实测）
     //
     // socks is supported **deliberately**
     // http and socks5 are the two kinds of local proxy one commonly has
     // The UI copy promises the user that "socks5 and http proxies are supported"
-    // These cases are what backs that promise (.NET 8 supports http/https/socks4/socks4a/socks5, measured)
+    // These cases are what backs that promise (the runtime supports http/https/socks4/socks4a/socks5, measured)
     [InlineData("socks5://127.0.0.1:1080")]
     [InlineData("socks4://127.0.0.1:1080")]
     [InlineData("socks4a://127.0.0.1:1080")]
@@ -141,11 +141,17 @@ public sealed class UpdateAssetSelectorTests
     [Fact]
     public void Choice_does_not_depend_on_asset_order()
     {
-        // 唯一结果时，顺序不应影响选择 / With a single candidate the order must not affect the choice
+        // 唯一结果时，顺序不应影响选择
+        // 显式写 Enumerable.Reverse：数组没有实例 Reverse，交给扩展方法解析时
+        // 选中的重载随编译器版本变化，返回类型可能是 void
+        //
+        // With a single candidate the order must not affect the choice
+        // Enumerable.Reverse is written out: an array has no instance Reverse,
+        // and extension-method resolution picks a different overload per compiler version, one of which returns void
         var only = new[] { Asset("MIDITap-v2.1.0-win-x64.zip") };
         Assert.Equal(
             UpdateAssetSelector.Select(only)!.Name,
-            UpdateAssetSelector.Select(only.Reverse())!.Name);
+            UpdateAssetSelector.Select(Enumerable.Reverse(only))!.Name);
     }
 }
 

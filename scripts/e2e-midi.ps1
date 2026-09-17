@@ -55,7 +55,7 @@
 [CmdletBinding()]
 param(
     [string]$PortName = "MIDITap-TestConfig",
-    [string]$AppDir = "src/MIDITap.App/bin/x64/Debug/net8.0-windows10.0.19041.0",
+    [string]$AppDir = "src/MIDITap.App/bin/x64/Debug/net10.0-windows10.0.19041.0",
     [switch]$SkipBuild
 )
 

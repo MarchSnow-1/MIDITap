@@ -39,9 +39,9 @@ public sealed class MidiLoopbackSession : IDisposable
     private readonly MidiIn _input;
     private readonly IntPtr _output;
     private readonly List<byte[]> _received = [];
-    // 用 object 而不是 .NET 9 的 System.Threading.Lock：本项目目标框架是 net8.0
+    // 用 object 而非 System.Threading.Lock：本次只做框架升级，不改锁的实现语义
     //
-    // An object rather than .NET 9's System.Threading.Lock: this project targets net8.0
+    // An object rather than System.Threading.Lock: this change only moves the target framework, leaving lock semantics untouched
     private readonly object _gate = new();
     private readonly ManualResetEventSlim _signal = new(false);
 

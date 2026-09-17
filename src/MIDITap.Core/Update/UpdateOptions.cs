@@ -53,12 +53,12 @@ public sealed record UpdateOptions(string? ProxyUrl = null)
             return null;
         }
         // 只放行 HttpClientHandler 真正支持的 scheme
-        // 给 WebProxy 设一个 ftp:// 地址时，.NET 8 会直接报
+        // 给 WebProxy 设一个 ftp:// 地址时，运行时会直接报
         // "Only the 'http', 'https', 'socks4', 'socks4a' and 'socks5' schemes are allowed for proxies."
         // 其余 scheme（file: 等）不是代理，放行没有意义
         //
         // Only the schemes HttpClientHandler really supports are allowed
-        // Setting an ftp:// address on WebProxy makes .NET 8 report
+        // Setting an ftp:// address on WebProxy makes the runtime report
         // "Only the 'http', 'https', 'socks4', 'socks4a' and 'socks5' schemes are allowed for proxies."
         // Other schemes (file: and so on) are not proxies, so allowing them would be meaningless
         if (!AllowedSchemes.Contains(uri.Scheme, StringComparer.OrdinalIgnoreCase))

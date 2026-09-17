@@ -67,7 +67,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       # 生成发布说明要用 auto-changelog-plus（Node 包），且必须走本地安装
       # 理由见文件头：helper 的相对路径要能解析到 node_modules

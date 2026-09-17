@@ -1,10 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
+    <!-- 语言版本显式钉在 14，不用 latest：latest 会随机器上最高的 SDK 浮动，
+         同一份源码在不同机器上可能编译出不同结果
+
+         The language version is pinned to 14 rather than latest: latest floats with the highest
+         SDK on the machine, so the same source may compile to different results on different machines -->
+    <LangVersion>14</LangVersion>
     <IsPackable>false</IsPackable>
     <!-- 集成测试需要真实 MIDI 端口，因此**不在 CI 上失败**
          端口不存在时用例自动跳过（见 MidiFactAttribute）
@@ -17,9 +22,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="xunit" Version="2.9.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
     <!-- 与被测应用使用同一 MIDI 栈
          集成测试要验证的正是"应用实际走的那条路"
          同样只引用 NAudio.Midi，而非元包
@@ -28,7 +33,7 @@
          The point is to exercise the path the app really uses
          Again NAudio.Midi only, not the metapackage
          The metapackage would drag in NAudio.WinForms and the WPF/WinForms assemblies -->
-    <PackageReference Include="NAudio.Midi" Version="2.2.1" />
+    <PackageReference Include="NAudio.Midi" Version="2.4.0" />
   </ItemGroup>
 
   <ItemGroup>

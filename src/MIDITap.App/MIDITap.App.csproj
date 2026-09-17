@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <RootNamespace>MIDITap.App</RootNamespace>
@@ -20,7 +20,12 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
+    <!-- 语言版本显式钉在 14，不用 latest：latest 会随机器上最高的 SDK 浮动，
+         同一份源码在不同机器上可能编译出不同结果
+
+         The language version is pinned to 14 rather than latest: latest floats with the highest
+         SDK on the machine, so the same source may compile to different results on different machines -->
+    <LangVersion>14</LangVersion>
     <!-- 版本号与根目录 package.json 保持一致：npm version 改的是 package.json，这里不会自动跟着变
          发布时 release.yml 会用标签版本注入 -p:Version 覆盖它
 
@@ -28,12 +33,12 @@
          npm version edits package.json only, so this value does not follow automatically
          At release time release.yml overrides it by injecting -p:Version with the tag version -->
     <Version>1.7.1</Version>
-    <!-- 版本号后面默认不追加 git 提交哈希
-         .NET 8 默认会追加（InformationalVersion 变成 "1.7.1+<40位哈希>"）
+    <!-- 版本号后面不追加 git 提交哈希
+         SDK 默认会追加，把 InformationalVersion 变成 "1.7.1+<40位哈希>"
          而这一串会直接显示在「关于」区，既难看又不好抄
          开发构建需要可区分时，由 dev.yml 显式传入带标识的版本号（见那里的说明）
-         Do not append the git commit hash to the version by default
-         .NET 8 does by default, which turns InformationalVersion into "1.7.1+<40-char hash>"
+         Do not append the git commit hash to the version
+         The SDK does by default, turning InformationalVersion into "1.7.1+<40-char hash>"
          That string then shows up verbatim under About — ugly and awkward to copy
          Development builds pass an identifying version explicitly from dev.yml instead -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -42,7 +47,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260804001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <!-- 只引用 NAudio.Midi，而不是 NAudio 元包
          元包会把 NAudio.WinForms 一起拉进来，进而带上 System.Windows.Forms 与 PresentationFramework/PresentationCore（WPF）
@@ -54,7 +59,7 @@
          This app is WinUI 3 and its source uses only NAudio.Midi
          Those assemblies are dead weight
  -->
-    <PackageReference Include="NAudio.Midi" Version="2.2.1" />
+    <PackageReference Include="NAudio.Midi" Version="2.4.0" />
   </ItemGroup>
 
   <ItemGroup>

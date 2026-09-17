@@ -11,7 +11,7 @@
 
 <!-- Badges -->
 
-[![.NET 8.0 / C#](https://img.shields.io/badge/.NET%208.0-C%23-239120?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/languages/csharp)
+[![.NET 10.0 / C#](https://img.shields.io/badge/.NET%2010.0-C%23-239120?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/languages/csharp)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange?style=for-the-badge)](LICENSE)
 <br>
 ![Platform](https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge)
@@ -114,7 +114,7 @@ To write a whole set of mappings by hand instead of through the GUI, see the for
 
 ### Prerequisites
 
-- [.NET SDK 8.0+](https://dotnet.microsoft.com/download)
+- [.NET SDK 10.0+](https://dotnet.microsoft.com/download)
 - Windows 10 1809+ / Windows 11
 - Git
 

@@ -1,19 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- net8.0-windows 而非 net8.0：本应用只支持 Windows
+    <!-- net10.0-windows 而非 net10.0：本应用只支持 Windows
          显式声明平台后，分析器不会再要求给 Windows 专有 API 加 OperatingSystem.IsWindows() 守卫
          那些守卫会掩盖真实的平台依赖
          这不改变功能，只是把"仅 Windows"写进项目声明，而不是靠注释说明
 
-         net8.0-windows rather than net8.0: the app is Windows-only
+         net10.0-windows rather than net10.0: the app is Windows-only
          Declaring the platform stops the analyzer from demanding OperatingSystem.IsWindows() guards
          Those guards would surround Windows-specific APIs and obscure the real platform dependency
          It changes no behaviour: Windows-only belongs in the project declaration rather than in a comment -->
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
+    <!-- 语言版本显式钉在 14，不用 latest：latest 会随机器上最高的 SDK 浮动，
+         同一份源码在不同机器上可能编译出不同结果
+
+         The language version is pinned to 14 rather than latest: latest floats with the highest
+         SDK on the machine, so the same source may compile to different results on different machines -->
+    <LangVersion>14</LangVersion>
     <Version>1.7.1</Version>
     <Description>MIDITap core logic: MIDI note state machine, key injection, JSON5 mapping config editing (comment preserving), settings storage and update checking.</Description>
   </PropertyGroup>
