@@ -226,16 +226,28 @@ jobs:
           # 三个候选位置都找一遍
           # choco 通常装在 Program Files (x86)，但安装器版本变了以后可能落到 Program Files 或用户目录
           # 只认一个路径会让发布因为找不到编译器而失败
+          # 第一项的花括号不能省：$env:ProgramFiles(x86) 会解析成 C:\Program Files(x86)，少一个空格，于是永远匹配不到
           #
           # Three candidates are tried
           # choco usually lands under Program Files (x86), yet a different installer version may put it under Program Files or the user profile
           # Trusting one path would fail a release over a missing compiler
+          # The braces in the first entry are required: $env:ProgramFiles(x86) parses as C:\Program Files(x86) with the space missing, so it never matches
           $isccCandidates = @(
-            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
             "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
             "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
           )
           $iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          # 三个候选都没命中时再搜一遍：安装位置会随安装器版本变化，猜路径迟早会猜错
+          # 只搜这三棵树的浅层目录，不遍历整个 Program Files
+          #
+          # If none of the three exists, search once: the install location moves between installer versions, and a guessed path eventually misses
+          # Only the shallow levels of those three roots are searched, so the whole of Program Files is not walked
+          if (-not $iscc) {
+            $iscc = Get-ChildItem -Path @("${env:ProgramFiles(x86)}", $env:ProgramFiles, "$env:LOCALAPPDATA\Programs") `
+              -Filter "ISCC.exe" -Recurse -Depth 2 -File -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
           if (-not $iscc) {
             throw ("ISCC.exe not found after install; looked in: " + ($isccCandidates -join ", "))
           }
