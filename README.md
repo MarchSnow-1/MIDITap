@@ -21,6 +21,15 @@
 
 </div>
 
+> [!WARNING]
+> **This branch is no longer maintained**
+>
+> This branch is the `v1` release of MIDITap, written in Node.js + Neutralino, kept for reference only
+> The project has been rewritten in C# with WinUI 3
+> See the [`v2`](../../tree/v2) branch for the current version
+>
+> Everything below describes that earlier implementation and no longer matches the code under development
+
 ## 📖 Introduction
 
 MIDITap is a low-latency MIDI-to-keyboard mapping tool built on native Windows APIs.

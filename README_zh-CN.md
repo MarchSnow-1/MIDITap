@@ -21,6 +21,14 @@
 
 </div>
 
+> [!WARNING]
+> **本分支已停止维护**
+>
+> 本分支是 MIDITap 使用 Node.js + Neutralino 编写的 `v1` 版本，仅供留档参考
+> 项目已用 C# 与 WinUI 3 重写，当前版本请见 [`v2`](../../tree/v2) 分支
+>
+> 以下内容描述的是旧版实现，与正在开发的代码已不再对应
+
 ## 📖 使用须知
 
 MIDITap 是一个调用 Windows 原生 API 的低延迟 MIDI → 键盘映射工具
