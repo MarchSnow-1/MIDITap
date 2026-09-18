@@ -146,6 +146,104 @@ public sealed class UpdateFallbackOrderTests
     }
 
     [Fact]
+    public async Task Carries_the_quota_from_a_403_into_the_fallback_result()
+    {
+        // 界面要说明"什么时候能再试"，因此 403 的配额头必须一路送到回退结果里
+        // 重置时间单独就有用，而"0/60"需要剩余次数与上限两个头
+        //
+        // The UI has to say when the API may be tried again, so the quota headers must reach the fallback result
+        // The reset time is useful on its own, while "0/60" needs both the remaining and the limit header
+        const string pageHtml = """
+            <a href="/username/repository/releases/download/v9.9.9/MIDITap-v9.9.9-win-x64.zip">dl</a>
+            """;
+
+        using var api = new MiniHttpServer(_ => (403, null, "{\"message\":\"rate limit\"}"));
+        api.ExtraHeaders["x-ratelimit-reset"] = "1790000000";
+        api.ExtraHeaders["x-ratelimit-remaining"] = "0";
+        api.ExtraHeaders["x-ratelimit-limit"] = "60";
+        using var page = new MiniHttpServer(path => path switch
+        {
+            var p when p.StartsWith("/releases/latest") => (302, "/releases/tag/v9.9.9", string.Empty),
+            var p when p.Contains("/expanded_assets/") => (200, null, pageHtml),
+            _ => (404, null, string.Empty),
+        });
+
+        var endpoints = new UpdateEndpoints(
+            api.BaseUrl + "/latest", page.BaseUrl + "/releases/latest", page.BaseUrl + "/releases");
+
+        var outcome = await UpdateChecker.CheckWithReasonAsync("1.0.0", NoProxy, endpoints);
+
+        Assert.True(outcome.Ok);
+        var quota = outcome.Info!.RateLimit;
+        Assert.NotNull(quota);
+        Assert.Equal(0, quota.Remaining);
+        Assert.Equal(60, quota.Limit);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1790000000).ToLocalTime(), quota.Reset);
+    }
+
+    [Fact]
+    public async Task Carries_only_the_reset_time_when_the_other_quota_headers_are_absent()
+    {
+        // 三个头各自独立，只有重置时间时省掉配额数字，而不是拼一个假的"0/60"
+        //
+        // The three headers are independent, so with only the reset time the quota figures are omitted
+        // rather than inventing a "0/60"
+        const string pageHtml = """
+            <a href="/username/repository/releases/download/v9.9.9/MIDITap-v9.9.9-win-x64.zip">dl</a>
+            """;
+
+        using var api = new MiniHttpServer(_ => (403, null, "{\"message\":\"rate limit\"}"));
+        api.ExtraHeaders["x-ratelimit-reset"] = "1790000000";
+        using var page = new MiniHttpServer(path => path switch
+        {
+            var p when p.StartsWith("/releases/latest") => (302, "/releases/tag/v9.9.9", string.Empty),
+            var p when p.Contains("/expanded_assets/") => (200, null, pageHtml),
+            _ => (404, null, string.Empty),
+        });
+
+        var endpoints = new UpdateEndpoints(
+            api.BaseUrl + "/latest", page.BaseUrl + "/releases/latest", page.BaseUrl + "/releases");
+
+        var outcome = await UpdateChecker.CheckWithReasonAsync("1.0.0", NoProxy, endpoints);
+
+        Assert.True(outcome.Ok);
+        var quota = outcome.Info!.RateLimit;
+        Assert.NotNull(quota);
+        Assert.Null(quota.Remaining);
+        Assert.Null(quota.Limit);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1790000000).ToLocalTime(), quota.Reset);
+    }
+
+    [Fact]
+    public async Task Reports_no_quota_when_a_403_carries_none_of_the_headers()
+    {
+        // 403 但没有任何配额头（例如被中间设备改写）：界面退回通用文案
+        // 这里返回 null 而不是一个全空的记录，界面只需判断"有没有配额信息"
+        //
+        // A 403 without any quota header, e.g. rewritten by an intermediary: the UI falls back to generic wording
+        // This yields null rather than an empty record, so the UI only asks whether quota information exists
+        const string pageHtml = """
+            <a href="/username/repository/releases/download/v9.9.9/MIDITap-v9.9.9-win-x64.zip">dl</a>
+            """;
+
+        using var api = new MiniHttpServer(_ => (403, null, "{\"message\":\"rate limit\"}"));
+        using var page = new MiniHttpServer(path => path switch
+        {
+            var p when p.StartsWith("/releases/latest") => (302, "/releases/tag/v9.9.9", string.Empty),
+            var p when p.Contains("/expanded_assets/") => (200, null, pageHtml),
+            _ => (404, null, string.Empty),
+        });
+
+        var endpoints = new UpdateEndpoints(
+            api.BaseUrl + "/latest", page.BaseUrl + "/releases/latest", page.BaseUrl + "/releases");
+
+        var outcome = await UpdateChecker.CheckWithReasonAsync("1.0.0", NoProxy, endpoints);
+
+        Assert.True(outcome.Ok);
+        Assert.Null(outcome.Info!.RateLimit);
+    }
+
+    [Fact]
     public async Task Falls_back_when_the_api_returns_a_server_error()
     {
         // 放宽后的回退条件：API 的 **任何** 失败都触发回退，不只 403

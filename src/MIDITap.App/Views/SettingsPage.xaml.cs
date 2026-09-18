@@ -387,7 +387,7 @@ public sealed partial class SettingsPage : Page
         var failure = UpdateFailure.None;
         var httpStatus = 0;
         var detail = (string?)null;
-        DateTimeOffset? rateLimitReset = null;
+        RateLimitInfo? rateLimit = null;
         try
         {
             var outcome = await Core.Update.UpdateChecker.CheckWithReasonAsync(
@@ -408,7 +408,7 @@ public sealed partial class SettingsPage : Page
                 failure = outcome.Failure;
                 httpStatus = outcome.HttpStatus;
                 detail = outcome.Detail;
-                rateLimitReset = outcome.RateLimitReset;
+                rateLimit = outcome.RateLimit;
             }
         }
         finally
@@ -427,7 +427,7 @@ public sealed partial class SettingsPage : Page
                     // For network failures in particular, the overwhelmingly common cause is that the network requires a proxy
                     // So that possibility is stated outright
                     ToastService.Show(
-                        DescribeUpdateFailure(failure, httpStatus, detail, rateLimitReset),
+                        DescribeUpdateFailure(failure, httpStatus, detail, rateLimit),
                         severity: Core.Notifications.ToastSeverity.Warning);
                 }
                 else
@@ -451,7 +451,7 @@ public sealed partial class SettingsPage : Page
     /// The former means "check your proxy", the latter means "you may need one"
     /// </summary>
     private string DescribeUpdateFailure(
-        UpdateFailure failure, int httpStatus, string? detail, DateTimeOffset? rateLimitReset)
+        UpdateFailure failure, int httpStatus, string? detail, RateLimitInfo? rateLimit)
     {
         Func<string, string> t = AppServices.I18n.T;
         var proxy = AppStorage.GetUpdateProxy(AppServices.BaseDir);
@@ -467,9 +467,9 @@ public sealed partial class SettingsPage : Page
             //
             // A 403 with a reset time names the time; otherwise it falls back to a general note
             // Kept short on purpose: the toast is narrow and long sentences got cut off mid-clause
-            UpdateFailure.Http when httpStatus == 403 && rateLimitReset is not null =>
+            UpdateFailure.Http when httpStatus == 403 && rateLimit?.Reset is not null =>
                 AppServices.I18n.T("update.failed.rateLimited",
-                    ("time", rateLimitReset.Value.ToString("HH:mm"))),
+                    ("time", rateLimit.Reset.Value.ToString("HH:mm"))),
             UpdateFailure.Http => AppServices.I18n.T(
                 "update.failed.http", ("status", httpStatus.ToString())),
             UpdateFailure.Parse => t("update.failed.parse"),

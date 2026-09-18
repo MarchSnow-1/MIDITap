@@ -32,6 +32,11 @@ namespace MIDITap.Core.Update;
 /// The fallback path therefore carries null notes and sets <paramref name="ViaFallback"/> to true
 /// The UI uses that to say "the preview is unavailable, view it on the release page"
 /// rather than leaving an empty notes area
+/// 回退是**因为 API 失败**，而失败若是 403 就带着配额信息
+/// 因此 <paramref name="RateLimit"/> 让界面能说明"什么时候能再试"，而不是只说"看不了"
+///
+/// The fallback happens because the API failed, and a 403 failure carries the quota with it
+/// <paramref name="RateLimit"/> therefore lets the UI say when to try again, not merely that the preview is missing
 /// </summary>
 public sealed record UpdateInfo(
     string Latest,
@@ -39,7 +44,8 @@ public sealed record UpdateInfo(
     string Url,
     UpdateAsset? Asset = null,
     string? Notes = null,
-    bool ViaFallback = false);
+    bool ViaFallback = false,
+    RateLimitInfo? RateLimit = null);
 
 /// <summary>
 /// 检查失败的**可归因原因**。为什么要分类而不是只给一个 bool
@@ -73,12 +79,14 @@ public enum UpdateFailure
 }
 
 /// <summary>带失败原因的检查结果</summary>
-/// <param name="RateLimitReset">
-/// HTTP 403 且响应带 x-ratelimit-reset 时的配额重置时间（本地时间）
-/// 这是 403 唯一有用的信息：告诉用户"什么时候再试"而不是"失败了"
+/// <param name="RateLimit">
+/// HTTP 403 时从响应头解析出的配额：剩余次数、每小时上限、重置时间（本地时间）
+/// 这是 403 最有用的信息：告诉用户"什么时候能再试"，而不是只说"失败了"
+/// 非 403 的失败没有这些头，因此该值为 null
 ///
-/// The quota reset time when a 403 carries x-ratelimit-reset
-/// This is the only useful thing to say about a 403: when to try again, not merely that it failed
+/// The quota parsed from the response headers on a 403: remaining, limit and the reset time
+/// That is the most useful thing to say about a 403: when to try again rather than merely that it failed
+/// Failures other than a 403 carry none of those headers, so this is null for them
 /// </param>
 public sealed record UpdateCheckOutcome(
     UpdateInfo? Info,
@@ -86,7 +94,7 @@ public sealed record UpdateCheckOutcome(
     UpdateFailure Failure = UpdateFailure.None,
     int HttpStatus = 0,
     string? Detail = null,
-    DateTimeOffset? RateLimitReset = null);
+    RateLimitInfo? RateLimit = null);
 
 public static class UpdateChecker
 {
@@ -231,7 +239,8 @@ public static class UpdateChecker
         // 2) API 失败 -> 网页路径
         //
         // 2) API failed -> the web page path
-        var viaPage = await CheckViaReleasePageAsync(currentVersion, options, endpoints, cancellationToken)
+        var viaPage = await CheckViaReleasePageAsync(
+            currentVersion, options, endpoints, viaApi.RateLimit, cancellationToken)
             .ConfigureAwait(false);
         if (viaPage is not null)
         {
@@ -275,16 +284,12 @@ public static class UpdateChecker
                 //
                 // A 403 is nearly always the anonymous API quota (60 requests/hour per egress IP)
                 // The header carries the reset time; surfacing it beats surfacing the status code
-                DateTimeOffset? reset = null;
+                RateLimitInfo? quota = null;
                 if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                 {
                     try
                     {
-                        if (response.Headers.TryGetValues("x-ratelimit-reset", out var values)
-                            && long.TryParse(values.FirstOrDefault(), out var epoch))
-                        {
-                            reset = DateTimeOffset.FromUnixTimeSeconds(epoch).ToLocalTime();
-                        }
+                        quota = ReadRateLimit(response);
                     }
                     catch
                     {
@@ -298,7 +303,7 @@ public static class UpdateChecker
                 //
                 // The fallback to the web path is handled by CheckWithReasonAsync
                 // Here we only report the failure faithfully
-                return new UpdateCheckOutcome(null, false, UpdateFailure.Http, status, null, reset);
+                return new UpdateCheckOutcome(null, false, UpdateFailure.Http, status, null, quota);
             }
 
             var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -373,16 +378,53 @@ public static class UpdateChecker
     }
 
     /// <summary>
+    /// 从 403 的响应头读出配额：剩余次数、每小时上限、重置时间
+    /// 三个头各自独立，缺哪个就把哪个留成 null，界面按"有什么显示什么"处理
+    /// 三个都没有时返回 null，表示"没有任何配额信息"，而不是一个全空的记录
+    ///
+    /// Reads the quota from a 403 response's headers: remaining, hourly limit and the reset time
+    /// The three headers are independent, so a missing one stays null and the UI shows what it has
+    /// All three absent yields null, meaning "no quota information", rather than an empty record
+    /// </summary>
+    private static RateLimitInfo? ReadRateLimit(HttpResponseMessage response)
+    {
+        DateTimeOffset? reset = null;
+        if (long.TryParse(ReadHeader(response, "x-ratelimit-reset"), out var epoch))
+        {
+            // 头里是 Unix 秒（UTC），转成本地时间供界面直接显示
+            //
+            // The header carries Unix seconds in UTC, converted here so the UI can show it directly
+            reset = DateTimeOffset.FromUnixTimeSeconds(epoch).ToLocalTime();
+        }
+
+        var remaining = ReadIntHeader(response, "x-ratelimit-remaining");
+        var limit = ReadIntHeader(response, "x-ratelimit-limit");
+
+        return remaining is null && limit is null && reset is null
+            ? null
+            : new RateLimitInfo(remaining, limit, reset);
+    }
+
+    private static string? ReadHeader(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
+
+    private static int? ReadIntHeader(HttpResponseMessage response, string name)
+        => int.TryParse(ReadHeader(response, name), out var value) ? value : null;
+
+    /// <summary>
     /// 经网页检查最新版本：/releases/latest 的 302 给出标签，expanded_assets 给出真实资源列表
     /// 返回 null 表示网页路径也失败（此时调用方按原错误上报）
+    /// rateLimit 是 API 那次 403 带回来的配额，原样放进回退结果，界面据此说明何时能再试
     ///
     /// Checks via the web page: the 302 from /releases/latest yields the tag
     /// expanded_assets yields the real asset list
     /// Null means the web path failed too, so the caller reports the original error
+    /// rateLimit is the quota the failed API call returned, carried into the fallback result
+    /// The UI uses it to say when the API may be tried again
     /// </summary>
     private static async Task<UpdateCheckOutcome?> CheckViaReleasePageAsync(
         string currentVersion, UpdateOptions options, UpdateEndpoints endpoints,
-        CancellationToken cancellationToken)
+        RateLimitInfo? rateLimit, CancellationToken cancellationToken)
     {
         try
         {
@@ -447,7 +489,8 @@ public static class UpdateChecker
             // Notes therefore stays null, and the UI hides the "what's new" section accordingly
             // That is a limitation of the sources, not something the parsing missed
             return new UpdateCheckOutcome(
-                new UpdateInfo(tag, currentVersion, ReleasesUrl, asset, ViaFallback: true), true);
+                new UpdateInfo(
+                    tag, currentVersion, ReleasesUrl, asset, ViaFallback: true, RateLimit: rateLimit), true);
         }
         catch (Exception err)
         {

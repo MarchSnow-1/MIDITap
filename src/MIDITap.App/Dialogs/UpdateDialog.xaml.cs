@@ -324,6 +324,54 @@ public sealed partial class UpdateDialog : ContentDialog
         NotesChevron.Glyph = expanded ? "\uE70E" : "\uE70D";
     }
 
+    /// <summary>
+    /// 预览不可用时的说明
+    /// 回退是因为 API 失败，而失败若带着配额信息，就能说明"什么时候能再试"
+    /// 那比只说"看不了"有用得多，因此这里按已知的信息分三种写法
+    ///
+    /// The explanation shown when the preview is unavailable
+    /// The fallback happened because the API failed, and a failure carrying quota information can say when to try again
+    /// That beats merely saying the preview is missing, so there are three forms depending on what is known
+    /// </summary>
+    private string DescribeUnavailableNotes()
+    {
+        var quota = _info.RateLimit;
+        var reset = quota?.Reset;
+        var now = DateTimeOffset.Now;
+
+        // 重置时间已经过去时不再报时间，那会让用户以为还要继续等
+        // 此刻配额其实已经恢复，下一次检查本来就该成功
+        //
+        // A reset time in the past is not reported, since it would suggest there is still a wait ahead
+        // The quota has in fact been restored by then, and the next check should simply succeed
+        if (reset is null || reset <= now)
+        {
+            return AppServices.I18n.T("update.notes.unavailable");
+        }
+
+        // 不足一分钟也报 1，否则会显示"还有 0 分钟"
+        //
+        // Anything under a minute still reads as 1, so the text never says "in 0 minutes"
+        var minutes = Math.Max(1, (int)Math.Ceiling((reset.Value - now).TotalMinutes));
+        var time = reset.Value.ToString("HH:mm");
+
+        if (quota!.Remaining is not null && quota.Limit is not null)
+        {
+            return AppServices.I18n.T("update.notes.rateLimit",
+                ("remaining", quota.Remaining.Value.ToString()),
+                ("limit", quota.Limit.Value.ToString()),
+                ("reset", time),
+                ("minutes", minutes.ToString()));
+        }
+
+        // 只有重置时间时省掉配额数字：三个头各自独立，缺一个就不能拼出"0/60"
+        //
+        // The quota figures are omitted when only the reset time is known
+        // The three headers are independent, and "0/60" cannot be built without both of them
+        return AppServices.I18n.T("update.notes.rateLimitNoQuota",
+            ("reset", time), ("minutes", minutes.ToString()));
+    }
+
     private void RefreshTexts()
     {
         Func<string, string> t = AppServices.I18n.T;
@@ -348,7 +396,7 @@ public sealed partial class UpdateDialog : ContentDialog
         // The header is drawn by hand, so its text is not picked up as an automation name; it is set explicitly
         // Screen readers and automated tests both rely on it to find this control
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(NotesToggle, t("update.notes"));
-        NotesUnavailableText.Text = t("update.notes.unavailable");
+        NotesUnavailableText.Text = DescribeUnavailableNotes();
         PageBtn.Content = t("update.notes.viewOnPage");
         IgnoreBtn.Content = t("update.ignoreVersion");
         NeverRemindBtn.Content = t("update.neverRemind");
