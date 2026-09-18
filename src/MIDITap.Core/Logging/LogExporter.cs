@@ -39,6 +39,7 @@
 // The export is a file meant to be read elsewhere, so its format is fixed
 // It therefore does not follow the local locale
 
+using System.Formats.Tar;
 using System.IO.Compression;
 using System.Text;
 
@@ -151,6 +152,168 @@ public static class LogExporter
         return new LogExportResult(zipPath, entries.Count);
     }
 
+    /// <summary>
+    /// 按时间顺序列出日志目录里可导出的来源
+    /// 单次会话按（日期，编号）排序，整天归档按日期占位
+    /// 两者不会落在同一天：会话文件只属于今天，归档只属于更早的日期
+    ///
+    /// Lists the exportable sources in the log directory in chronological order
+    /// Sessions sort by date then number, and a whole-day archive takes its date slot
+    /// The two never share a date: session files belong to today and archives to earlier days
+    /// </summary>
+    public static IReadOnlyList<string> ListExportSources(string logDirectory)
+    {
+        if (!Directory.Exists(logDirectory))
+        {
+            return [];
+        }
+
+        var ordered = new List<(DateOnly Date, int Order, string Path)>();
+        foreach (var path in Directory.GetFiles(logDirectory))
+        {
+            var info = LogFileNames.Parse(Path.GetFileName(path));
+            switch (info.Shape)
+            {
+                case LogFileShape.Session when info.Date is { } sessionDate:
+                    ordered.Add((sessionDate, info.Session ?? 0, path));
+                    break;
+                case LogFileShape.DayArchive when info.Date is { } archiveDate:
+                    ordered.Add((archiveDate, 0, path));
+                    break;
+            }
+        }
+
+        return ordered
+            .OrderBy(entry => entry.Date)
+            .ThenBy(entry => entry.Order)
+            .Select(entry => entry.Path)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 从落盘的日志文件打包，边读边写，不把全文拼成一个字符串
+    /// 为什么必须流式：保留期内可能有几百 MB，先拼成字符串再转 UTF-8 会同时占住两份
+    /// 级别筛选在这里做：每一行都带 [level]，没有级别的结构性行（会话头、截断标记）一律保留
+    ///
+    /// Packs from the on-disk log files, reading and writing as it goes rather than building one big string
+    /// Why streaming is required: the retention window can hold hundreds of MB, and building a string first would
+    /// hold two copies at once
+    /// Level filtering happens here: every log line carries [level], and structural lines without one
+    /// (session headers, the truncation marker) are always kept
+    /// </summary>
+    public static LogExportResult ExportFromSources(
+        string zipPath,
+        IReadOnlyList<string> sources,
+        string environmentText,
+        DateTimeOffset now,
+        IReadOnlyCollection<string>? levels = null)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(zipPath));
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var selected = levels is null ? null : new HashSet<string>(levels, StringComparer.OrdinalIgnoreCase);
+        var tempPath = zipPath + ".tmp";
+        var written = 0;
+        try
+        {
+            using (var archive = ZipFile.Open(tempPath, ZipArchiveMode.Create))
+            {
+                var entry = archive.CreateEntry(LogEntryName, CompressionLevel.Optimal);
+                using (var stream = entry.Open())
+                using (var writer = new StreamWriter(stream, Utf8NoBom))
+                {
+                    writer.WriteLine(
+                        "===== MIDITap log export | exported " + FormatTimestamp(now)
+                        + " | sources " + sources.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + " =====");
+
+                    foreach (var source in sources)
+                    {
+                        written += CopySource(writer, source, selected);
+                    }
+                }
+
+                WriteEntry(archive, EnvironmentEntryName, environmentText);
+            }
+
+            File.Move(tempPath, zipPath, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(tempPath);
+            throw;
+        }
+
+        return new LogExportResult(zipPath, written);
+    }
+
+    /// <summary>把一个来源的内容写进导出文本，返回写入的行数 / Copies one source into the exported text, returning the lines written</summary>
+    private static int CopySource(TextWriter writer, string source, HashSet<string>? levels)
+    {
+        var info = LogFileNames.Parse(Path.GetFileName(source));
+
+        if (info.Shape == LogFileShape.DayArchive)
+        {
+            var lines = 0;
+            using var file = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var gzip = new GZipStream(file, CompressionMode.Decompress);
+            using var tar = new TarReader(gzip);
+            while (tar.GetNextEntry() is { } entry)
+            {
+                if (entry.DataStream is null)
+                {
+                    continue;
+                }
+
+                using (var reader = new StreamReader(entry.DataStream, Utf8NoBom))
+                {
+                    lines += CopyLines(writer, reader, levels);
+                }
+
+                // 条目之间留一空行：解开后一眼能看出会话的分界
+                //
+                // A blank line between entries, so the session boundary is visible at a glance
+                writer.WriteLine();
+            }
+            return lines;
+        }
+
+        // 会话文件一律是明文，因此这里直接按文本读
+        //
+        // A session file is always plain text, so it is read as text directly
+        using var plain = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var sessionReader = new StreamReader(plain, Utf8NoBom);
+        return CopyLines(writer, sessionReader, levels);
+    }
+
+    /// <summary>
+    /// 逐行搬运，并按级别筛选
+    /// 没有级别的行（会话头等）始终保留：它们不是日志内容，而是这份日志的结构
+    ///
+    /// Copies line by line, filtering by level
+    /// A line without a level (a session header, say) is always kept: it is structure rather than log content
+    /// </summary>
+    private static int CopyLines(TextWriter writer, TextReader reader, HashSet<string>? levels)
+    {
+        var written = 0;
+        while (reader.ReadLine() is { } line)
+        {
+            if (levels is not null
+                && LogLineFormat.LevelOf(line) is { } level
+                && !levels.Contains(LogLevels.Normalize(level)))
+            {
+                continue;
+            }
+
+            writer.WriteLine(line);
+            written++;
+        }
+        return written;
+    }
+
     private static void WriteEntry(ZipArchive archive, string name, string text)
     {
         var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
@@ -186,11 +349,7 @@ public static class LogExporter
         // The exported file is precisely the copy other people read, so they are the last thing to drop
         foreach (var entry in entries)
         {
-            builder.Append(FormatTimestamp(entry.Time))
-                .Append(" [")
-                .Append(entry.Level)
-                .Append("] ")
-                .AppendLine(entry.Message);
+            builder.AppendLine(LogLineFormat.Format(entry.Time, entry.Level, entry.Message));
         }
 
         return builder.ToString();

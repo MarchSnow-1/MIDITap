@@ -64,6 +64,7 @@
   "log.export.fileType": "Zip 压缩包",
   "log.export.hint": "把本次运行的日志导出并打包为压缩文件",
   "log.export.include": "包含的级别",
+  "log.export.memoryOnly": "（仅内存中的最近记录，未找到落盘日志）",
   "log.export.saved": "日志已导出到 {path}",
   "log.export.summary": "本次运行共 {count} 条日志，汇报问题时请一并上传日志，便于定位问题",
   "log.export.title": "导出日志",

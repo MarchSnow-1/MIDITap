@@ -64,6 +64,7 @@
   "log.export.fileType": "Zip archive",
   "log.export.hint": "Export this run's log and pack it into a compressed file",
   "log.export.include": "Levels to include",
+  "log.export.memoryOnly": "(memory only; no on-disk log was found)",
   "log.export.saved": "Logs exported to {path}",
   "log.export.summary": "This run has {count} entries. When reporting a problem, attach the log so it can be located.",
   "log.export.title": "Export logs",

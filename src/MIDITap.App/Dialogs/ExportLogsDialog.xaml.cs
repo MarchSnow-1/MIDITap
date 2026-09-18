@@ -110,7 +110,6 @@ public sealed partial class ExportLogsDialog : ContentDialog
             ErrorText.Visibility = Visibility.Collapsed;
 
             var now = DateTimeOffset.Now;
-            var entries = CollectEntries();
             var target = await PickTargetAsync(now);
             if (target is null)
             {
@@ -121,10 +120,26 @@ public sealed partial class ExportLogsDialog : ContentDialog
 
             try
             {
-                var result = LogExporter.Export(target.Path, entries, LogEnvironment.Compose(), now);
+                // 落盘的日志优先：那才是完整的历史，而内存里只有最近 1000 条
+                // 用户可能从未开启「记录日志」，那时才退回内存
+                // 两种情况要如实区分，否则用户会以为发出的就是完整日志
+                //
+                // The on-disk logs come first: they hold the full history, while memory keeps the last 1000 entries
+                // The in-memory fallback is used when the user never turned log-to-file on
+                // The two are told apart honestly, or the user would believe the complete log was sent
+                var sources = LogExporter.ListExportSources(LogPersistence.LogDirectory(AppServices.BaseDir));
+                var fromFiles = sources.Count > 0;
+                var result = fromFiles
+                    ? LogExporter.ExportFromSources(
+                        target.Path, sources, LogEnvironment.Compose(), now, SelectedLevels())
+                    : LogExporter.Export(target.Path, CollectEntries(), LogEnvironment.Compose(), now);
                 var message = AppServices.I18n.T(
                     target.IsFallback ? "log.export.fallback" : "log.export.saved",
                     ("path", result.ZipPath));
+                if (!fromFiles)
+                {
+                    message += " " + AppServices.I18n.T("log.export.memoryOnly");
+                }
                 // 同时进日志与浮窗：浮窗让用户当场知道文件在哪，日志留下"什么时候导出过"的记录
                 // Both a log line and a toast
                 // The toast tells the user where the file is right now
@@ -155,16 +170,6 @@ public sealed partial class ExportLogsDialog : ContentDialog
     /// </summary>
     private List<LogExportEntry> CollectEntries()
     {
-        // 勾选状态从生成的字典里读，而不是逐个具名控件：级别清单只有 Core 那一处
-        //
-        // The checked state is read from the generated dictionary
-        // It is not read from named controls one by one
-        // The level list has its single source in Core
-        var levels = _levelBoxes
-            .Where(kv => kv.Value.IsChecked == true)
-            .Select(kv => kv.Key)
-            .ToList();
-
         // 用 LogLevels.Normalize 比较而不是直接比字符串
         // 未知级别归入 info
         // 这样"勾了 info"时新增级别的条目也一并导出，不会被静默漏掉
@@ -172,10 +177,26 @@ public sealed partial class ExportLogsDialog : ContentDialog
         // Comparison goes through LogLevels.Normalize rather than raw string equality
         // An unknown level folds into info
         // So checking info also exports entries of a level added later instead of silently dropping them
-        var selected = levels.ToHashSet();
+        var selected = SelectedLevels().ToHashSet();
         return AppServices.Log.Entries
             .Where(entry => selected.Contains(LogLevels.Normalize(entry.Level)))
             .Select(entry => new LogExportEntry(entry.Time, entry.Level, entry.Message))
+            .ToList();
+    }
+
+    /// <summary>
+    /// 按勾选读出级别集合
+    /// 勾选状态从生成的字典里读，而不是逐个具名控件：级别清单只有 Core 那一处
+    ///
+    /// Reads the selected levels from the checkboxes
+    /// The checked state comes from the generated dictionary rather than named controls one by one,
+    /// because the level list has its single source in Core
+    /// </summary>
+    private List<string> SelectedLevels()
+    {
+        return _levelBoxes
+            .Where(kv => kv.Value.IsChecked == true)
+            .Select(kv => kv.Key)
             .ToList();
     }
 

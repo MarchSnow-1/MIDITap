@@ -201,10 +201,11 @@ public static class LogPersistence
         _writer = null;
     }
 
-    // 时间戳带毫秒与时区偏移：跨时区回看日志、或需要对齐两次事件时，这两项都是必需的
+    // 行的格式由 LogLineFormat 拥有：导出与按级别筛选都要读同一个格式
+    // 这里若自己拼一遍，改格式时就会漏掉读取方
     //
-    // Timestamps carry milliseconds and the UTC offset
-    // Both are needed when reading a log from another timezone or lining two events up
+    // The line format is owned by LogLineFormat: exporting and filtering by level both have to read it
+    // Building it here would mean a format change misses the reader
     private static void OnEntryAdded(LogEntry entry)
-        => _writer?.Append($"{entry.Time:yyyy-MM-dd HH:mm:ss.fff zzz} [{entry.Level}] {entry.Message}");
+        => _writer?.Append(LogLineFormat.Format(entry.Time, entry.Level, entry.Message));
 }
