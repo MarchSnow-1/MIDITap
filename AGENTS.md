@@ -169,17 +169,6 @@ Any future entry point that looks up a file by name must reuse this check.
 Two further requirements: extraction must guard against **zip-slips**, and a failed verification must
 **refuse installation and delete the downloaded package**.
 
-### 3.4 日志默认不写入文件
-
-写入磁盘属于用户未要求的副作用，且日志内容包含设备名与按键
-
-仅在用户主动开启后才写入 `.storage/logs/miditap.log`，超过 2 MB 时轮转
-
-Writing to disk is a side effect the user did not request, and log entries contain device names and key
-presses.
-
-Write to `.storage/logs/miditap.log` only after the user enables it; rotate once the file exceeds 2 MB.
-
 ## 4. 改配置的约定 / Configuration
 
 ```
@@ -337,6 +326,7 @@ Specific requirements:
 - 不要在注释行尾添加句号，除非一行有两个句子需要区分
 - 如需多行注释，保证一句话在一行注释内写完，严禁一句话分多行来写
 - 修改前端界面 **必须** 同步更新全部 i18n 文件并进行实机验证
+- 严禁修改 AGENTS.md 文件
 
 - **Work in batches** — split a task into several small, incremental changes and commit often; avoid landing a large body of code in a single commit
 - **Maintainability** — every commit must build and carry a clear, readable message, so later review and problem tracing stay easy
@@ -347,3 +337,4 @@ Specific requirements:
 - Do not add a period at the end of a comment line unless two sentences on one line need to be distinguished
 - If a multi-line comment is needed, ensure that a sentence is written in one line of comment; it is strictly forbidden to split a sentence into multiple lines
 - Changing the front-end interface **must** synchronously update all i18n files and perform real-machine verification
+- Modifying AGENTS.md is strictly forbidden
