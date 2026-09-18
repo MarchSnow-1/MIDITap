@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   MIDITap 端到端测试：向虚拟 MIDI 端口发送真实数据，验证应用确实注入了按键
 
@@ -259,6 +259,60 @@ Set-Content -Path $configPath -Value $testConfig -NoNewline
 # The app now creates a default config on first launch, so that route is no longer deterministic
 New-Item -ItemType Directory -Force -Path (Split-Path $lastConfigPath) | Out-Null
 Set-Content -Path $lastConfigPath -Value $configPath -NoNewline
+
+# --------------------------------------------------------------------------- 日志整理用的种子文件 / Seed files for the housekeeping test
+
+# 这一段必须在应用**启动之前**放好：整理发生在启动时，启动后再放就赶不上这一轮
+# 种子分两类：上一版的旧格式（miditap.log 与 .log.1），以及「昨天」的两份明文会话
+# 期望结果：旧格式被删，昨天的两份会话直接并成 miditap-<昨天>.tar.gz，中途不产生任何会话级的压缩文件
+#
+# This has to be in place BEFORE the app starts: housekeeping runs at start-up, so seeding afterwards misses this round
+# Two kinds of seed: the previous version's legacy shapes (miditap.log and .log.1),
+# and two plain-text sessions dated yesterday
+# Expected: the legacy shapes are removed, and yesterday's two sessions are merged straight into
+# miditap-<yesterday>.tar.gz with no per-session compression in between
+
+$logDir = Join-Path $AppDir ".storage/logs"
+$logSettingPath = Join-Path $AppDir ".storage/miditap_log_to_file"
+$logFilesBefore = @()
+if (Test-Path $logDir) { $logFilesBefore = @(Get-ChildItem $logDir -File | ForEach-Object { $_.Name }) }
+
+# 落盘开关先置为关闭，这样第 14 节在界面上打开它时必然产生一份新文件，时序才是确定的
+# 原值在 finally 里还原
+#
+# The log-to-file switch is forced off first, which makes section 14 deterministic:
+# turning it on in the UI must then create a brand new file
+# The original value is restored in the finally block
+$logSettingBackup = if (Test-Path $logSettingPath) { Get-Content $logSettingPath -Raw } else { $null }
+
+$yesterday = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+$today = (Get-Date).ToString("yyyy-MM-dd")
+
+# 本脚本会碰到的确切文件名：先整份备份，结束时原样放回
+# 用文件复制而不是读成字符串：.gz 与 .tar.gz 是二进制，读成文本会坏掉
+#
+# The exact names this script touches: each is backed up whole and put back at the end
+# A file copy is used rather than reading text, because .gz and .tar.gz are binary and reading them as text corrupts them
+$logTouchNames = @(
+    "miditap.log",
+    "miditap.log.1",
+    "miditap-$yesterday-1.log",
+    "miditap-$yesterday-2.log",
+    "miditap-$yesterday.tar.gz"
+)
+$logBackupDir = Join-Path $env:TEMP ("miditap-e2e-logbackup-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force -Path $logBackupDir | Out-Null
+foreach ($name in $logTouchNames) {
+    $seedSource = Join-Path $logDir $name
+    if (Test-Path $seedSource) { Copy-Item $seedSource (Join-Path $logBackupDir $name) -Force }
+}
+
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+Set-Content -Path $logSettingPath -Value "0" -NoNewline
+Set-Content -Path (Join-Path $logDir "miditap.log") -Value "legacy line" -NoNewline
+Set-Content -Path (Join-Path $logDir "miditap.log.1") -Value "legacy rotated line" -NoNewline
+Set-Content -Path (Join-Path $logDir "miditap-$yesterday-1.log") -Value "seeded first" -NoNewline
+Set-Content -Path (Join-Path $logDir "miditap-$yesterday-2.log") -Value "seeded second" -NoNewline
 
 # --------------------------------------------------------------------------- 启动应用 / Launch the app
 
@@ -568,6 +622,116 @@ try {
     $cleared = Find-ById 'ActiveNotesItems'
     Assert-True ($null -eq $cleared -or $cleared.Current.Name -eq '') "抬起后主页清空"
 
+    Write-Section "14. 日志落盘：开关一打开就出现会话文件"
+    # 启动前已把落盘开关置为关闭（见脚本开头的种子部分）
+    # 因此在界面上打开它之后，必定出现一份本次会话的新文件
+    #
+    # The switch was forced off before start-up (see the seeding at the top of the script)
+    # Turning it on in the UI must therefore produce a brand new file for this session
+    Select-NavItem 'NavSettings'
+    Start-Sleep -Milliseconds 1000
+    $logToggle = Find-ById 'LogFileToggle'
+    Assert-True ($null -ne $logToggle) "找到日志落盘开关"
+    if ($logToggle) {
+        $togglePattern = $logToggle.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+        if ($togglePattern.Current.ToggleState -ne [System.Windows.Automation.ToggleState]::On) { $togglePattern.Toggle() }
+    }
+
+    # 等到一份**启动时不存在**的今天的会话文件
+    # 用「新出现的名字」而不是「最新的文件」来判定：后者在开关本来就开着时无法区分是不是本次新建的
+    #
+    # Waits for a today-session file that did NOT exist at start-up
+    # A newly appearing name is used rather than the newest file: the latter cannot tell whether it was just created
+    # when the switch was already on
+    $sessionFile = $null
+    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    while ([DateTime]::UtcNow -lt $deadline -and -not $sessionFile) {
+        $sessionFile = Get-ChildItem $logDir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "^miditap-$today-[0-9]+[.]log$" -and $logFilesBefore -notcontains $_.Name } |
+            Sort-Object Name | Select-Object -Last 1
+        if (-not $sessionFile) { Start-Sleep -Milliseconds 300 }
+    }
+    Assert-True ($null -ne $sessionFile) "开关打开后出现本次会话的日志文件"
+    if ($sessionFile) {
+        # 名字里的编号是「当天第几次启动」，只增不减
+        #
+        # The number in the name is which launch of the day this was, and it only grows
+        Assert-True ($sessionFile.Name -match "^miditap-$today-[0-9]+[.]log$") ("文件名为 miditap-<日期>-<编号>.log（实际：" + $sessionFile.Name + "）")
+        $sessionText = Get-Content $sessionFile.FullName -Raw
+        Assert-True ($sessionText -match "===== MIDITap") "会话头已写入文件"
+        Assert-True ($sessionText -match "session [0-9]+") "会话头含当天第几次启动"
+        Assert-True ($sessionText -match "logging enabled") "记录了「日志已开启」"
+
+        # 这一条把「MIDI 回调 → 日志服务 → 落盘」整条链串起来
+        # 只验文件名与文件头的话，写入器坏了也照样通过
+        #
+        # This ties the whole chain together: MIDI callback, log service, file
+        # Verifying only the name and the header would still pass with a broken writer
+        Send-NoteOn 60 100
+        Start-Sleep -Milliseconds 1500
+        Send-NoteOff 60
+        Start-Sleep -Milliseconds 600
+        $sessionText = Get-Content $sessionFile.FullName -Raw
+        Assert-True ($sessionText -match "60") "演奏事件写进了会话文件"
+    }
+
+    Write-Section "15. 日志整理：删旧格式、跨天的并成整天归档"
+    # 整理在启动时跑，种子文件在启动前就放好了（见脚本开头）
+    #
+    # Housekeeping runs at start-up, and the seed files were placed before the app started (see the top of the script)
+    $legacyGone = (-not (Test-Path (Join-Path $logDir "miditap.log"))) -and (-not (Test-Path (Join-Path $logDir "miditap.log.1")))
+    Assert-True $legacyGone "旧格式 miditap.log 与 miditap.log.1 已被删除"
+
+    $archive = Join-Path $logDir "miditap-$yesterday.tar.gz"
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    while ([DateTime]::UtcNow -lt $deadline -and -not (Test-Path $archive)) { Start-Sleep -Milliseconds 300 }
+    Assert-True (Test-Path $archive) "昨天的会话已并成整天归档 miditap-$yesterday.tar.gz"
+
+    # 源文件收进归档后就不该再留在目录里
+    # 会话级的 .gz 也不再产生：整天归档一步到位，没有中间产物
+    #
+    # Once a source is inside the archive it should no longer sit in the directory
+    # No session-level .gz is produced either: the day archive is made in one step, with no intermediate file
+    Assert-True (-not (Test-Path (Join-Path $logDir "miditap-$yesterday-1.log"))) "源会话文件已收进归档（1）"
+    Assert-True (-not (Test-Path (Join-Path $logDir "miditap-$yesterday-2.log"))) "源会话文件已收进归档（2）"
+    Assert-True (-not (Test-Path (Join-Path $logDir "miditap-$yesterday-1.log.gz"))) "未产生会话级的 .gz（1）"
+    Assert-True (-not (Test-Path (Join-Path $logDir "miditap-$yesterday-2.log.gz"))) "未产生会话级的 .gz（2）"
+
+    if (Test-Path $archive) {
+        # 解开归档逐条读回：只看文件存在是不够的，条目名与内容都可能写错
+        #
+        # The archive is opened and read back entry by entry
+        # Checking that the file merely exists would miss a wrong entry name or wrong content
+        $archiveEntries = [System.Collections.Generic.List[string]]::new()
+        $archiveStream = [System.IO.File]::OpenRead($archive)
+        try {
+            $archiveGzip = [System.IO.Compression.GZipStream]::new($archiveStream, [System.IO.Compression.CompressionMode]::Decompress)
+            try {
+                $archiveTar = [System.Formats.Tar.TarReader]::new($archiveGzip)
+                try {
+                    while ($tarEntry = $archiveTar.GetNextEntry()) {
+                        $entryReader = [System.IO.StreamReader]::new($tarEntry.DataStream)
+                        try { $archiveEntries.Add($tarEntry.Name + "|" + $entryReader.ReadToEnd()) } finally { $entryReader.Dispose() }
+                    }
+                } finally { $archiveTar.Dispose() }
+            } finally { $archiveGzip.Dispose() }
+        } finally { $archiveStream.Dispose() }
+
+        Assert-True ($archiveEntries.Count -eq 2) ("归档里有两个会话条目（实际：" + $archiveEntries.Count + "）")
+        # 条目名是解压后可直接辨认的明文名字，内容也必须是解压后的原文
+        #
+        # The entry names are the identifiable plain-text names, and the content must be the decompressed original
+        Assert-True ($archiveEntries -contains "miditap-$yesterday-1.log|seeded first") "归档条目名与内容对应（1）"
+        Assert-True ($archiveEntries -contains "miditap-$yesterday-2.log|seeded second") "归档条目名与内容对应（2）"
+    }
+
+    # 今天的会话必须各自独立：合并它们会破坏「每次启动一个文件」
+    #
+    # Today's sessions stay separate: merging them would break the one-file-per-launch rule
+    $todaySession = Get-ChildItem $logDir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match "^miditap-$today-[0-9]+[.]log$" } | Select-Object -First 1
+    Assert-True ($null -ne $todaySession) "今天的会话文件没有被并入归档"
+
     Write-Section "13. 全程无崩溃"
     Assert-True (-not $app.HasExited) "应用在整个测试过程中保持存活"
     $crashLog = Join-Path $AppDir ".storage/crash.log"
@@ -583,6 +747,26 @@ finally {
     else { Remove-Item $configPath -Force -ErrorAction SilentlyContinue }
     if ($null -ne $lastBackup) { Set-Content -Path $lastConfigPath -Value $lastBackup -NoNewline }
     else { Remove-Item $lastConfigPath -Force -ErrorAction SilentlyContinue }
+
+    # 日志目录还原：先放回备份，再删掉本脚本新增的文件
+    # 顺序不能反：放回的那些文件本来就在「启动前已存在」的名单里，反了会把刚还原的删掉
+    #
+    # The log directory is restored: backups first, then files this script newly created are removed
+    # The order matters: a restored backup is already in the at-start-up list, and reversing the order would delete it
+    if (Test-Path $logDir) {
+        foreach ($name in $logTouchNames) {
+            $restoreTarget = Join-Path $logDir $name
+            $restoreBackup = Join-Path $logBackupDir $name
+            if (Test-Path $restoreBackup) { Copy-Item $restoreBackup $restoreTarget -Force }
+            else { Remove-Item $restoreTarget -Force -ErrorAction SilentlyContinue }
+        }
+        Get-ChildItem $logDir -File -ErrorAction SilentlyContinue |
+            Where-Object { $logFilesBefore -notcontains $_.Name } |
+            ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+    }
+    Remove-Item $logBackupDir -Recurse -Force -ErrorAction SilentlyContinue
+    if ($null -ne $logSettingBackup) { Set-Content -Path $logSettingPath -Value $logSettingBackup -NoNewline }
+    else { Remove-Item $logSettingPath -Force -ErrorAction SilentlyContinue }
 
     if ($midiHandle -ne [IntPtr]::Zero) { [void][MidiTapE2E.Midi]::midiOutClose($midiHandle) }
     Pop-Location
