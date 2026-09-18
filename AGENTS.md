@@ -7,12 +7,14 @@ Written for human developers and coding agents, to lay out the details of how th
 ## 0. 先看什么 / Read first
 
 1. `README.md` 与 `README_zh-CN.md` —— 功能、安装、更新机制
-2. 要改哪个模块，先读那个文件开头的注释
+2. `docs/DEVELOPMENT_zh-CN.md` —— 环境、常用命令、各脚本分别管什么
+3. 要改哪个模块，先读那个文件开头的注释
 
 本项目每个源文件开头均说明了其编写原因。请遵守第三条，不要凭猜测推断代码意图，也不要进行破坏性修改
 
 1. `README.md` and `README_zh-CN.md` — features, installation, update mechanism
-2. Before changing a module, read the header comment of that file
+2. `docs/DEVELOPMENT.md` — environment, common commands, and what each script owns
+3. Before changing a module, read the header comment of that file
 
 Every source file explains at its top why it is written that way. Follow rule 3 above: do not infer intent
 by guesswork, and do not make destructive changes.
@@ -267,7 +269,20 @@ Common types: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`, 
 |---|---|---|---|
 | 单元 | `src/MIDITap.Core.Tests` | 无 | 全跑 |
 | 集成 | `src/MIDITap.Integration.Tests` | 真实 MIDI 回环端口 | **跳过**，CI 没有 MIDI 设备 |
-| 端到端 | `scripts/e2e-midi.ps1` | 回环端口 + 交互式桌面 | 只检查语法 |
+| 端到端 | `dev-scripts/e2e-all.ps1` | 回环端口 + 交互式桌面 + PowerShell 7 | 只检查语法 |
+
+端到端脚本都在 `dev-scripts/`，**不随用户包发布**
+
+| 脚本 | 负责 | 怎么调 |
+|---|---|---|
+| `e2e-all.ps1` | 依次跑下面三个并汇总结果 | `pwsh dev-scripts/e2e-all.ps1` |
+| `e2e-midi.ps1` | 按键注入：按下/抬起、边界音符 0 与 127、velocity 0、重复按下、引用计数、组合键、未映射音符、非音符消息、突发 | `pwsh dev-scripts/e2e-midi.ps1` |
+| `e2e-ui.ps1` | 界面：日志页记录、主页实时预览、切页后仍被按住的音符补回 | `pwsh dev-scripts/e2e-ui.ps1` |
+| `e2e-log.ps1` | 日志：开关打开后写文件（含补写开关打开前内存里已有的行）、启动时的整理 | `pwsh dev-scripts/e2e-log.ps1` |
+
+三个用例脚本各自启动一次应用，因此互不干扰，也都能单独跑
+公共参数：`-PortName`（默认 `MIDITap-TestConfig`）、`-AppDir`（默认构建输出目录）、`-SkipBuild`（跳过 `dotnet build`）
+共用三个库：`e2e-common.ps1`（断言、MIDI 发送、界面读取）、`e2e-seed.ps1`（现场准备与还原）、`e2e-app.ps1`（应用生命周期），用例脚本只点源 `e2e-app.ps1`
 
 具体要求：
 
@@ -283,7 +298,20 @@ Three layers, each with its own job:
 |---|---|---|---|
 | Unit | `src/MIDITap.Core.Tests` | Nothing | All run |
 | Integration | `src/MIDITap.Integration.Tests` | A real MIDI loopback port | **Skipped**, CI has no MIDI device |
-| End-to-end | `scripts/e2e-midi.ps1` | Loopback port + interactive desktop | Syntax check only |
+| End-to-end | `dev-scripts/e2e-all.ps1` | Loopback port + interactive desktop + PowerShell 7 | Syntax check only |
+
+The end-to-end scripts live in `dev-scripts/` and are **not packaged**
+
+| Script | Owns | How to run |
+|---|---|---|
+| `e2e-all.ps1` | runs the three below in turn and summarises the result | `pwsh dev-scripts/e2e-all.ps1` |
+| `e2e-midi.ps1` | injection: press and release, boundary notes 0 and 127, velocity 0, a repeated note-on, reference counting, combos, unmapped notes, non-note messages, a burst | `pwsh dev-scripts/e2e-midi.ps1` |
+| `e2e-ui.ps1` | the UI: what the log page records, the home page live preview, notes still held replayed after a page switch | `pwsh dev-scripts/e2e-ui.ps1` |
+| `e2e-log.ps1` | logging: writing the file once the switch is on (including backfilling what was already in memory), the start-up housekeeping | `pwsh dev-scripts/e2e-log.ps1` |
+
+Each case script starts the app once, so they do not interfere and each runs on its own
+Common parameters: `-PortName` (default `MIDITap-TestConfig`), `-AppDir` (default the build output directory), `-SkipBuild` (skip `dotnet build`)
+Three shared libraries: `e2e-common.ps1` (assertions, MIDI sending, UI reading), `e2e-seed.ps1` (preparing and restoring the scene), `e2e-app.ps1` (the app lifecycle); a case script dot-sources `e2e-app.ps1` alone
 
 Specific requirements:
 
