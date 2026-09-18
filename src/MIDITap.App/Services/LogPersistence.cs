@@ -21,12 +21,20 @@ public static class LogPersistence
 {
     private static LogFileWriter? _writer;
 
+    // 本次会话的编号（当天第几次启动）
+    // 它写在会话头里：文件名里的编号是给人与清理用的，头里的这一份让日志正文自己也能说清是哪一次
+    //
+    // This session number, meaning which launch of the day it was
+    // It goes into the session header: the number in the file name serves people and cleanup,
+    // while the one in the header lets the log body state which launch it belongs to
+    private static int _session;
+
     /// <summary>当前是否正在把日志写入文件 / Whether the log is currently being written to a file</summary>
     public static bool Enabled => _writer is not null;
 
-    /// <summary>日志文件路径（与其它可变文件一致，位于 exe 旁的 .storage/ 内） / Path of the log file; like the other writable files it lives in .storage/ next to the exe</summary>
-    public static string FilePath(string baseDir)
-        => AppPaths.LogFilePath(baseDir);
+    /// <summary>日志目录（与其它可变文件一致，位于 exe 旁的 .storage/ 内） / The log directory; like the other writable files it lives in .storage/ next to the exe</summary>
+    public static string LogDirectory(string baseDir)
+        => AppPaths.LogDir(baseDir);
 
     /// <summary>启动时按已保存的偏好决定是否开启 / Decides at startup whether to enable it, following the saved preference</summary>
     public static void Load(string baseDir)
@@ -72,11 +80,7 @@ public static class LogPersistence
     /// </summary>
     public static void OpenLogFolder(string baseDir)
     {
-        var directory = Path.GetDirectoryName(FilePath(baseDir));
-        if (string.IsNullOrEmpty(directory))
-        {
-            return;
-        }
+        var directory = LogDirectory(baseDir);
         try
         {
             Directory.CreateDirectory(directory);
@@ -103,24 +107,36 @@ public static class LogPersistence
 
         try
         {
-            _writer = new LogFileWriter(FilePath(baseDir));
+            // 每次启动都新建一个会话文件，编号是「当天第几次启动」
+            // 用 CreateNew 创建：两个实例同时启动时，后者会换下一个编号，不会写进同一个文件
+            //
+            // Every launch creates its own session file, numbered by which launch of the day it was
+            // Created with CreateNew, so two instances starting together take different numbers
+            // rather than writing into one file
+            var (path, session) = LogFileNames.ReserveSessionFile(
+                LogDirectory(baseDir), DateOnly.FromDateTime(DateTime.Now));
+            _session = session;
+            _writer = new LogFileWriter(path);
         }
         catch
         {
-            // 无法创建写入器（路径非法等）：保持关闭，不影响应用运行
+            // 无法创建写入器（路径非法、介质只读等）：保持关闭，不影响应用运行
             //
-            // The writer cannot be created (an invalid path, say): logging stays off, and the app keeps running
+            // The writer cannot be created (an invalid path, a read-only medium, and so on)
+            // Logging stays off and the app keeps running
             _writer = null;
             return;
         }
 
         AppServices.Log.Added += OnEntryAdded;
-        // 会话头：排查问题时最先要看的几项（版本、时间、界面语言）
+        // 会话头：排查问题时最先要看的几项（版本、时间、界面语言、当天第几次启动）
         //
         // Session header: the first things worth knowing when triaging
+        // The version, the time, the UI language and which launch of the day this was
         _writer.Append(
             $"===== MIDITap {AppServices.AppVersion} | " +
-            $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} | lang={AppServices.I18n.Current} =====");
+            $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} | lang={AppServices.I18n.Current} | " +
+            $"session {_session} =====");
         _writer.Append("logging enabled");
     }
 

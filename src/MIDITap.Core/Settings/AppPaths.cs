@@ -50,8 +50,6 @@ public static class AppPaths
     /// <summary>.storage 下存放日志文件的子目录名 / Sub-directory of .storage holding log files</summary>
     public const string LogDirectoryName = "logs";
 
-    /// <summary>活动日志的文件名 / File name of the activity log</summary>
-    public const string LogFileName = "miditap.log";
 
     /// <summary>.storage 下存放导出日志的子目录名 / Sub-directory of .storage holding exported logs</summary>
     public const string ExportsDirectoryName = "exports";
@@ -96,8 +94,11 @@ public static class AppPaths
     /// <summary>日志目录的完整路径 / Full path of the log directory</summary>
     public static string LogDir(string baseDir) => Path.Combine(StorageDir(baseDir), LogDirectoryName);
 
-    /// <summary>活动日志文件的完整路径 / Full path of the activity-log file</summary>
-    public static string LogFilePath(string baseDir) => Path.Combine(LogDir(baseDir), LogFileName);
+    // 日志**文件名**不在这里：它带日期与当天第几次启动的编号，由 LogFileNames 负责
+    // 本类只管目录布局，而目录是固定的
+    //
+    // The log FILE NAME is not here: it carries a date and a per-day launch number, so LogFileNames owns it
+    // This class owns the directory layout alone, and the directory is fixed
 
     /// <summary>导出日志的兜底目录完整路径 / Full path of the fallback export directory</summary>
     public static string ExportsDir(string baseDir) => Path.Combine(StorageDir(baseDir), ExportsDirectoryName);
