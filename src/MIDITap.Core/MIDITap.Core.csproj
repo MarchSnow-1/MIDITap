@@ -11,7 +11,7 @@
          Those guards would surround Windows-specific APIs and obscure the real platform dependency
          It changes no behaviour: Windows-only belongs in the project declaration rather than in a comment -->
     <TargetFramework>net10.0-windows</TargetFramework>
-    <Version>2.0.0</Version>
+    <Version>2.0.1</Version>
     <Description>MIDITap core logic: MIDI note state machine, key injection, JSON5 mapping config editing (comment preserving), settings storage and update checking.</Description>
   </PropertyGroup>
 

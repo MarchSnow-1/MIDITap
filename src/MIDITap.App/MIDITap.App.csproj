@@ -24,7 +24,7 @@
          The version number is kept in step with the root package.json
          npm version edits package.json only, so this value does not follow automatically
          At release time release.yml overrides it by injecting -p:Version with the tag version -->
-    <Version>2.0.0</Version>
+    <Version>2.0.1</Version>
     <!-- 版本号后面不追加 git 提交哈希
          SDK 默认会追加，把 InformationalVersion 变成 "1.7.1+<40位哈希>"
          而这一串会直接显示在「关于」区，既难看又不好抄
