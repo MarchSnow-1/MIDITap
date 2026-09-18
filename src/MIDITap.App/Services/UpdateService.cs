@@ -101,6 +101,15 @@ public static class UpdateService
     }
 
     /// <summary>
+    /// 当前这一轮更新的独占运行
+    /// 它保证取消时必须等本轮真正结束才清理磁盘，理由见 UpdateRun 的文件头
+    ///
+    /// The exclusive run for the current round of the update flow
+    /// It guarantees the disk is only cleaned after the round has really ended, as UpdateRun explains
+    /// </summary>
+    private static readonly UpdateRun _run = new();
+
+    /// <summary>
     /// 下载并解压到暂存区，成功后 <see cref="Stage"/> 为 ReadyToRestart但不会自动退出
     /// 何时重启由用户决定，避免打断正在进行的工作
     ///
@@ -108,7 +117,10 @@ public static class UpdateService
     /// On success Stage becomes ReadyToRestart, but the app does NOT exit on its own
     /// When to restart is the user's call, so an update does not interrupt their work
     /// </summary>
-    public static async Task<bool> PrepareAsync(UpdateInfo info, CancellationToken cancellationToken = default)
+    public static Task<bool> PrepareAsync(UpdateInfo info)
+        => _run.Start(token => PrepareCoreAsync(info, token));
+
+    private static async Task<bool> PrepareCoreAsync(UpdateInfo info, CancellationToken cancellationToken)
     {
         // 开发构建没有更新这回事（见 AppServices.UpdatesEnabled）
         // 界面已经不会走到这里，这层是让"更新功能"本身不成立，而不只是按钮点不动
@@ -395,9 +407,42 @@ public static class UpdateService
         return result.Version;
     }
 
-    /// <summary>丢弃暂存内容（用户放弃更新、或开始新一轮时调用）</summary>
-/// <remarks>Discards the staged content (called when the user gives up on the update or starts a new round)</remarks>
-    public static void CleanStaging()
+    /// <summary>
+    /// 丢弃本轮更新：取消、等这一轮结束、清掉它留下的文件、回到空闲
+    /// 关闭更新弹窗时调用
+    /// 顺序不能颠倒，必须等运行结束才清理磁盘，理由见 UpdateRun 的文件头
+    ///
+    /// Discards this round: cancel it, wait for it to end, remove what it left behind, and return to idle
+    /// Called when the update dialog is closed
+    /// The order may not be reversed: the disk may only be cleaned once the round has ended, as UpdateRun explains
+    /// </summary>
+    public static async Task DiscardAsync()
+    {
+        if (!await _run.CancelAndWaitAsync().ConfigureAwait(true))
+        {
+            // 新一轮已经接手，它正在写自己的文件，这里什么都不要动
+            //
+            // A newer round has taken over and is writing its own files, so nothing is touched here
+            return;
+        }
+
+        // 下载已经完成并暂存好了，那是用户想要的结果，不当作取消丢弃
+        // 这一条是防御性的：ReadyToRestart 状态下弹窗不提供关闭入口
+        //
+        // The download finished and is staged, which is the outcome the user wanted, so it is not discarded as a cancel
+        // This is defensive: the dialog offers no way to close in the ReadyToRestart state
+        if (Stage == UpdateStage.ReadyToRestart)
+        {
+            return;
+        }
+
+        CleanStaging();
+        Reset();
+    }
+
+    /// <summary>丢弃暂存内容（只由 DiscardAsync 调用，见那里的顺序要求）</summary>
+/// <remarks>Discards the staged content (called only by DiscardAsync, see the ordering requirement there)</remarks>
+    private static void CleanStaging()
     {
         try
         {
@@ -425,9 +470,9 @@ public static class UpdateService
         Progress = 0;
     }
 
-    /// <summary>把服务状态重置为空闲（关闭更新提示后调用）</summary>
-/// <remarks>Resets the service state to idle (called after the update prompt is closed)</remarks>
-    public static void Reset()
+    /// <summary>把服务状态重置为空闲（只由 DiscardAsync 调用）</summary>
+/// <remarks>Resets the service state to idle (called only by DiscardAsync)</remarks>
+    private static void Reset()
     {
         LastError = null;
         Progress = 0;

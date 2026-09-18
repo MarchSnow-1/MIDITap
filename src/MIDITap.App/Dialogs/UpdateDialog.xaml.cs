@@ -31,7 +31,6 @@ public sealed partial class UpdateDialog : ContentDialog
 {
     private readonly UpdateInfo _info;
     private readonly bool _showNeverRemind;
-    private CancellationTokenSource? _cts;
 
     // 只有本文件主动发起的关闭才放行，见类注释
     // Only a close started by this file is allowed through; see the class comment
@@ -106,8 +105,6 @@ public sealed partial class UpdateDialog : ContentDialog
         UpdateService.StageChanged -= OnStageChanged;
         UpdateService.ProgressChanged -= OnStageChanged;
         AppServices.I18n.LanguageChanged -= RefreshTexts;
-        _cts?.Dispose();
-        _cts = null;
     }
 
     private void OnStageChanged() => AppServices.RunOnUi(RenderState);
@@ -131,23 +128,17 @@ public sealed partial class UpdateDialog : ContentDialog
 
     private void OnCloseClick(object sender, RoutedEventArgs e)
     {
-        // 下载中点叉号 = 取消。取消要真的把下载停下来并丢弃已下载的内容
+        // 关窗即放弃本轮更新，取消要真的把下载停下来并丢弃已下载的内容
         // 否则用户会留下一个"看起来取消了、磁盘上却躺着几百 MB"的暂存区
+        // 取消与清理的先后顺序由 UpdateService 负责，界面不参与判断，理由见 UpdateRun 的文件头
+        // 这里不等结果，窗口要立刻关掉，清理在后台完成
         //
-        // The cross during a download means cancel, and cancelling must actually stop the download and discard it
+        // Closing gives up this round, and that has to actually stop the download and discard it
         // Otherwise the user ends up with a staging area holding hundreds of MB after a cancel that looked complete
-        CancelDownloadIfRunning();
+        // The ordering between cancelling and cleaning belongs to UpdateService, not the UI; UpdateRun explains why
+        // The result is not awaited because the window has to close at once, so the cleanup finishes in the background
+        _ = UpdateService.DiscardAsync();
         CloseAfter(ignored: false, neverRemind: false);
-    }
-
-    private void CancelDownloadIfRunning()
-    {
-        if (UpdateService.Stage is UpdateStage.Downloading or UpdateStage.Extracting)
-        {
-            _cts?.Cancel();
-            UpdateService.CleanStaging();
-            UpdateService.Reset();
-        }
     }
 
     private void OnOpenPageClick(object sender, RoutedEventArgs e)
@@ -204,9 +195,7 @@ public sealed partial class UpdateDialog : ContentDialog
         }
 
         RenderState();
-        _cts?.Dispose();
-        _cts = new CancellationTokenSource();
-        await UpdateService.PrepareAsync(_info, _cts.Token);
+        await UpdateService.PrepareAsync(_info);
         RenderState();
     }
 
