@@ -186,16 +186,48 @@ public static class LogPersistence
             return;
         }
 
-        AppServices.Log.Added += OnEntryAdded;
         // 会话头：排查问题时最先要看的几项（版本、时间、界面语言、当天第几次启动）
+        // 头里的时间是**这份文件创建的时刻**，不一定是下面最早那行的时刻，原因见紧接着的补写
         //
         // Session header: the first things worth knowing when triaging
         // The version, the time, the UI language and which launch of the day this was
+        // The time in the header is when this file was created, not necessarily the earliest line below it;
+        // the backfill right after explains why
         _writer.Append(
             $"===== MIDITap {AppServices.AppVersion} | " +
             $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} | lang={AppServices.I18n.Current} | " +
             $"session {_session} =====");
+
+        // 把启动以来只存在于内存里的那些行补写进来
+        // 用户是在遇到问题**之后**才把开关打开的，他要的恰恰是打开之前那一段
+        // 不补的话文件从打开的那一刻开始，前面的端口枚举、配置加载、环境摘要全都看不到
+        // 这与界面上「debug 照常记录、只是默认不显示」是同一条理由
+        // 只能补内存里还留着的部分：LogService 是 1000 条的环形缓冲，更早的已经丢弃
+        //
+        // The lines that so far exist only in memory are written first
+        // The user turns the switch on *after* hitting a problem, and what is needed is exactly the stretch
+        // before that moment
+        // Without this the file starts at the instant of enabling, and the port enumeration, the config load
+        // and the environment summary are all missing
+        // This is the same reasoning as "debug is recorded but hidden by default" in the UI
+        // Only what the buffer still holds can be written: LogService is a 1000-entry ring, and anything older is gone
+        foreach (var entry in AppServices.Log.Entries)
+        {
+            _writer.Append(LogLineFormat.Format(entry.Time, entry.Level, entry.Message));
+        }
+
         _writer.Append("logging enabled");
+
+        // 订阅放在最后：先把上面这些写进去，之后的才由事件逐条追加
+        // 顺序反了会有两种错：先订阅再补写，两者之间产生的那条会被写两遍
+        // 而补写之后才订阅，中间产生的那条会丢
+        // 追加日志只在 UI 线程进行，而本方法也在 UI 线程上，因此这里不存在两者交错的时机
+        //
+        // The subscription comes last: everything above is written first, and only later entries arrive by event
+        // The reverse order fails two ways: subscribing before the backfill writes an entry raised in between twice,
+        // while subscribing after it loses one raised in the gap
+        // Appending happens on the UI thread only and so does this method, so there is no moment where the two interleave
+        AppServices.Log.Added += OnEntryAdded;
     }
 
     private static void Disable(bool writeSessionEnd = true)

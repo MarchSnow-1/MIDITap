@@ -662,6 +662,26 @@ try {
         Assert-True ($sessionText -match "session [0-9]+") "会话头含当天第几次启动"
         Assert-True ($sessionText -match "logging enabled") "记录了「日志已开启」"
 
+        # 打开开关之前就已经发生的那些行必须被补写进来，而且要排在 logging enabled **之前**
+        # 用户是在遇到问题之后才打开开关的，要看的恰恰是打开之前那一段
+        # 不按具体文案断言：文案随界面语言变，而**行数与位置与语言无关**
+        # 也不用启动期的那些行做锚点：本脚本第 0 节点了「清空」，内存缓冲里已经没有了
+        # 第 1~12 节又产生了几十条（每次 note on/off 各一条），补写生效时文件里远不止会话头与这一行
+        #
+        # Lines that already happened before the switch was turned on must be backfilled, and must come
+        # **before** "logging enabled"
+        # The user turns the switch on after hitting a problem, and needs exactly the stretch before that
+        # No specific wording is asserted: wording follows the UI language, whereas a line count and a position
+        # do not
+        # Start-up lines are not used as the anchor either: section 0 of this script presses Clear, so they are
+        # no longer in the in-memory buffer
+        # Sections 1..12 have since produced dozens of lines (one per note on and off), so a working backfill
+        # leaves far more than the header and this one marker
+        $sessionLines = @(Get-Content $sessionFile.FullName | Where-Object { $_.Trim() })
+        $enabledLineIndex = [array]::IndexOf($sessionLines, "logging enabled")
+        Assert-True ($sessionLines.Count -gt 10) ("开关打开后文件里不只有会话头（实际 " + $sessionLines.Count + " 行）")
+        Assert-True ($enabledLineIndex -gt 1) ("补写的行排在 logging enabled 之前（它位于第 " + ($enabledLineIndex + 1) + " 行）")
+
         # 这一条把「MIDI 回调 → 日志服务 → 落盘」整条链串起来
         # 只验文件名与文件头的话，写入器坏了也照样通过
         #
