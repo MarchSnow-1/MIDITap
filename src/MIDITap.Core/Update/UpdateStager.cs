@@ -97,20 +97,63 @@ public static class UpdateStager
     {
         try
         {
-            // 每次都从干净的暂存区开始
+            // 解压出来的内容每次都从干净状态开始
             // "混装的更新"是最难排查的坏状态
+            // 但已下载的包**保留**，它可能是上一轮中断时留下的、仍然完好的那一份
+            // 是否复用它由下面按摘要决定，摘要对不上就删掉
             //
-            // Every run starts from a clean staging directory
+            // The extracted content always starts clean
             // A half-mixed update is the hardest bad state to diagnose
-            CleanStaging(stagingDirectory, packagePath);
+            // The downloaded package is KEPT though, since it may be a still-intact one left by an interrupted round
+            // Whether it is reused is decided below from the digest, and a mismatch deletes it
+            ClearExtractedContent(stagingDirectory);
+            DeleteQuietly(packagePath + ".part");
+
+            // ---- 0) 本地已有的包能否直接复用 / Can the package already on disk be reused -------
+            // 先看本地是否已经有一份完好的包，能省掉一次几百 MB 的下载
+            // 判断依据只有摘要：**没有摘要时无从校验**，那份文件就不能信任
+            // 注意 ChecksumVerdict.NotProvided 的 CanInstall 是 true（历史版本没有摘要文件）
+            // 那是"允许安装"，不等于"可以复用本地文件"
+            // 复用必须先能校验，因此这里单独判断 Sha256 是否存在
+            //
+            // Check whether an intact package is already on disk, which saves a download of hundreds of MB
+            // The digest is the only basis: without one the file cannot be verified and must not be trusted
+            // Note that CanInstall is true for ChecksumVerdict.NotProvided (historical releases carry no digest)
+            // That means "installation is allowed", not "a local file may be reused"
+            // Reuse requires verification, so the presence of Sha256 is checked separately here
+            var reused = false;
+            if (asset.Sha256 is not null && File.Exists(packagePath))
+            {
+                var local = UpdateChecksum.VerifyDigest(packagePath, asset.Sha256);
+                if (local.Verdict == ChecksumVerdict.Match)
+                {
+                    reused = true;
+                    Console.Error.WriteLine(
+                        "[miditap.updater]: Reusing the package already on disk; the digest matches.");
+                    // 复用时不经过下载，进度在这里补一次，否则界面会停在 0%
+                    //
+                    // The download is skipped, so progress is reported here
+                    // Without it the UI would sit at 0%
+                    progress?.Report(new DownloadProgress(asset.Size, asset.Size));
+                }
+                else
+                {
+                    Console.Error.WriteLine(
+                        "[miditap.updater]: Discarding the package already on disk; digest " + local.Verdict + ".");
+                    DeleteQuietly(packagePath);
+                }
+            }
 
             // ---- 1) 下载 / Download ----
-            var downloaded = await UpdateDownloader
-                .DownloadAsync(asset.DownloadUrl, packagePath, options, progress, cancellationToken)
-                .ConfigureAwait(false);
-            if (!downloaded)
+            if (!reused)
             {
-                return new StageResult(false, StageFailure.Download);
+                var downloaded = await UpdateDownloader
+                    .DownloadAsync(asset.DownloadUrl, packagePath, options, progress, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!downloaded)
+                {
+                    return new StageResult(false, StageFailure.Download);
+                }
             }
 
             // ---- 2) 校验（下载之后、解压之前）/ Verify (after download, before extract) ----
@@ -188,6 +231,20 @@ public static class UpdateStager
     /// <summary>清掉暂存目录与已下载的包 / Clears the staging directory and the downloaded package</summary>
     public static void CleanStaging(string stagingDirectory, string packagePath)
     {
+        ClearExtractedContent(stagingDirectory);
+        DeleteQuietly(packagePath);
+        DeleteQuietly(packagePath + ".part");
+    }
+
+    /// <summary>
+    /// 只清解压出来的内容，保留已下载的包
+    /// 下载前用它而不是 CleanStaging：那份包可能就是上一轮留下的、仍然完好的那一份
+    ///
+    /// Clears only the extracted content and keeps the downloaded package
+    /// Used before a download instead of CleanStaging, because that package may be a still-intact one from an earlier round
+    /// </summary>
+    private static void ClearExtractedContent(string stagingDirectory)
+    {
         try
         {
             if (Directory.Exists(stagingDirectory))
@@ -201,8 +258,6 @@ public static class UpdateStager
             //
             // A failed cleanup is fine: the next run rebuilds the directory
         }
-        DeleteQuietly(packagePath);
-        DeleteQuietly(packagePath + ".part");
     }
 
     private static void DeleteQuietly(string path)

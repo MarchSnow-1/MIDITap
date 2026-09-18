@@ -297,6 +297,88 @@ public sealed class UpdateEndToEndTests : IDisposable
         Assert.False(File.Exists(PackagePath + ".part"));
     }
 
+    // ================================================================ 本地已有的包 / A package already on disk
+
+    [Fact]
+    public async Task Reuses_a_verified_local_package_without_downloading()
+    {
+        // 本地已经有一份完好的包时不该再下一次：那是一次几百 MB 的无谓传输
+        // 复用的依据只有摘要，因此这里给的是正确摘要
+        //
+        // An intact package on disk must not be downloaded again, which would be a pointless transfer of hundreds of MB
+        // The digest is the only basis for reuse, so the correct one is supplied here
+        var package = ZipFixture.NormalPackage();
+        File.WriteAllBytes(PackagePath, package);
+
+        // 服务器只要被访问就说明复用没有生效，因此让它返回失败
+        //
+        // Any request at all proves the reuse did not happen, so the server is made to fail
+        using var server = new MiniHttpServer(_ => (500, null, "should not be reached"));
+
+        var result = await UpdateStager.PrepareAsync(
+            AssetFor(server.BaseUrl, package, ZipFixture.Sha256(package)),
+            NoProxy, StagingDir, PackagePath);
+
+        Assert.True(result.Ok, result.Detail);
+        Assert.Equal(ChecksumVerdict.Match, result.Checksum!.Verdict);
+
+        // 一次请求都没有发出 / Not a single request was made
+        Assert.Empty(server.Requests);
+
+        // 复用的包照样要解压，并且照样排除用户数据
+        //
+        // A reused package is still extracted, and still excludes user data
+        Assert.True(File.Exists(Path.Combine(StagingDir, "MIDITap.exe")));
+        Assert.False(Directory.Exists(Path.Combine(StagingDir, "config")));
+    }
+
+    [Fact]
+    public async Task Discards_a_local_package_whose_digest_does_not_match()
+    {
+        // 上一轮中断留下的半成品：摘要对不上就必须丢弃，否则一个坏包会反复参与判断
+        //
+        // A leftover from an interrupted round: a digest mismatch has to discard it
+        // Otherwise the same bad file keeps taking part in the decision
+        File.WriteAllBytes(PackagePath, ZipFixture.Build(("MIDITap/MIDITap.exe", "stale-bytes")));
+
+        var package = ZipFixture.NormalPackage();
+        using var server = new MiniHttpServer(_ => (200, null, package));
+
+        var result = await UpdateStager.PrepareAsync(
+            AssetFor(server.BaseUrl, package, ZipFixture.Sha256(package)),
+            NoProxy, StagingDir, PackagePath);
+
+        Assert.True(result.Ok, result.Detail);
+        Assert.Equal(ChecksumVerdict.Match, result.Checksum!.Verdict);
+
+        // 坏包被丢弃，重新下载了一次 / The bad file was discarded and exactly one download was made
+        Assert.Single(server.Requests);
+    }
+
+    [Fact]
+    public async Task Does_not_reuse_a_local_package_when_no_digest_is_available()
+    {
+        // 没有摘要时本地文件无从校验，必须重新下载
+        // 复用一份无法校验的文件等于跳过校验，而校验是自更新的安全前提
+        // 注意 CanInstall 对 NotProvided 是 true，那是"允许安装"，不等于"可以复用本地文件"
+        //
+        // Without a digest the local file cannot be verified, so it has to be downloaded again
+        // Reusing an unverifiable file would amount to skipping verification, which the self-updater depends on
+        // Note CanInstall is true for NotProvided: that means "installation is allowed", not "a local file may be reused"
+        var package = ZipFixture.NormalPackage();
+        File.WriteAllBytes(PackagePath, package);
+
+        using var server = new MiniHttpServer(_ => (200, null, package));
+
+        var result = await UpdateStager.PrepareAsync(
+            AssetFor(server.BaseUrl, package, digest: null),
+            NoProxy, StagingDir, PackagePath);
+
+        Assert.True(result.Ok, result.Detail);
+        Assert.Equal(ChecksumVerdict.NotProvided, result.Checksum!.Verdict);
+        Assert.Single(server.Requests);
+    }
+
     // ================================================================ 解压边界 / Extraction edge cases
 
     [Fact]
