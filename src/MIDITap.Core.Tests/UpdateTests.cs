@@ -206,7 +206,7 @@ public sealed class UpdateStagingTests
     [InlineData("MIDITap.exe")]
     [InlineData("MIDITap.dll")]
     [InlineData("i18n/en_US.json")]
-    [InlineData("scripts/e2e-midi.ps1")]
+    [InlineData("scripts/apply-update.ps1")]
     public void Program_files_are_not_excluded(string path)
     {
         Assert.False(UpdateStaging.IsExcluded(path));

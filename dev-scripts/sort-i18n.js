@@ -102,6 +102,6 @@ if (keySets.length > 1) {
 
 if (failed) {
   console.log("");
-  console.log("Language files are out of order. Run: node scripts/sort-i18n.js");
+  console.log("Language files are out of order. Run: node dev-scripts/sort-i18n.js");
   process.exit(1);
 }

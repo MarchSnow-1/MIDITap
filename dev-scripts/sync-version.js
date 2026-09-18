@@ -6,9 +6,8 @@
 // 因此把它挂进 npm 的 version 钩子（该钩子在版本号已改、提交之前运行），一起提交
 //
 // 注意：本文件是**开发期工具，不随用户包发布**
-// 打包只复制 scripts/*.ps1（见 .github/workflows/dev.yml 与 release.yml）
-// 因此这里的 .js 不在发布范围内
-// 若将来改成复制 scripts/*，必须先把本文件移出去
+// 它在 dev-scripts/ 下，而打包只取 scripts/ 里的 apply-update.ps1（见 .github/workflows/dev.yml 与 release.yml）
+// 因此它本来就不在发布范围内
 //
 // sync-version.js — copies package.json version into each csproj Version element
 //
@@ -19,9 +18,8 @@
 // That way both land in the same commit
 //
 // Note: this is a DEVELOPMENT-ONLY tool that does not ship with the user package
-// Packaging copies scripts/*.ps1 only (see .github/workflows/dev.yml and release.yml)
-// So a .js here is outside the release scope
-// If that glob ever becomes scripts/*, move this file out first
+// It lives in dev-scripts/, while packaging takes only apply-update.ps1 from scripts/
+// (see .github/workflows/dev.yml and release.yml), so it is outside the release scope by construction
 
 const fs = require("fs");
 const path = require("path");

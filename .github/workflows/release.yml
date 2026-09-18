@@ -86,7 +86,7 @@ jobs:
       #
       # The language files' key set and order must hold before a release; a missing key shows the raw key name in that language
       - name: Validate language files
-        run: node scripts/sort-i18n.js --check
+        run: node dev-scripts/sort-i18n.js --check
 
       # --------------------------------------------------- 测试 / Tests
 
@@ -163,9 +163,12 @@ jobs:
           # config/ is not packaged: the app creates it on first launch, named after the UI language
           # See LanguageCatalog.DefaultConfigStem
           # Leaving it out means no update can overwrite a user's config, which is stronger than excluding it afterwards
-          # E2E 脚本随包发布：用户与维护者都能用同一份脚本对真实设备做验证
+          # scripts/ 里只有 apply-update.ps1 随包发布：自更新流程要用它
+          # E2E 测试脚本在 dev-scripts/，不进包——它需要回环端口与交互式桌面，用户的安装目录里没有这两样
           #
-          # The E2E script ships with the package so users and maintainers validate against real hardware with exactly the same script
+          # Only apply-update.ps1 in scripts/ ships: the self-update flow needs it
+          # The end-to-end test scripts live in dev-scripts/ and are not packaged, because they need a loopback port
+          # and an interactive desktop that a user's installation does not have
           New-Item -ItemType Directory -Force -Path "$stage/scripts" | Out-Null
           Copy-Item scripts/*.ps1 "$stage/scripts/" -ErrorAction SilentlyContinue
           # 不自行发布校验和文件
