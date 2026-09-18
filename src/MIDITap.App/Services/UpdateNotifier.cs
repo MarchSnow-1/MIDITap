@@ -61,6 +61,29 @@ public static class UpdateNotifier
             return;
         }
 
+        // 弹窗之前把这次检查的来路记下来：为什么看不到发布说明、配额还剩多少
+        // 这两条正是"更新看起来不对劲"时最先要看的
+        //
+        // The route this check took is recorded before the dialog opens: why there are no release notes, and how
+        // much quota is left
+        // Those two are the first things worth seeing when the update looks wrong
+        if (info.ViaFallback)
+        {
+            AppServices.Log.Debug(AppServices.I18n.T("log.debug.updateFallback"));
+        }
+
+        if (info.RateLimit is { } quota)
+        {
+            AppServices.Log.Debug(AppServices.I18n.T(
+                "log.debug.updateQuota",
+                ("remaining", quota.Remaining?.ToString() ?? "?"),
+                ("limit", quota.Limit?.ToString() ?? "?"),
+                ("reset", quota.Reset?.ToString("HH:mm") ?? "?")));
+        }
+
+        AppServices.Log.Debug(AppServices.I18n.T(
+            "log.debug.updateNotes", ("count", (info.Notes?.Length ?? 0).ToString())));
+
         _showing = true;
         try
         {

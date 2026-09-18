@@ -438,6 +438,12 @@ public static class UpdateService
 
         CleanStaging();
         Reset();
+
+        // 丢弃这件事记一条 debug：取消之后状态是否真的回到空闲，事后只有日志能回答
+        //
+        // The discard is recorded at debug: only the log can answer afterwards whether cancelling really
+        // returned the state to idle
+        AppServices.Log.Debug(AppServices.I18n.T("log.debug.updateDiscard"));
     }
 
     /// <summary>丢弃暂存内容（只由 DiscardAsync 调用，见那里的顺序要求）</summary>

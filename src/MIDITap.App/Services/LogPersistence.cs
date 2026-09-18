@@ -71,15 +71,28 @@ public static class LogPersistence
                 // would skip them
                 // Then each day earlier than today is merged into its own archive
                 // Today is left alone, because its sessions have to stay separate
-                LogHousekeeping.RemoveLegacyFiles(directory);
-                LogHousekeeping.ArchiveEarlierDays(directory, DateOnly.FromDateTime(DateTime.Now));
+                var today = DateOnly.FromDateTime(DateTime.Now);
+                var legacy = LogHousekeeping.RemoveLegacyFiles(directory);
+                var archived = LogHousekeeping.ArchiveEarlierDays(directory, today);
 
                 // 最后清掉超出保留期的归档：保留 7 天（含今天），没有体积上限
                 //
                 // Finally the archives past the retention window are removed: seven days including today,
                 // with no size cap
-                LogHousekeeping.RemoveExpiredArchives(
-                    directory, DateOnly.FromDateTime(DateTime.Now), LogHousekeeping.RetentionDays);
+                var removed = LogHousekeeping.RemoveExpiredArchives(
+                    directory, today, LogHousekeeping.RetentionDays);
+
+                // 结果记一条 debug："日志到底有没有在整理"正是排查时想知道的
+                // LogService 只接受 UI 线程的追加，因此回到 UI 线程
+                //
+                // The result goes to a debug line: whether housekeeping is running at all is worth knowing when
+                // diagnosing
+                // LogService only accepts appends from the UI thread, so this returns to it
+                AppServices.RunOnUi(() => AppServices.Log.Debug(AppServices.I18n.T(
+                    "log.debug.housekeeping",
+                    ("archived", archived.ToString()),
+                    ("removed", removed.ToString()),
+                    ("legacy", legacy.ToString()))));
             }
             catch
             {

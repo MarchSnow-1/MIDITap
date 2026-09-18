@@ -169,6 +169,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // 走到这里说明没有可恢复的暂存更新：记一条，"上次下完了为什么这次没提示"就有据可查
+        //
+        // Reaching this point means there was no restorable staged update
+        // One line makes "I downloaded it last time, why no prompt now" answerable
+        AppServices.Log.Debug(AppServices.I18n.T("log.debug.updateNoStaged"));
+
         if (!AppServices.UpdatesEnabled)
         {
             AppServices.Log.Debug(
@@ -463,9 +469,32 @@ public sealed partial class MainWindow : Window
         // Yet "the piano is plugged in but no device appears" is exactly the report that starts with these lines
         // That is why recording and display are separate
         backend.PortsListed += ports => AppServices.RunOnUi(() =>
-            log.Debug(AppServices.I18n.T("log.debug.ports", ("count", ports.Count.ToString()))));
+        {
+            log.Debug(AppServices.I18n.T("log.debug.ports", ("count", ports.Count.ToString())));
+            // 端口**名字**也记一条："明明插着琴却看不到设备"这类反馈，只报个数是查不出来的
+            // 数量与名字分成两条：名字可能很长，混在一条里会让计数难以扫读
+            //
+            // The port NAMES go to a line of their own
+            // The report that the piano is plugged in yet no device appears cannot be diagnosed from a count alone
+            // Count and names are kept apart because names can be long, and mixing them makes the count hard to scan
+            log.Debug(AppServices.I18n.T(
+                "log.debug.portNames",
+                ("names", string.Join(", ", ports.Select(port => port.Name)))));
+        });
         backend.ConfigList += configs => AppServices.RunOnUi(() =>
             log.Debug(AppServices.I18n.T("log.debug.configs", ("count", configs.Count.ToString()))));
+        // 状态重放走专用事件，因此不会进活动日志（见 BackendService 的说明）
+        // 但"启动时到底恢复了什么"是排查的关键一环，这里补一条 debug
+        //
+        // State replay uses its own event and therefore does not reach the activity log (see BackendService)
+        // What was restored at startup is a key part of diagnosing, so a debug line is added here
+        backend.ConfigStateRestored += info => AppServices.RunOnUi(() =>
+            log.Debug(AppServices.I18n.T(
+                "log.debug.configRestored",
+                ("name", info.Name),
+                ("count", info.NoteCount.ToString()))));
+        backend.HeldNotesRestored += held => AppServices.RunOnUi(() =>
+            log.Debug(AppServices.I18n.T("log.debug.heldRestored", ("count", held.Count.ToString()))));
         backend.UpdateAvailable += info => AppServices.RunOnUi(() =>
             log.Debug(AppServices.I18n.T(
                 "log.debug.updateFound", ("latest", info.Latest), ("current", info.Current))));
