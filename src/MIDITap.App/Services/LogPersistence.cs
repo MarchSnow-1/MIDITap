@@ -1,15 +1,18 @@
 // LogPersistence.cs — 活动日志落盘开关（在设置页切换）
 //
 // 默认**关闭**：未经要求就往磁盘写日志是多余副作用，且日志行可能包含设备名与按键内容
-// 用户显式开启后，每条活动日志都会以文本行追加到 .storage/logs/miditap.log
-// 由 LogFileWriter 负责后台写入与体积轮转（不在此重复实现）
+// 用户显式开启后，每次启动新建一份 .storage/logs/miditap-<日期>-<编号>.log，活动日志以文本行追加其中
+// 由 LogFileWriter 负责后台写入与单会话体积上限（不在此重复实现）
+// 跨天之后，那一天的各次会话会被合并成 .storage/logs/miditap-<日期>.tar.gz，见 LogHousekeeping
 //
 // LogPersistence.cs — the switch that writes the activity log to disk (toggled on the settings page)
 //
 // **Off** by default: writing a log to disk without being asked is a side effect the user did not request
 // Log lines can also contain device names and key presses
-// Once the user turns it on explicitly, every activity entry is appended as one text line to .storage/logs/miditap.log
-// LogFileWriter handles the background writing and the rotation by size (not reimplemented here)
+// Once the user turns it on explicitly, every launch creates its own .storage/logs/miditap-<date>-<number>.log
+// and activity entries are appended to it as text lines
+// LogFileWriter handles the background writing and the per-session size cap (not reimplemented here)
+// Once a day has passed, that day's sessions are merged into .storage/logs/miditap-<date>.tar.gz; see LogHousekeeping
 
 
 using MIDITap.Core.Logging;
@@ -36,13 +39,55 @@ public static class LogPersistence
     public static string LogDirectory(string baseDir)
         => AppPaths.LogDir(baseDir);
 
-    /// <summary>启动时按已保存的偏好决定是否开启 / Decides at startup whether to enable it, following the saved preference</summary>
+    /// <summary>启动时按已保存的偏好决定是否开启，并整理上一次留下的日志 / Decides at startup whether to enable it, following the saved preference, and tidies up the previous logs</summary>
     public static void Load(string baseDir)
     {
         if (AppStorage.GetLogToFile(baseDir))
         {
             Enable(baseDir);
         }
+
+        // 整理上一次留下的日志
+        // 放到后台：压缩几十上百 MB 会拖住启动，而窗口应当立刻出现
+        // 落盘关闭时也要做：那些文件是本应用自己留下的，跨天之后同样应当归档，否则会一直堆着
+        // 这一步只维护已有文件，不产生任何新的日志内容
+        //
+        // Tidies up the logs left by earlier sessions
+        // On a background thread: compressing tens or hundreds of MB would hold up the start, and the window should
+        // appear at once
+        // It also runs when logging is off: those files were left by this app, and a day that has passed should be
+        // archived all the same, or they pile up
+        // This maintains existing files and produces no new log content
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var directory = AppPaths.LogDir(baseDir);
+
+                // 先清掉旧格式（miditap.log 与 miditap.log.1）：新命名不认识它们，后面的步骤都会跳过
+                // 再把早于今天的每一天各自合并成整天归档；今天的不动，它的会话必须各自独立
+                //
+                // The legacy shapes are removed first: the new naming does not recognise them, so every later step
+                // would skip them
+                // Then each day earlier than today is merged into its own archive
+                // Today is left alone, because its sessions have to stay separate
+                LogHousekeeping.RemoveLegacyFiles(directory);
+                LogHousekeeping.ArchiveEarlierDays(directory, DateOnly.FromDateTime(DateTime.Now));
+
+                // 最后清掉超出保留期的归档：保留 7 天（含今天），没有体积上限
+                //
+                // Finally the archives past the retention window are removed: seven days including today,
+                // with no size cap
+                LogHousekeeping.RemoveExpiredArchives(
+                    directory, DateOnly.FromDateTime(DateTime.Now), LogHousekeeping.RetentionDays);
+            }
+            catch
+            {
+                // 整理失败不影响应用运行，下一轮启动会再试
+                //
+                // A failed tidy-up does not affect the app, and the next launch tries again
+            }
+        });
     }
 
     /// <summary>
