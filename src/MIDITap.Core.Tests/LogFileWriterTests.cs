@@ -1,4 +1,4 @@
-// LogFileWriterTests.cs — 日志落盘与轮转
+// LogFileWriterTests.cs — 日志落盘、体积上限与截断
 //
 // Covers the log-to-file writer and the preference that enables it
 
@@ -120,16 +120,18 @@ public sealed class LogFileWriterTests : IDisposable
         writer.Dispose();
     }
 
-    // ------------------------------------------------------------------ 体积上限轮转
+    // ------------------------------------------------------------------ 体积上限与截断 / Size cap and truncation
     //
-    // Rotation at the size cap
+    // Appending stops at the size cap
 
     [Fact]
-    public void File_rotates_to_backup_once_the_cap_is_exceeded()
+    public void Appending_stops_once_the_cap_is_reached()
     {
-        // 每条 "0123456789" + 换行 = 12 字节；上限 40 字节
+        // 每条 0123456789 加换行是 12 字节，上限 40 字节
+        // 写满 36 字节后下一条会超过上限，于是写一行标记并停手
         //
-        // Each "0123456789" + newline = 12 bytes; the cap is 40 bytes
+        // Each 0123456789 plus a newline is 12 bytes, and the cap is 40 bytes
+        // After 36 bytes the next line would pass the cap, so one marker is written and appending stops
         using (var writer = new LogFileWriter(LogPath, maxBytes: 40))
         {
             for (var i = 0; i < 10; i++)
@@ -138,49 +140,58 @@ public sealed class LogFileWriterTests : IDisposable
             }
         }
 
-        Assert.True(File.Exists(LogPath), "主日志文件应存在");
-        Assert.True(File.Exists(LogPath + ".1"), "超过上限后应产生 .1 备份");
+        // 断言放在 Dispose 之后：写入由后台线程完成，Dispose 会等队列排空
+        // 在 using 块内断言就是与那个线程赛跑，截断标记可能还没写下去
+        //
+        // The assertions come after Dispose: the writing happens on a background thread and Dispose waits for
+        // the queue to drain
+        // Asserting inside the using block races that thread, so the marker may not be written yet
+        var lines = File.ReadAllLines(LogPath);
+        Assert.Equal(LogFileWriter.TruncationMarker, lines[^1]);
+        Assert.True(lines.Length < 10, "达到上限后不应把 10 条全部写入");
     }
 
     [Fact]
-    public void Rotation_keeps_at_most_one_backup_so_disk_use_is_bounded()
+    public void The_file_never_grows_past_the_cap_by_more_than_one_marker()
     {
-        // 不封顶的日志会无限增长；轮转必须只保留 .1，占用上限约为 2 x maxBytes
+        // 上限的意义是占用有界：超出上限的只有那一行标记
+        // 为什么不再轮转成 .1：每个会话已是独立文件，.log.1 不在命名规则里，清理与归档都认不出它
         //
-        // An uncapped log grows without bound
-        // Rotation must keep only .1, so usage is capped at about 2 x maxBytes
+        // The point of the cap is bounded usage: the only thing past it is that single marker line
+        // Why rotation to .1 is gone: every session is already its own file, and .log.1 is not one of the
+        // name shapes, so cleanup and archiving could not recognise it
         using (var writer = new LogFileWriter(LogPath, maxBytes: 24))
         {
-            for (var i = 0; i < 40; i++)
+            for (var i = 0; i < 400; i++)
             {
                 writer.Append("0123456789");
             }
         }
 
-        Assert.True(File.Exists(LogPath));
-        Assert.True(File.Exists(LogPath + ".1"));
-        Assert.False(File.Exists(LogPath + ".2"), "只应保留一个备份");
+        var markerBytes = System.Text.Encoding.UTF8.GetByteCount(LogFileWriter.TruncationMarker)
+            + System.Text.Encoding.UTF8.GetByteCount(Environment.NewLine);
 
-        // 主文件在轮转后必然小于上限；备份也不应无界增长
+        Assert.True(
+            new FileInfo(LogPath).Length <= 24 + markerBytes,
+            "文件最多只超出上限一行标记的长度");
+        Assert.Equal(LogFileWriter.TruncationMarker, File.ReadAllLines(LogPath)[^1]);
+
+        // 不再产生 .1 备份
         //
-        // After rotation the main file is necessarily below the cap
-        // The backup must not grow without bound either
-        Assert.True(new FileInfo(LogPath).Length <= 24, "主文件应小于上限");
-        Assert.True(new FileInfo(LogPath + ".1").Length <= 48, "备份约为一个上限的量级");
+        // No .1 backup is produced any more
+        Assert.False(File.Exists(LogPath + ".1"), "不再轮转，因此不应出现 .1");
     }
 
     [Fact]
-    public void No_rotation_before_the_cap_is_reached()
+    public void Nothing_is_truncated_before_the_cap_is_reached()
     {
         using (var writer = new LogFileWriter(LogPath, maxBytes: 10_000))
         {
             writer.Append("small");
         }
 
-        Assert.True(File.Exists(LogPath));
-        Assert.False(File.Exists(LogPath + ".1"), "未达上限不应轮转");
+        Assert.Equal(["small"], File.ReadAllLines(LogPath));
     }
-
     // ------------------------------------------------------------------ 偏好开关 / Preference switch
 
     [Fact]
