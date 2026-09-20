@@ -373,33 +373,46 @@ public sealed class StagedUpdateTests : IDisposable
     // ================================================================ 落地内容的清理 / Discarding landed content
 
     /// <summary>铺出一次更新落地后会留下的全部内容 / Lays down everything a landed update leaves behind</summary>
-    private (string Installer, string Staging, string Package) WriteLandedContent()
+    private void WriteLandedContent()
     {
         WriteInstaller();
         WriteCompletePayload();
-        var package = Path.Combine(AppPaths.UpdateDir(_dir), UpdateStager.PortablePackageFileName);
-        File.WriteAllText(package, "zip");
-        File.WriteAllText(package + ".part", "partial");
-        return (StagedUpdate.InstallerPath(_dir), StagedUpdate.StagingDir(_dir), package);
+        var update = AppPaths.UpdateDir(_dir);
+        File.WriteAllText(Path.Combine(update, UpdateStager.PortablePackageFileName), "zip");
+        File.WriteAllText(Path.Combine(update, UpdateStager.PortablePackageFileName + ".part"), "partial");
+
+        // 便携辅助脚本的备份与它自己的日志：实测成功后一个成功更新会留下 539 个文件 / 230 MB
+        // 它们也在更新工作目录之下，因此同样该被丢弃
+        //
+        // The portable helper's backup and its own log: measured, one successful update left 539 files and 230 MB
+        // They live under the same update working directory, so they go too
+        Directory.CreateDirectory(Path.Combine(update, "backup", "Assets"));
+        File.WriteAllText(Path.Combine(update, "backup", "MIDITap.exe"), "old");
+        File.WriteAllText(Path.Combine(update, "backup", "Assets", "appIcon.ico"), "old");
+        File.WriteAllText(Path.Combine(update, "apply.log"), "helper log");
     }
 
     [Fact]
-    public void Discarding_a_landed_update_removes_everything_it_left()
+    public void Discarding_a_landed_update_removes_the_whole_working_directory()
     {
         // 更新装上之后再留着这些文件只是占地方，而"占地方"会一直被忽略下去
-        // 实测：安装器路线成功后 .update 里的 setup.exe 有 62 MB，此前没有任何一步删它
+        // 实测两处：安装器路线成功后 .update 里的 setup.exe 有 62 MB；便携路线成功后 .update\backup 有 230 MB
+        // 两处此前都没有任何一步去删
         //
         // Once the update is installed these files only take up room, and that goes unnoticed
-        // Measured: after a successful installer-route update the setup.exe in .update was 62 MB, and no step
-        // deleted it
-        var landed = WriteLandedContent();
+        // Measured twice: after a successful installer-route update the setup.exe in .update was 62 MB, and after a
+        // successful portable-route update .update\backup held 230 MB
+        // Neither had any step deleting it
+        var update = AppPaths.UpdateDir(_dir);
+        WriteLandedContent();
 
         UpdateStager.DiscardStagedContent(_dir);
 
-        Assert.False(File.Exists(landed.Installer), "the installer should be gone");
-        Assert.False(Directory.Exists(landed.Staging), "the extracted directory should be gone");
-        Assert.False(File.Exists(landed.Package), "the downloaded package should be gone");
-        Assert.False(File.Exists(landed.Package + ".part"), "a half-written download should be gone too");
+        // 断言整个目录不在，而不是逐条断言：逐条列举正是漏掉 backup/ 的原因
+        //
+        // The assertion is that the DIRECTORY is gone rather than an itemised list
+        // An itemised list is exactly how backup/ was missed
+        Assert.False(Directory.Exists(update), "the update working directory should be gone");
     }
 
     [Fact]

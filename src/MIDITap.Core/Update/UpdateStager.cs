@@ -387,31 +387,46 @@ public static class UpdateStager
     }
 
     /// <summary>
-    /// 丢弃一次更新落地后留下的全部内容：安装包、解压目录、下载的包
-    /// 用于"这次更新已经装上了"这一情形，此时这些文件没有任何用途，留着只是几十 MB 的垃圾
+    /// 丢弃一次更新落地后留下的全部内容：整个更新工作目录
+    /// 用于"这次更新已经装上了"这一情形，此时那里的东西没有任何用途
     ///
-    /// 三条路径各自取自它们的定义处（StagedUpdate 与 UpdateStager），不在此另写一份，改名时不会漏掉一处
-    /// 与 CleanStaging 的分工：那个清的是下载过程本身中途留下的东西，调用方是下载流程
+    /// 为什么是整个目录而不是逐条列出：那里的内容比"安装包 + 解压目录 + 下载的包"多
+    /// 便携辅助脚本还会把替换前的每一个文件备份到其下的 backup/ 供回滚（apply-update.ps1）
+    /// 实测一次成功更新后那份备份是 539 个文件 / 230 MB，脚本成功后并不删除它
+    /// 逐条列举就会漏掉这一类，而漏掉的代价是一份应用副本永久留在用户盘上
     ///
-    /// Discards everything a landed update leaves behind: the installer, the extracted directory, the downloaded package
-    /// Used once the update has been installed, when those files have no further purpose and are tens of MB of litter
+    /// 为什么只有"已经装上"和"记录过期"两种情形会调它，失败时不会
+    ///   失败时脚本已回滚，backup/ 与暂存目录都是排查现场，本次启动还可能让用户重试
+    ///   因此那两种失败情形下 Resolve 得到的结论都不是这两个，本函数不会被调到
     ///
-    /// Each path comes from where it is defined (StagedUpdate and UpdateStager) rather than being written out again
-    /// here, so a rename cannot miss one
-    /// The split against CleanStaging: that one clears what a round in progress left behind and is called by the
-    /// download flow itself
+    /// 与辅助脚本的先后：便携路线上是脚本先启动新应用、再删暂存目录，因此本函数有可能在脚本收尾前跑起来
+    /// 那时脚本往 apply.log 追加最后几行会失败，而它那处写入已包了 try/catch，只会少写一行日志
+    /// 应用此刻已经重启完成，退出码与结果都不受影响
+    ///
+    /// Discards everything a landed update leaves behind: the whole update working directory
+    ///
+    /// Ordering against the helper: on the portable route the script starts the new app before it removes the
+    /// staging directory, so this method can run while the script is still finishing
+    /// Appending its last few lines to apply.log then fails, and that write is already wrapped in a try/catch, so a
+    /// log line is merely lost
+    /// The app has restarted by then, and neither the exit code nor the outcome is affected
+    /// Used once the update has been installed, when nothing in there has any further purpose
+    ///
+    /// Why the whole directory rather than an itemised list: that directory holds more than "installer plus
+    /// extracted tree plus downloaded package"
+    /// The portable helper also backs up every file it replaces into backup/ underneath, for rollback
+    /// (apply-update.ps1)
+    /// Measured after one successful update, that backup was 539 files and 230 MB, and the script does not remove it
+    /// on success
+    /// An itemised list would miss that kind, and missing it leaves a whole copy of the app on the user's disk
+    ///
+    /// Why only the "already installed" and "stale record" cases call it, and a failure does not
+    ///   After a failure the helper has rolled back, so backup/ and the staging tree are the evidence, and this
+    ///   launch may still let the user retry
+    ///   Neither of those two verdicts is reached in that state, so this method is not called
     /// </summary>
     public static void DiscardStagedContent(string baseDir)
-    {
-        var installer = StagedUpdate.InstallerPath(baseDir);
-        var package = Path.Combine(Settings.AppPaths.UpdateDir(baseDir), PortablePackageFileName);
-
-        DeleteQuietly(installer);
-        DeleteQuietly(installer + ".part");
-        ClearExtractedContent(StagedUpdate.StagingDir(baseDir));
-        DeleteQuietly(package);
-        DeleteQuietly(package + ".part");
-    }
+        => ClearExtractedContent(Settings.AppPaths.UpdateDir(baseDir));
 
     /// <summary>
     /// 只清解压出来的内容，保留已下载的包
