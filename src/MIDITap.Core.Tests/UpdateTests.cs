@@ -153,6 +153,56 @@ public sealed class UpdateAssetSelectorTests
             UpdateAssetSelector.Select(only)!.Name,
             UpdateAssetSelector.Select(Enumerable.Reverse(only))!.Name);
     }
+
+    [Fact]
+    public void Selects_the_installer_when_one_is_asked_for()
+    {
+        // 安装器装的用户要的是 setup.exe，不是 zip
+        //
+        // An installed copy wants setup.exe rather than the zip
+        var selected = UpdateAssetSelector.Select(
+            [Asset("MIDITap-v2.1.0-win-x64.zip"), Asset("MIDITap-v2.1.0-win-x64-setup.exe")],
+            UpdatePackageKind.Installer);
+
+        Assert.NotNull(selected);
+        Assert.Equal("MIDITap-v2.1.0-win-x64-setup.exe", selected!.Name);
+    }
+
+    [Fact]
+    public void The_two_kinds_never_pick_each_others_asset()
+    {
+        // 两种后缀互不包含，因此问错种类的唯一后果是"找不到"，而不是"下载了另一个包"
+        // 这比挑错文件安全：找不到会退回 Releases 页面，挑错文件则会把东西装错
+        //
+        // Neither suffix contains the other, so asking for the wrong kind yields "not found" rather than
+        // "downloaded the other package"
+        // That is safer than picking the wrong file: not found falls back to the Releases page, whereas the
+        // wrong file would be installed
+        var zip = new[] { Asset("MIDITap-v2.1.0-win-x64.zip") };
+        var setup = new[] { Asset("MIDITap-v2.1.0-win-x64-setup.exe") };
+
+        Assert.Null(UpdateAssetSelector.Select(zip, UpdatePackageKind.Installer));
+        Assert.Null(UpdateAssetSelector.Select(setup, UpdatePackageKind.Portable));
+    }
+
+    [Fact]
+    public void The_default_kind_is_the_portable_one()
+    {
+        // 不传 kind 的调用方与改动前行为一致
+        //
+        // A caller that passes no kind keeps the behaviour from before this change
+        var selected = UpdateAssetSelector.Select([Asset("MIDITap-v2.1.0-win-x64.zip")]);
+
+        Assert.NotNull(selected);
+        Assert.Equal("MIDITap-v2.1.0-win-x64.zip", selected!.Name);
+    }
+
+    [Fact]
+    public void Suffix_for_maps_each_kind()
+    {
+        Assert.Equal("-win-x64.zip", UpdateAssetSelector.SuffixFor(UpdatePackageKind.Portable));
+        Assert.Equal("-win-x64-setup.exe", UpdateAssetSelector.SuffixFor(UpdatePackageKind.Installer));
+    }
 }
 
 public sealed class UpdateStagingTests

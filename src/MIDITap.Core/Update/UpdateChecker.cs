@@ -166,9 +166,12 @@ public static class UpdateChecker
         => CheckForUpdatesAsync(currentVersion, UpdateOptions.Default);
 
     /// <summary>带网络设置的检查 / The check with explicit network settings</summary>
-    public static async Task<UpdateInfo?> CheckForUpdatesAsync(string currentVersion, UpdateOptions options)
+    public static async Task<UpdateInfo?> CheckForUpdatesAsync(
+        string currentVersion,
+        UpdateOptions options,
+        UpdatePackageKind kind = UpdatePackageKind.Portable)
     {
-        var (info, _) = await CheckForUpdatesDetailedAsync(currentVersion, options).ConfigureAwait(false);
+        var (info, _) = await CheckForUpdatesDetailedAsync(currentVersion, options, kind).ConfigureAwait(false);
         return info;
     }
 
@@ -185,9 +188,10 @@ public static class UpdateChecker
 
     /// <summary>带网络设置的详细检查 / The detailed check with explicit network settings</summary>
     public static async Task<(UpdateInfo? Info, bool Ok)> CheckForUpdatesDetailedAsync(
-        string currentVersion, UpdateOptions options)
+        string currentVersion, UpdateOptions options,
+        UpdatePackageKind kind = UpdatePackageKind.Portable)
     {
-        var outcome = await CheckWithReasonAsync(currentVersion, options).ConfigureAwait(false);
+        var outcome = await CheckWithReasonAsync(currentVersion, options, kind: kind).ConfigureAwait(false);
         return (outcome.Info, outcome.Ok);
     }
 
@@ -209,8 +213,10 @@ public static class UpdateChecker
     /// Handling only 403 would needlessly lose those cases
     /// </summary>
     public static Task<UpdateCheckOutcome> CheckWithReasonAsync(
-        string currentVersion, UpdateOptions options, CancellationToken cancellationToken = default)
-        => CheckWithReasonAsync(currentVersion, options, UpdateEndpoints.Default, cancellationToken);
+        string currentVersion, UpdateOptions options,
+        CancellationToken cancellationToken = default,
+        UpdatePackageKind kind = UpdatePackageKind.Portable)
+        => CheckWithReasonAsync(currentVersion, options, UpdateEndpoints.Default, cancellationToken, kind);
 
     /// <summary>
     /// 带端点覆盖的检查（供测试注入本地服务器，从而确定性地验证回退顺序）
@@ -220,12 +226,13 @@ public static class UpdateChecker
     /// </summary>
     public static async Task<UpdateCheckOutcome> CheckWithReasonAsync(
         string currentVersion, UpdateOptions options, UpdateEndpoints endpoints,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        UpdatePackageKind kind = UpdatePackageKind.Portable)
     {
         // 1) API 优先
         //
         // 1) API first
-        var viaApi = await TryApiAsync(currentVersion, options, endpoints, cancellationToken)
+        var viaApi = await TryApiAsync(currentVersion, options, endpoints, cancellationToken, kind)
             .ConfigureAwait(false);
         if (viaApi.Ok)
         {
@@ -240,7 +247,7 @@ public static class UpdateChecker
         //
         // 2) API failed -> the web page path
         var viaPage = await CheckViaReleasePageAsync(
-            currentVersion, options, endpoints, viaApi.RateLimit, cancellationToken)
+            currentVersion, options, endpoints, viaApi.RateLimit, cancellationToken, kind)
             .ConfigureAwait(false);
         if (viaPage is not null)
         {
@@ -264,7 +271,7 @@ public static class UpdateChecker
     /// </summary>
     private static async Task<UpdateCheckOutcome> TryApiAsync(
         string currentVersion, UpdateOptions options, UpdateEndpoints endpoints,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, UpdatePackageKind kind)
     {
         try
         {
@@ -328,7 +335,7 @@ public static class UpdateChecker
                     && bodyElement.ValueKind == JsonValueKind.String
                         ? bodyElement.GetString()
                         : null;
-                asset = ParseAsset(root);
+                asset = ParseAsset(root, kind);
             }
 
             // 用 semver 库比较，而不是自己手写。SemVersionStyles.Any 接受真实的 GitHub 标签（都带 v 前缀）
@@ -424,7 +431,7 @@ public static class UpdateChecker
     /// </summary>
     private static async Task<UpdateCheckOutcome?> CheckViaReleasePageAsync(
         string currentVersion, UpdateOptions options, UpdateEndpoints endpoints,
-        RateLimitInfo? rateLimit, CancellationToken cancellationToken)
+        RateLimitInfo? rateLimit, CancellationToken cancellationToken, UpdatePackageKind kind)
     {
         try
         {
@@ -457,7 +464,7 @@ public static class UpdateChecker
             var assets = await ReleasePageChecker
                 .GetAssetsAsync(endpoints.ReleasesPageBase, tag, options, cancellationToken)
                 .ConfigureAwait(false);
-            var asset = UpdateAssetSelector.Select(assets);
+            var asset = UpdateAssetSelector.Select(assets, kind);
 
             // 列表拿不到（端点变化、代理拦截、页面结构改动）时**不停在这里**
             // 资产名由我们自己的命名约定决定，构造候选名并用 HEAD 探测即可
@@ -472,7 +479,7 @@ public static class UpdateChecker
             // Otherwise the user hits a limitation that should not exist
             // github.com is reachable, yet a manual download is required
             asset ??= await ReleaseAssetProbe
-                .FindExistingAsync(endpoints.ReleasesPageBase, tag, options, cancellationToken)
+                .FindExistingAsync(endpoints.ReleasesPageBase, tag, options, cancellationToken, kind)
                 .ConfigureAwait(false);
 
             // 仍然为 null 只可能是"该版本确实没有 Windows 构建"，此时调用方引导到 Releases 页面
@@ -504,7 +511,7 @@ public static class UpdateChecker
     ///
     /// Takes the asset list out of the release JSON and picks the one this platform should download
     /// </summary>
-    private static UpdateAsset? ParseAsset(JsonElement root)
+    private static UpdateAsset? ParseAsset(JsonElement root, UpdatePackageKind kind)
     {
         if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
         {
@@ -539,6 +546,6 @@ public static class UpdateChecker
                 list.Add(new UpdateAsset(name, url, size, digest));
             }
         }
-        return UpdateAssetSelector.Select(list);
+        return UpdateAssetSelector.Select(list, kind);
     }
 }

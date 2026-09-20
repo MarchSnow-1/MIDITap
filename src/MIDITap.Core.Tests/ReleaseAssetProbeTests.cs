@@ -34,6 +34,18 @@ public sealed class ReleaseAssetProbeNamingTests
     }
 
     [Fact]
+    public void Probes_the_installer_name_when_one_is_asked_for()
+    {
+        // 安装器路线探测的是 setup.exe，命名规则同样是 MIDITap-<tag>-<后缀>
+        // 标签带 v 前缀（见 release.yml 的 VERSION），因此资产名也带
+        //
+        // The installer route probes setup.exe, named by the same MIDITap-<tag>-<suffix> rule
+        // The tag carries the v prefix (see VERSION in release.yml), and so does the asset name
+        var names = ReleaseAssetProbe.CandidateNames("v2.0.0", UpdatePackageKind.Installer);
+        Assert.Equal(["MIDITap-v2.0.0-win-x64-setup.exe"], names);
+    }
+
+    [Fact]
     public void Builds_the_download_url_from_the_releases_base()
     {
         Assert.Equal(

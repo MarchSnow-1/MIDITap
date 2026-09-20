@@ -40,8 +40,10 @@ public static class ReleaseAssetProbe
     /// It still returns a list because the probe is written to try candidates in turn
     /// A second naming variant later therefore needs no structural change
     /// </summary>
-    public static IReadOnlyList<string> CandidateNames(string tag)
-        => [$"MIDITap-{tag}-win-x64.zip"];
+    public static IReadOnlyList<string> CandidateNames(
+        string tag,
+        UpdatePackageKind kind = UpdatePackageKind.Portable)
+        => [$"MIDITap-{tag}{UpdateAssetSelector.SuffixFor(kind)}"];
 
     /// <summary>构造下载地址 / Builds the download URL</summary>
     public static string BuildUrl(string releasesPageBase, string tag, string fileName)
@@ -58,7 +60,8 @@ public static class ReleaseAssetProbe
     /// </summary>
     public static async Task<UpdateAsset?> FindExistingAsync(
         string releasesPageBase, string tag, UpdateOptions options,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        UpdatePackageKind kind = UpdatePackageKind.Portable)
     {
         try
         {
@@ -78,7 +81,7 @@ public static class ReleaseAssetProbe
             }
             using var client = new HttpClient(handler) { Timeout = RequestTimeout };
 
-            foreach (var name in CandidateNames(tag))
+            foreach (var name in CandidateNames(tag, kind))
             {
                 var url = BuildUrl(releasesPageBase, tag, name);
                 try
