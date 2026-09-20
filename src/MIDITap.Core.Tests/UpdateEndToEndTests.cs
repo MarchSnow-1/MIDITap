@@ -99,6 +99,12 @@ public sealed class UpdateEndToEndTests : IDisposable
         => new("MIDITap-v9.9.9-win-x64.zip", baseUrl + "/dl/MIDITap-v9.9.9-win-x64.zip",
             package.Length, digest);
 
+    private string InstallerPath => Path.Combine(_dir, UpdateStager.InstallerFileName);
+
+    private static UpdateAsset InstallerAssetFor(string baseUrl, byte[] payload, string? digest)
+        => new("MIDITap-v9.9.9-win-x64-setup.exe", baseUrl + "/dl/MIDITap-v9.9.9-win-x64-setup.exe",
+            payload.Length, digest);
+
     // ================================================================ 正常路径 / Happy path
 
     [Fact]
@@ -533,6 +539,126 @@ public sealed class UpdateEndToEndTests : IDisposable
         Assert.Contains(
             UpdateStager.RequiredRelativePaths,
             p => p.EndsWith("apply-update.ps1", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ================================================================ 安装器路线 / The installer route
+
+    [Fact]
+    public async Task Installer_route_accepts_a_verified_installer()
+    {
+        // 身份校验器注入一个替身：能通过校验的真实安装包有几十 MB，不能作为测试数据
+        // 身份规则本身由 InstallerIdentityTests 覆盖
+        //
+        // A stand-in verifier is injected: a real installer that passes the check is tens of MB and cannot serve
+        // as test data
+        // The identity rules themselves are covered by InstallerIdentityTests
+        var payload = new byte[] { 1, 2, 3, 4, 5 };
+        using var server = new MiniHttpServer(_ => (200, null, payload));
+
+        var result = await UpdateStager.PrepareInstallerAsync(
+            InstallerAssetFor(server.BaseUrl, payload, ZipFixture.Sha256(payload)),
+            NoProxy, InstallerPath, verifyInstaller: _ => new InstallerIdentityResult(true));
+
+        Assert.True(result.Ok, result.Detail);
+        Assert.Equal(ChecksumVerdict.Match, result.Checksum!.Verdict);
+
+        // 安装包留在盘上等界面层运行它，而且**没有**解压出任何东西
+        //
+        // The installer stays on disk for the UI layer to run, and nothing was extracted
+        Assert.True(File.Exists(InstallerPath));
+        Assert.False(Directory.Exists(StagingDir));
+    }
+
+    [Fact]
+    public async Task Installer_route_refuses_a_file_that_is_not_our_installer()
+    {
+        // 用真实校验器：这几个字节不是 PE，身份校验必然不通过
+        // 通过之后要执行它，因此拒绝之外还必须**删掉**
+        //
+        // The real verifier is used: these bytes are not a PE, so the identity check must fail
+        // The file would be executed next, so a refusal must also DELETE it
+        var payload = new byte[] { 1, 2, 3, 4, 5 };
+        using var server = new MiniHttpServer(_ => (200, null, payload));
+
+        var result = await UpdateStager.PrepareInstallerAsync(
+            InstallerAssetFor(server.BaseUrl, payload, ZipFixture.Sha256(payload)),
+            NoProxy, InstallerPath);
+
+        Assert.False(result.Ok);
+        Assert.Equal(StageFailure.NotOurInstaller, result.Failure);
+        Assert.False(File.Exists(InstallerPath));
+    }
+
+    [Fact]
+    public async Task Installer_route_refuses_an_asset_without_a_digest()
+    {
+        // 摘要缺失时**连下载都不做**：几十 MB 下完也无法校验
+        // 服务器故意返回 500，若真的去下载就会变成 Download 失败，从而暴露这条判断没生效
+        //
+        // Without a digest not even the download happens: tens of MB would arrive unverifiable
+        // The server answers 500 on purpose, so actually downloading would surface as a Download failure and
+        // reveal that this guard did not hold
+        var payload = new byte[] { 1, 2, 3 };
+        using var server = new MiniHttpServer(_ => (500, null, "should not be reached"));
+
+        var result = await UpdateStager.PrepareInstallerAsync(
+            InstallerAssetFor(server.BaseUrl, payload, null),
+            NoProxy, InstallerPath);
+
+        Assert.False(result.Ok);
+        Assert.Equal(StageFailure.NotOurInstaller, result.Failure);
+        Assert.Contains("digest", result.Detail);
+        Assert.False(File.Exists(InstallerPath));
+    }
+
+    [Fact]
+    public async Task Installer_route_rejects_a_digest_mismatch()
+    {
+        var payload = new byte[] { 1, 2, 3, 4, 5 };
+        using var server = new MiniHttpServer(_ => (200, null, payload));
+
+        var result = await UpdateStager.PrepareInstallerAsync(
+            InstallerAssetFor(server.BaseUrl, payload, new string('a', 64)),
+            NoProxy, InstallerPath, verifyInstaller: _ => new InstallerIdentityResult(true));
+
+        Assert.False(result.Ok);
+        Assert.Equal(StageFailure.ChecksumMismatch, result.Failure);
+        // 坏包必须被删掉，绝不能留一个"看起来可用"的可执行文件
+        //
+        // The bad package must be deleted: a plausible-looking executable must never be left behind
+        Assert.False(File.Exists(InstallerPath));
+    }
+
+    [Fact]
+    public async Task Installer_route_reports_a_download_failure()
+    {
+        using var server = new MiniHttpServer(_ => (404, null, Array.Empty<byte>()));
+
+        var result = await UpdateStager.PrepareInstallerAsync(
+            InstallerAssetFor(server.BaseUrl, Array.Empty<byte>(), new string('a', 64)),
+            NoProxy, InstallerPath, verifyInstaller: _ => new InstallerIdentityResult(true));
+
+        Assert.False(result.Ok);
+        Assert.Equal(StageFailure.Download, result.Failure);
+    }
+
+    [Fact]
+    public async Task Installer_route_reuses_a_verified_installer_already_on_disk()
+    {
+        // 与便携路线同理：重启后再点更新不该重下几十 MB
+        //
+        // The same reasoning as the portable route: after a restart, clicking update again must not re-download
+        // tens of MB
+        var payload = new byte[] { 9, 8, 7 };
+        var digest = ZipFixture.Sha256(payload);
+        File.WriteAllBytes(InstallerPath, payload);
+        using var server = new MiniHttpServer(_ => (500, null, "should not be reached"));
+
+        var result = await UpdateStager.PrepareInstallerAsync(
+            InstallerAssetFor(server.BaseUrl, payload, digest),
+            NoProxy, InstallerPath, verifyInstaller: _ => new InstallerIdentityResult(true));
+
+        Assert.True(result.Ok, result.Detail);
     }
 
     // ================================================================ 摘要解析 / Digest parsing
