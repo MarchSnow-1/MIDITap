@@ -57,6 +57,7 @@
   "log.debug.updateCheck": "Update check started (current {version})",
   "log.debug.updateDiscard": "Discarded this update round and returned to idle",
   "log.debug.updateDiscardLanded": "Installed update {version} and cleaned up the temporary files",
+  "log.debug.updateDiscardStale": "Update {version} was stale; cleaned up the temporary files",
   "log.debug.updateFallback": "The GitHub API was unavailable, so the web path was used (hence no markdown notes)",
   "log.debug.updateFound": "Found new version {latest} (current {current})",
   "log.debug.updateNoStaged": "No restorable staged update, checking the network instead",

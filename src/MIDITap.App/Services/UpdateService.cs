@@ -535,8 +535,17 @@ public static class UpdateService
         if (result.Verdict is StagedRestoreVerdict.AlreadyInstalled or StagedRestoreVerdict.Superseded)
         {
             UpdateStager.DiscardStagedContent(AppServices.BaseDir);
-            AppServices.Log.Debug(AppServices.I18n.T(
-                "log.debug.updateDiscardLanded", ("version", result.Version ?? string.Empty)));
+
+            // 两种结论分开措辞：前者那个版本确实装上了，后者只是记录过期、那个版本并没有被安装
+            // 用同一句话盖住两种情形，日志就会报一件没有发生过的事
+            //
+            // The two verdicts read differently: in the first the version really was installed, while in the second
+            // only the record went stale and that version was never installed
+            // One sentence covering both would have the log state something that did not happen
+            var key = result.Verdict == StagedRestoreVerdict.AlreadyInstalled
+                ? "log.debug.updateDiscardLanded"
+                : "log.debug.updateDiscardStale";
+            AppServices.Log.Debug(AppServices.I18n.T(key, ("version", result.Version ?? string.Empty)));
         }
 
         if (result.Verdict != StagedRestoreVerdict.Ready)
