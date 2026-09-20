@@ -7,6 +7,10 @@
 // 两条路线的凭据不同，因此形态也必须一起核对：便携看解压出来的必需文件，安装器看那个 setup.exe
 // 只记版本号的话，重启后无从判断该核对哪一样
 //
+// 版本号有**两种形式**，两者都必须在用例里出现：
+//   记录里写的是远端标签（v2.0.1，带 v），而核对时传进来的是程序集版本（2.0.1，不带 v）
+//   只测"两边都带 v"这一种组合，正是漏掉"更新成功后每次启动又提示一遍"那个缺陷的原因
+//
 // StagedUpdateTests.cs — whether an update downloaded but never restarted can be restored on the next launch
 //
 // Why these tests matter: this path is reachable only in a **release** build (a development build has no update flow),
@@ -17,6 +21,11 @@
 // The two routes check different evidence, so the shape has to be checked as well: the portable route looks for
 // the extracted required files, the installer route for that setup.exe
 // With only a version number, a relaunch cannot tell which one to check
+//
+// A version comes in TWO forms and both must appear in these tests:
+//   the record holds the remote tag (v2.0.1, with the v) while the check passes in the assembly version (2.0.1, without it)
+//   Testing only the "both carry a v" combination is exactly why the defect where every launch re-offered an
+//   already-installed update went unnoticed
 
 using MIDITap.Core.Settings;
 using MIDITap.Core.Update;
@@ -66,6 +75,12 @@ public sealed class StagedUpdateTests : IDisposable
         File.WriteAllText(path, "MZ");
     }
 
+    /// <summary>按形态铺出对应的凭据 / Lays down the evidence the given shape looks for</summary>
+    private void WriteEvidence(UpdatePackageKind kind)
+    {
+        if (kind == UpdatePackageKind.Installer) { WriteInstaller(); } else { WriteCompletePayload(); }
+    }
+
     [Fact]
     public void No_record_means_nothing_to_restore()
     {
@@ -113,19 +128,124 @@ public sealed class StagedUpdateTests : IDisposable
         Assert.Equal(string.Empty, AppStorage.GetStagedUpdate(_dir));
     }
 
+    // ================================================================ 版本形式 / The two forms of a version
+
     [Fact]
     public void An_already_installed_version_clears_the_record()
     {
         // 上次已经装上了，只是记录没来得及清：不能再弹一次更新，同时把记录抹掉
+        // 这里刻意用实机上的真实组合：记录来自远端标签（v2.0.1，带 v），而 Restore 拿到的是程序集版本（2.0.1，不带 v）
+        // 两者形式不同，按文字比较永远不相等，于是记录清不掉、每次启动都把同一个版本再提示一遍
         //
         // The update did get installed last time and only the record survived: no prompt, and the record is cleared
-        StagedUpdate.Mark(_dir, "v2.0.0", UpdatePackageKind.Portable);
+        // The real-machine combination is used on purpose: the record comes from the remote tag (v2.0.1, with the v)
+        // while Restore receives the assembly version (2.0.1, without it)
+        // The two forms differ, so a text comparison never matches, the record is never cleared, and every launch
+        // offers the same version again
+        StagedUpdate.Mark(_dir, "v2.0.1", UpdatePackageKind.Portable);
         WriteCompletePayload();
 
-        var result = StagedUpdate.Restore(_dir, "v2.0.0");
+        var result = StagedUpdate.Restore(_dir, "2.0.1");
 
         Assert.Equal(StagedRestoreVerdict.AlreadyInstalled, result.Verdict);
         Assert.Equal(string.Empty, AppStorage.GetStagedUpdate(_dir));
+    }
+
+    [Theory]
+    [InlineData(UpdatePackageKind.Portable)]
+    [InlineData(UpdatePackageKind.Installer)]
+    public void The_tag_form_and_the_assembly_form_name_the_same_version(UpdatePackageKind kind)
+    {
+        // 两条路线都要按版本比较：安装器路线是实机复现出该缺陷的那一条，便携路线此前也有同一处形式差
+        //
+        // Both routes have to compare versions: the installer route is the one where the defect was reproduced on a
+        // real machine, and the portable route carried the same difference in form
+        StagedUpdate.Mark(_dir, "v2.0.1", kind);
+        WriteEvidence(kind);
+
+        var result = StagedUpdate.Restore(_dir, "2.0.1");
+
+        Assert.Equal(StagedRestoreVerdict.AlreadyInstalled, result.Verdict);
+        Assert.Equal(kind, result.Kind);
+    }
+
+    [Fact]
+    public void A_record_older_than_the_running_version_is_superseded()
+    {
+        // 记录停在旧版本：此时若还恢复出"可恢复的更新"，提示会把版本往回退（当前 2.0.1 / 最新 2.0.0）
+        //
+        // A record left at an older version: restoring it would propose moving the version backwards
+        // (current 2.0.1, latest 2.0.0)
+        StagedUpdate.Mark(_dir, "v2.0.0", UpdatePackageKind.Portable);
+        WriteCompletePayload();
+
+        var result = StagedUpdate.Restore(_dir, "2.0.1");
+
+        Assert.Equal(StagedRestoreVerdict.Superseded, result.Verdict);
+        Assert.Equal("v2.0.0", result.Version);
+        Assert.Equal(string.Empty, AppStorage.GetStagedUpdate(_dir));
+    }
+
+    [Fact]
+    public void A_prerelease_record_is_older_than_its_release()
+    {
+        // 预发布版排在正式版之前：记录 v2.0.0-beta.1 而当前已是 2.0.0 时，这条记录同样过期
+        // 按文字比较会认为两者不同，于是恢复出一个把正式版换回 beta 的提示
+        //
+        // A prerelease precedes its release, so a record of v2.0.0-beta.1 against a running 2.0.0 is stale as well
+        // A text comparison would call the two different and restore a prompt that swaps the release back for a beta
+        StagedUpdate.Mark(_dir, "v2.0.0-beta.1", UpdatePackageKind.Portable);
+        WriteCompletePayload();
+
+        Assert.Equal(StagedRestoreVerdict.Superseded, StagedUpdate.Restore(_dir, "2.0.0").Verdict);
+    }
+
+    [Theory]
+    [InlineData("garbage", "2.0.1")]
+    [InlineData("2.0.1", "garbage")]
+    [InlineData("nightly", "2.0.1")]
+    [InlineData("v", "2.0.1")]
+    public void A_version_that_does_not_parse_never_counts_as_already_installed(string recorded, string current)
+    {
+        // 解析不了时不能当成"同一个版本"：那会把用户已经下好的更新包白白清掉
+        // 文字完全相同才算相等，其余一律继续按磁盘凭据判断，那才是保守的一侧
+        //
+        // An unparsable value must not count as "the same version", or a downloaded package would be discarded
+        // Only an exact text match counts as equal; anything else still goes through the disk evidence,
+        // which is the cautious side
+        StagedUpdate.Mark(_dir, recorded, UpdatePackageKind.Portable);
+        WriteCompletePayload();
+
+        Assert.Equal(StagedRestoreVerdict.Ready, StagedUpdate.Restore(_dir, current).Verdict);
+    }
+
+    [Fact]
+    public void A_loose_form_is_still_read_as_a_version()
+    {
+        // SemVersionStyles.Any 接受简写（v2.0 读作 2.0.0），因此它比当前版本旧，记录同样过期
+        // 这条不是附带的：宽松解析是有意选的，真实标签就带 v 前缀，而写死成严格解析会把这些标签全判成读不懂
+        //
+        // SemVersionStyles.Any accepts the short form (v2.0 reads as 2.0.0), so it is older than the running version
+        // and the record is stale in the same way
+        // This is not incidental: the lenient style is deliberate, since real tags carry the v prefix and a strict
+        // style would call every one of them unreadable
+        StagedUpdate.Mark(_dir, "v2.0", UpdatePackageKind.Portable);
+        WriteCompletePayload();
+
+        Assert.Equal(StagedRestoreVerdict.Superseded, StagedUpdate.Restore(_dir, "2.0.1").Verdict);
+    }
+
+    [Fact]
+    public void Identical_unparsable_text_still_counts_as_already_installed()
+    {
+        // 两侧文字完全一样时仍按"已装上"处理：不解析也得能收敛，否则记录会一直留着
+        //
+        // Identical text on both sides still counts as already installed: without parsing it must still converge,
+        // or the record would stay behind for good
+        StagedUpdate.Mark(_dir, "garbage", UpdatePackageKind.Portable);
+        WriteCompletePayload();
+
+        Assert.Equal(StagedRestoreVerdict.AlreadyInstalled, StagedUpdate.Restore(_dir, "garbage").Verdict);
     }
 
     [Fact]

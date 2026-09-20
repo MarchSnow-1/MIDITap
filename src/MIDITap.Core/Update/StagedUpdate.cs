@@ -10,6 +10,16 @@
 // 只记版本号的话，重启后无从判断该核对哪一样
 // 旧版本只写了版本号，因此形态缺失时按便携路线处理 —— 那是保守的一侧
 //
+// 为什么版本比较交给 semver 库：记录里写的是远端标签（v2.0.1，带 v）
+// 而核对时传进来的是程序集版本（2.0.1，不带 v）
+// 两者形式不同却指的是同一个版本，按文字比较不会相等
+// 手写"去掉 v 再比"只在这次这一种形状上成立，换个形状（带构建元数据、带预发布后缀）又会错
+//
+// 为什么版本比较交给 semver 库：记录里写的是远端标签（v2.0.1，带 v）
+// 而核对时传进来的是程序集版本（2.0.1，不带 v）
+// 两者形式不同却指的是同一个版本，按文字比较不会相等
+// 手写"去掉 v 再比"只在这一次这一种形状上成立，换个形状（带构建元数据、带预发布后缀）又会错
+//
 // 为什么这段判断在 Core 而不是界面：它是业务规则（版本比对、完整性核对），不是显示逻辑
 // 放在这里可以在无桌面环境下测到
 // 而界面层的对应代码只在正式构建里才走得到：开发构建根本没有更新流程，那个分支永远覆盖不到
@@ -26,10 +36,18 @@
 // With only a version number, a relaunch cannot tell which of the two to check
 // An older version wrote only the version, so a missing shape means the portable route, which is the cautious side
 //
+// Why version comparison goes to the semver library: the record holds the remote tag (v2.0.1, with the v)
+// while the check passes in the assembly version (2.0.1, without it)
+// The two forms differ yet name the same version, so comparing them as text never matches
+// A hand-written "strip the v and compare" would hold only for this one shape and break again on another
+// (build metadata, a prerelease suffix)
+//
 // Why the decision lives in Core rather than the UI: it is a business rule (version comparison, completeness check),
 // not display logic
 // Here it can be tested without a desktop, whereas the UI-side equivalent is reachable only in a release build:
 // a development build has no update flow at all, so that branch would never be covered
+
+using Semver;
 
 namespace MIDITap.Core.Update;
 
@@ -44,6 +62,9 @@ public enum StagedRestoreVerdict
 
     /// <summary>记录里的版本已经在运行，说明上次已经装上了，记录已清除 / The recorded version is already running, so it was applied; the record was cleared</summary>
     AlreadyInstalled,
+
+    /// <summary>记录里的版本比在跑的更旧，这条记录已经没有意义，记录已清除 / The recorded version is older than the one running, so the record is meaningless and was cleared</summary>
+    Superseded,
 
     /// <summary>可以恢复成待重启状态 / Restorable as an update awaiting a restart</summary>
     Ready,
@@ -108,11 +129,11 @@ public static class StagedUpdate
 
     /// <summary>
     /// 启动时核对记录与磁盘，判断上一次下载的更新是否还能直接安装
-    /// 内容缺失或版本已经装上都算不可恢复，并顺手清掉过期的记录，避免下次再走一遍同样的判断
+    /// 内容缺失、版本已经装上、或记录比当前更旧，都算不可恢复，并顺手清掉过期的记录，避免下次再走一遍同样的判断
     ///
     /// Checks the record against the disk at startup and decides whether the last download is still installable
-    /// A missing payload or an already-installed version is not restorable, and the stale record is cleared
-    /// on the way out so the next launch does not repeat the same check
+    /// A missing payload, an already-installed version, or a record older than the running one is not restorable,
+    /// and the stale record is cleared on the way out so the next launch does not repeat the same check
     /// </summary>
     public static StagedRestoreResult Restore(string baseDir, string currentVersion)
     {
@@ -127,16 +148,30 @@ public static class StagedUpdate
         // The shape is read before the version comparison, because every return below carries it
         var kind = ParseKind(Settings.AppStorage.GetStagedUpdateKind(baseDir));
 
-        // 版本与当前一致 = 上次退出前更新其实已经装上了，记录已过期
-        // 这里比"是否相同"而不是"是否更新"：记录只由本类写入，而写入发生在下载成功之后，因此不会记入更旧的版本
+        // 与当前版本相同 = 上次退出前更新其实已经装上了，记录已过期
+        // 按版本比而不是按文字比：记录里是远端标签（v2.0.1），传进来的是程序集版本（2.0.1）
+        // 见文件头对这一处形式差的说明
         //
-        // A version equal to the running one means the update did get applied before the last exit: the record is stale
-        // The comparison is equality rather than "is newer" because only this class writes the record,
-        // and it writes after a successful download, so an older version never gets recorded
-        if (string.Equals(recorded, currentVersion, StringComparison.OrdinalIgnoreCase))
+        // Equal to the running version means the update did get applied before the last exit: the record is stale
+        // Compared as versions rather than as text: the record holds the remote tag (v2.0.1) while the argument is
+        // the assembly version (2.0.1); the file header explains that difference in form
+        if (IsSameVersion(recorded, currentVersion))
         {
             Clear(baseDir);
             return new StagedRestoreResult(StagedRestoreVerdict.AlreadyInstalled, recorded, kind);
+        }
+
+        // 比当前更旧 = 这条记录已经没有任何意义，清掉
+        // 少了这一步，一条陈旧记录会一直留到用户装上新版本，随后被当成"可恢复的更新"，
+        // 弹出一个把版本往回退的提示（当前 2.1.0 / 最新 2.0.0）
+        //
+        // Older than the running version means the record is meaningless and is cleared
+        // Without this step a stale record survives until the user installs a newer version, and is then restored
+        // as an update that would move the version backwards (current 2.1.0, latest 2.0.0)
+        if (IsOlderThan(recorded, currentVersion))
+        {
+            Clear(baseDir);
+            return new StagedRestoreResult(StagedRestoreVerdict.Superseded, recorded, kind);
         }
 
         // 记录说"已就绪"，但磁盘上的凭据才是真的
@@ -160,5 +195,49 @@ public static class StagedUpdate
         }
 
         return new StagedRestoreResult(StagedRestoreVerdict.Ready, recorded, kind);
+    }
+
+    /// <summary>
+    /// 记录里的版本与当前版本是否指的是同一个版本
+    /// 两侧都能解析成 semver 时按版本比，解析不了时退回忽略大小写的文字相等
+    /// 退回是有意的：一条读不懂的记录不该被当成"同一个版本"，那会把用户已经下好的更新包白白清掉
+    ///
+    /// Whether the recorded version and the running one name the same version
+    /// Both sides are compared as versions when they parse as semver, falling back to a case-insensitive text comparison
+    /// The fallback is deliberate: a record that cannot be read must not count as "the same version",
+    /// since that would throw away a package the user has already downloaded
+    /// </summary>
+    private static bool IsSameVersion(string recorded, string currentVersion)
+        => Compare(recorded, currentVersion) is { } order
+            ? order == 0
+            : string.Equals(recorded, currentVersion, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 记录里的版本是否比当前更旧
+    /// 解析不了时返回 false，继续按磁盘凭据走：那比凭一条读不懂的记录就清掉更新更保守
+    ///
+    /// Whether the recorded version is older than the running one
+    /// False when either side cannot be parsed, so the disk evidence still decides
+    /// That is more cautious than discarding the update over a record that cannot be read
+    /// </summary>
+    private static bool IsOlderThan(string recorded, string currentVersion)
+        => Compare(recorded, currentVersion) is { } order && order < 0;
+
+    /// <summary>
+    /// 按 semver 比较两个版本，返回负/零/正表示先后，任一侧解析不了时返回 null
+    /// 用本仓库既有的 SemVersion（见 UpdateChecker 的说明），不自行解析版本号
+    ///
+    /// Compares two versions as semver, returning a negative, zero or positive value; null when either side fails to parse
+    /// It uses the SemVersion already present in this repository (see UpdateChecker) rather than parsing versions by hand
+    /// </summary>
+    private static int? Compare(string left, string right)
+    {
+        if (!SemVersion.TryParse(left, SemVersionStyles.Any, out var parsedLeft)
+            || !SemVersion.TryParse(right, SemVersionStyles.Any, out var parsedRight))
+        {
+            return null;
+        }
+
+        return parsedLeft.ComparePrecedenceTo(parsedRight);
     }
 }
