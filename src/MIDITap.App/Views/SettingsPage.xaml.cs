@@ -390,8 +390,14 @@ public sealed partial class SettingsPage : Page
         RateLimitInfo? rateLimit = null;
         try
         {
+            // 与静默检查同理：手动检查也要按安装方式挑资产，否则"检查到有更新"和"能装的那个包"会对不上
+            //
+            // Same reasoning as the silent check: a manual check also has to pick the asset for this install kind,
+            // or "an update was found" and "the package that can be installed" would disagree
             var outcome = await Core.Update.UpdateChecker.CheckWithReasonAsync(
-                AppServices.AppVersion, AppServices.Backend.UpdateOptions);
+                AppServices.AppVersion,
+                AppServices.Backend.UpdateOptions,
+                kind: Core.Update.InstallKindDetector.PackageKindFor(AppServices.InstallKind));
             if (outcome.Ok && outcome.Info is not null)
             {
                 available = true;

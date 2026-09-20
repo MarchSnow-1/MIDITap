@@ -1206,8 +1206,17 @@ public sealed class BackendService
             return;
         }
 
+        // 包种类跟着安装方式走：安装器装的要挑 setup.exe，便携的要挑 zip
+        // 这一步与 UpdateService 里决定落地路径用的是同一个来源，因此检查与落地不会挑到不同的资产
+        //
+        // The package kind follows the install kind: an installed copy wants setup.exe, a portable one the zip
+        // This uses the same source as the route decision in UpdateService, so checking and applying cannot end up
+        // with different assets
         var (info, _) = await UpdateChecker
-            .CheckForUpdatesDetailedAsync(currentVersion, UpdateOptions)
+            .CheckForUpdatesDetailedAsync(
+                currentVersion,
+                UpdateOptions,
+                InstallKindDetector.PackageKindFor(AppServices.InstallKind))
             .ConfigureAwait(false);
         if (info is not null)
         {

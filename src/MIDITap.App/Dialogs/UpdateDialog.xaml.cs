@@ -171,10 +171,15 @@ public sealed partial class UpdateDialog : ContentDialog
     {
         if (UpdateService.Stage == UpdateStage.ReadyToRestart)
         {
-            // 交给辅助脚本并退出：脚本会等待本进程结束，所以必须真的关掉窗口
+            // Apply 返回 true 才关窗口
+            // 便携路线必须关：辅助脚本等着本进程结束，不关它会超时放弃
+            // 安装器路线返回 false：由 Inno 关我们，安装包启动失败时应用还留着，用户能看到错误
             //
-            // Hand off to the helper and exit: it waits for this process to end, so the window must really close
-            if (UpdateService.LaunchApplyAndExit())
+            // The window closes only when Apply returns true
+            // The portable route must close: the helper script waits for this process to end and gives up otherwise
+            // The installer route returns false: Inno closes us, and if the installer fails to start the app stays
+            // open so the user can see the error
+            if (UpdateService.Apply())
             {
                 _allowClose = true;
                 App.MainWindowInstance?.Close();
@@ -232,7 +237,13 @@ public sealed partial class UpdateDialog : ContentDialog
 
             case UpdateStage.ReadyToRestart:
                 ProgressArea.Visibility = Visibility.Visible;
-                StatusText.Text = t("update.ready.hint");
+                // 两条路的提示不同：安装器路线下应用会被安装程序关掉并自动重启，不是用户自己去重启
+                //
+                // The two routes hint differently: on the installer route the app is closed by the installer and
+                // restarted automatically, rather than the user restarting it themselves
+                StatusText.Text = UpdateService.Route == UpdatePackageKind.Installer
+                    ? t("update.apply.installer")
+                    : t("update.ready.hint");
                 ProgressBar.Visibility = Visibility.Collapsed;
                 SetActionsEnabled(true);
                 ActionBtn.Content = t("update.restart");

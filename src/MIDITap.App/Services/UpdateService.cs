@@ -49,6 +49,16 @@ public static class UpdateService
 /// <remarks>The current stage (read by the UI)</remarks>
     public static UpdateStage Stage { get; private set; } = UpdateStage.Idle;
 
+    /// <summary>
+    /// 这一轮更新走的是哪条落地路径
+    /// 暂存时定下，恢复暂存记录时也从记录里读回来：两条路的落地动作不同，中途必须保持一致
+    ///
+    /// Which route this round of updating takes
+    /// Decided while staging, and read back from the record when a staged update is restored: the two routes
+    /// apply differently, so the choice has to stay consistent throughout
+    /// </summary>
+    public static UpdatePackageKind Route { get; private set; } = UpdatePackageKind.Portable;
+
     /// <summary>阶段变化通知（UI 线程调度由订阅方负责）</summary>
 /// <remarks>Raised when the stage changes; dispatching to the UI thread is the subscriber's job</remarks>
     public static event Action? StageChanged;
@@ -186,14 +196,31 @@ public static class UpdateService
                 ProgressChanged?.Invoke();
             });
 
-            // 下载 -> **SHA-256 校验** -> 解压，整条链路由 Core 负责（因此可被完整测试，包括"校验和不匹配必须拒绝安装"这条安全关键分支）
+            // 这一轮走哪条路：本机是安装器装的，才跑安装包
+            // 便携包没有注册表项，只能靠辅助脚本逐文件替换
+            // 资产也是按同一个种类挑出来的（见 BackendService 与设置页），因此两者必然一致
             //
-            // Download -> SHA-256 verification -> extract, all inside Core
+            // Which route this round takes: the installer runs only when this machine installed the app that way
+            // A portable copy has no registry entry and can only be updated file by file by the helper script
+            // The asset was picked for the same kind (see BackendService and the settings page), so the two agree
+            Route = InstallKindDetector.PackageKindFor(AppServices.InstallKind);
+
+            // 下载 -> **SHA-256 校验** -> 落地，整条链路由 Core 负责（因此可被完整测试，包括"校验和不匹配必须拒绝安装"这条安全关键分支）
+            // 便携路线落地成解压目录，安装器路线落地成那个安装包本身
+            //
+            // Download -> SHA-256 verification -> stage, all inside Core
             // That keeps the whole chain testable
             // The security-critical "a mismatch must refuse to install" branch is included
-            var staged = await UpdateStager
-                .PrepareAsync(info.Asset, options, StagingDir, PackagePath, progress, cancellationToken)
-                .ConfigureAwait(false);
+            // The portable route stages an extracted directory; the installer route stages the installer itself
+            var staged = Route == UpdatePackageKind.Installer
+                ? await UpdateStager
+                    .PrepareInstallerAsync(
+                        info.Asset, options, StagedUpdate.InstallerPath(AppServices.BaseDir),
+                        progress, cancellationToken)
+                    .ConfigureAwait(false)
+                : await UpdateStager
+                    .PrepareAsync(info.Asset, options, StagingDir, PackagePath, progress, cancellationToken)
+                    .ConfigureAwait(false);
 
             if (!staged.Ok)
             {
@@ -214,6 +241,13 @@ public static class UpdateService
                     StageFailure.MissingRequiredContent =>
                         "This release is not a MIDITap build for Windows (missing: " +
                         (staged.Detail ?? "required files") + ")",
+                    // 安装器路线独有的失败：下载到的 exe 没通过身份校验，因此没有被运行
+                    //
+                    // A failure only the installer route reaches: the downloaded exe failed its identity check and
+                    // was therefore never run
+                    StageFailure.NotOurInstaller =>
+                        "The downloaded installer was not confirmed as this app's: " +
+                        (staged.Detail ?? "identity check failed"),
                     StageFailure.Cancelled => null,
                     _ => "Update failed",
                 };
@@ -269,6 +303,85 @@ public static class UpdateService
     /// The helper waits for this process to exit, so exiting is mandatory
     /// Otherwise it times out (code 3)
     /// </summary>
+    /// <summary>
+    /// 落地这次更新。返回 true 表示调用方**应立即关闭窗口**
+    ///   便携路线：启动辅助脚本，它等着本进程退出，因此必须真的关（否则脚本超时放弃）
+    ///   安装器路线：启动安装包，随后由 Inno 关闭我们，因此这里返回 false
+    ///     不主动关是有意的：安装包启动失败时用户手上还留着应用与错误提示
+    ///
+    /// Applies this update. A true return means the caller should close the window right away
+    ///   The portable route: the helper script waits for this process to exit, so the window must really close,
+    ///   or the script gives up after its timeout
+    ///   The installer route: the installer is started and Inno then closes us, so this returns false
+    ///   Not closing is deliberate: if the installer fails to start, the user still has the app and an error
+    /// </summary>
+    public static bool Apply()
+    {
+        // 开发构建没有可用的更新流程（见 AppServices.UpdatesEnabled）
+        // Development builds have no update flow (see AppServices.UpdatesEnabled)
+        if (!AppServices.UpdatesEnabled || Stage != UpdateStage.ReadyToRestart)
+        {
+            return false;
+        }
+
+        return Route == UpdatePackageKind.Installer ? LaunchInstaller() : LaunchApplyAndExit();
+    }
+
+    /// <summary>
+    /// 安装器路线：先登记重启，再静默运行安装包
+    /// 不返回"该关窗口"：由 Inno 关我们，它装完再按那条登记把我们拉回来
+    ///
+    /// The installer route: register for restart first, then run the installer silently
+    /// It does not ask for the window to close: Inno closes us, and after installing it relaunches us through
+    /// that registration
+    /// </summary>
+    private static bool LaunchInstaller()
+    {
+        var installer = StagedUpdate.InstallerPath(AppServices.BaseDir);
+        if (!File.Exists(installer))
+        {
+            // 暂存内容被清理过、或用户手工删了：如实说清，而不是静默什么都不做
+            //
+            // The staged content was cleaned up, or the user deleted it: say so rather than doing nothing
+            LastError = "the staged installer is missing";
+            SetStage(UpdateStage.Failed);
+            return false;
+        }
+
+        try
+        {
+            // **先登记再启动**：Inno 会在安装过程中关掉我们，那条登记必须已经存在
+            // 顺序反了的话，装完不会有任何东西把我们拉回来
+            //
+            // Register BEFORE starting: Inno closes us during the install, so the registration has to exist by then
+            // Reversing the order means nothing brings us back after the install
+            AppRestartRegistration.Register();
+
+            // /SILENT 保留进度窗，用户看得见在装
+            // /SUPPRESSMSGBOXES 不弹任何询问
+            // /NORESTART 不因为文件占用而要求重启系统，那是用户没要求的副作用
+            //
+            // /SILENT keeps the progress window, so the user can see it working
+            // /SUPPRESSMSGBOXES suppresses every prompt
+            // /NORESTART avoids a system reboot request over a file in use, which is a side effect nobody asked for
+            var startInfo = new System.Diagnostics.ProcessStartInfo(installer)
+            {
+                Arguments = "/SILENT /SUPPRESSMSGBOXES /NORESTART",
+                UseShellExecute = false,
+                WorkingDirectory = AppServices.BaseDir,
+            };
+            System.Diagnostics.Process.Start(startInfo);
+            AppServices.Log.Info(AppServices.I18n.T("update.apply.installer"));
+            return false;
+        }
+        catch (Exception err)
+        {
+            LastError = err.Message;
+            SetStage(UpdateStage.Failed);
+            return false;
+        }
+    }
+
     public static bool LaunchApplyAndExit()
     {
         // 开发构建没有可用的更新流程（见 AppServices.UpdatesEnabled）
@@ -403,6 +516,10 @@ public static class UpdateService
             return null;
         }
 
+        // 路由从记录里读回来：两条路的落地动作不同，恢复时不能猜
+        //
+        // The route is read back from the record: the two routes apply differently, so a restore must not guess
+        Route = result.Kind;
         Progress = 1;
         Stage = UpdateStage.ReadyToRestart;
         return result.Version;
