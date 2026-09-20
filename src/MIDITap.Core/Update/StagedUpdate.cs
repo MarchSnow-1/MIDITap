@@ -123,6 +123,28 @@ public static class StagedUpdate
             : UpdatePackageKind.Portable;
 
     /// <summary>
+    /// 这个结论是否意味着记录已经被丢弃
+    /// 三条结论会走到 Clear：内容缺失、版本已经装上、记录比当前更旧
+    /// 记录一没，它指向的那份内容就不可能再被用上 —— 恢复与安装都以记录为入口
+    /// 调用方据此决定要不要连磁盘上的内容一起清掉，否则那份内容会永久留下
+    ///   Incomplete 尤其要注意：记录与内容同时被清之后，下次启动返回的是 None
+    ///   那条清理路径再也不会被走到，因此必须在这一次就清掉
+    ///
+    /// Whether this verdict means the record has been discarded
+    /// Three of them reach Clear: a missing payload, an already-installed version, and a record older than the
+    /// running one
+    /// Once the record is gone the content it pointed at can never be used again, since both restoring and installing
+    /// enter through that record
+    /// The caller uses this to decide whether to clear that content from disk as well, or it stays behind for good
+    /// Incomplete especially: once the record and the content are both cleared, the next launch returns None, so that
+    /// cleanup path is never reached again and it has to happen on this pass
+    /// </summary>
+    public static bool RecordWasCleared(StagedRestoreVerdict verdict)
+        => verdict is StagedRestoreVerdict.AlreadyInstalled
+            or StagedRestoreVerdict.Superseded
+            or StagedRestoreVerdict.Incomplete;
+
+    /// <summary>
     /// 启动时核对记录与磁盘，判断上一次下载的更新是否还能直接安装
     /// 内容缺失、版本已经装上、或记录比当前更旧，都算不可恢复，并顺手清掉过期的记录，避免下次再走一遍同样的判断
     ///

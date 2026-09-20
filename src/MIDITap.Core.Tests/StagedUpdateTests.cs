@@ -370,6 +370,70 @@ public sealed class StagedUpdateTests : IDisposable
         Assert.Equal(UpdatePackageKind.Portable, StagedUpdate.ParseKind(stored));
     }
 
+    // ================================================================ 记录被丢弃 / The record was dropped
+
+    [Theory]
+    [InlineData(StagedRestoreVerdict.None, false)]
+    [InlineData(StagedRestoreVerdict.Ready, false)]
+    [InlineData(StagedRestoreVerdict.AlreadyInstalled, true)]
+    [InlineData(StagedRestoreVerdict.Superseded, true)]
+    [InlineData(StagedRestoreVerdict.Incomplete, true)]
+    public void Only_the_verdicts_that_drop_the_record_report_it(StagedRestoreVerdict verdict, bool cleared)
+    {
+        // 这条判断决定界面层要不要连磁盘上的内容一起清掉，因此逐条钉死
+        // 尤其是 Incomplete：它同样清了记录，漏掉它那份内容就永久留下 —— 记录一没，下次启动只会返回 None
+        //
+        // This decision drives whether the UI layer clears the content from disk as well, so every verdict is pinned
+        // Incomplete especially: it clears the record too, and missing it leaves that content behind for good, since
+        // with the record gone the next launch only ever returns None
+        Assert.Equal(cleared, StagedUpdate.RecordWasCleared(verdict));
+    }
+
+    [Theory]
+    [InlineData("v2.1.0", "2.0.0", StagedRestoreVerdict.Ready, false)]
+    [InlineData("v2.0.1", "2.0.1", StagedRestoreVerdict.AlreadyInstalled, true)]
+    [InlineData("v2.0.0", "2.0.1", StagedRestoreVerdict.Superseded, true)]
+    public void Dropping_the_record_goes_hand_in_hand_with_reporting_it(
+        string recorded, string current, StagedRestoreVerdict expected, bool cleared)
+    {
+        // Restore 与 RecordWasCleared 之间的契约：记录真的被清掉了，判断才为真
+        // 这一条把两者绑在一起，将来谁改了 Restore 的清记录时机，这里就会红
+        //
+        // The contract between Restore and RecordWasCleared: the verdict only reports true when the record really
+        // was cleared
+        // This ties the two together, so a later change to when Restore clears the record fails here
+        StagedUpdate.Mark(_dir, recorded, UpdatePackageKind.Portable);
+        WriteCompletePayload();
+
+        var result = StagedUpdate.Restore(_dir, current);
+
+        Assert.Equal(expected, result.Verdict);
+        Assert.Equal(cleared, StagedUpdate.RecordWasCleared(result.Verdict));
+        var left = AppStorage.GetStagedUpdate(_dir);
+        Assert.Equal(cleared ? string.Empty : recorded, left);
+    }
+
+    [Fact]
+    public void A_missing_payload_reports_that_the_record_was_dropped()
+    {
+        // 内容缺失这条路径此前漏掉了清理：记录与内容同时被清之后，下次启动返回 None，清理不会再有第二次机会
+        //
+        // This path used to miss the cleanup: once the record and the content are both cleared, the next launch
+        // returns None, so the cleanup never gets a second chance
+        StagedUpdate.Mark(_dir, "v9.9.9", UpdatePackageKind.Installer);
+        Directory.CreateDirectory(StagedUpdate.StagingDir(_dir));
+        File.WriteAllText(Path.Combine(AppPaths.UpdateDir(_dir), UpdateStager.PortablePackageFileName), "zip");
+
+        var result = StagedUpdate.Restore(_dir, "2.0.0");
+
+        Assert.Equal(StagedRestoreVerdict.Incomplete, result.Verdict);
+        Assert.True(StagedUpdate.RecordWasCleared(result.Verdict));
+        Assert.Equal(string.Empty, AppStorage.GetStagedUpdate(_dir));
+        // 清完之后再启动一次：结论变成 None，因此上面那次就是唯一的机会
+        // A second launch after that returns None, so the pass above was the only chance
+        Assert.Equal(StagedRestoreVerdict.None, StagedUpdate.Restore(_dir, "2.0.0").Verdict);
+    }
+
     // ================================================================ 落地内容的清理 / Discarding landed content
 
     /// <summary>铺出一次更新落地后会留下的全部内容 / Lays down everything a landed update leaves behind</summary>

@@ -420,10 +420,11 @@ public static class UpdateStager
     /// on success
     /// An itemised list would miss that kind, and missing it leaves a whole copy of the app on the user's disk
     ///
-    /// Why only the "already installed" and "stale record" cases call it, and a failure does not
+    /// Why only the verdicts where the record was already dropped call it, and a failure does not
+    ///   See StagedUpdate.RecordWasCleared, which names them
     ///   After a failure the helper has rolled back, so backup/ and the staging tree are the evidence, and this
     ///   launch may still let the user retry
-    ///   Neither of those two verdicts is reached in that state, so this method is not called
+    ///   None of those verdicts is reached in that state, so this method is not called
     /// </summary>
     public static void DiscardStagedContent(string baseDir)
         => ClearExtractedContent(Settings.AppPaths.UpdateDir(baseDir));

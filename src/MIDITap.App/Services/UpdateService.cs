@@ -513,39 +513,48 @@ public static class UpdateService
         // This method only adds the UI-layer precondition around it
         var result = StagedUpdate.Restore(AppServices.BaseDir, AppServices.AppVersion);
 
-        if (result.Verdict == StagedRestoreVerdict.Incomplete)
-        {
-            // 上次的下载不完整：说清是哪个版本被丢弃了，不然用户只会发现"更新不见了"
-            //
-            // The last download was incomplete: name the version that was discarded,
-            // otherwise the user just finds an update that vanished
-            AppServices.Log.Warn(
-                AppServices.I18n.T("update.staged.incomplete", ("version", result.Version ?? string.Empty)));
-        }
-
-        // 更新已经装上了，或记录里的版本比在跑的更旧：两种情形下这条记录都没有意义了
-        // 它留在磁盘上的那份内容同样没有用途，一并清掉
-        // 少了这一步，包会一直占着几十 MB，而且下次启动仍会被当成"可恢复的更新"再提示一遍
+        // 记录已经被丢弃的情形（哪些结论算，见 Core 的 RecordWasCleared）：它指向的那份内容已经没有用途
+        // 必须在这一次就清掉。少了这一步，包会一直占着几十 MB，而且 Incomplete 那条路径此后再也走不到：
+        // 记录与内容同时被清之后，下次启动返回的是 None，这条清理不会再有第二次机会
         //
-        // The update has already been installed, or the record is older than the running version
-        // In both cases the record means nothing any more, and so does what it left on disk
-        // Both are cleared here
-        // Without this step the package keeps tens of MB occupied and the next launch restores it as an update
-        // awaiting a restart, offering the same version again
-        if (result.Verdict is StagedRestoreVerdict.AlreadyInstalled or StagedRestoreVerdict.Superseded)
+        // Where the record has been dropped (which verdicts count is Core's RecordWasCleared), the content it
+        // pointed at has no purpose left and has to go on this pass
+        // Without this step the package keeps tens of MB occupied, and the Incomplete path is never reached again:
+        // once the record and the content are both cleared, the next launch returns None, so there is no second chance
+        if (StagedUpdate.RecordWasCleared(result.Verdict))
         {
             UpdateStager.DiscardStagedContent(AppServices.BaseDir);
 
-            // 两种结论分开措辞：前者那个版本确实装上了，后者只是记录过期、那个版本并没有被安装
-            // 用同一句话盖住两种情形，日志就会报一件没有发生过的事
+            // 三种结论说的不是同一件事，因此分开措辞：
+            //   AlreadyInstalled —— 那个版本确实装上了
+            //   Superseded       —— 只是记录过期，那个版本并没有被安装
+            //   Incomplete       —— 内容缺失，那个版本也没装上，而且用户当初什么都没点
+            // 用一句话盖住三种情形，日志就会报一件没有发生过的事
             //
-            // The two verdicts read differently: in the first the version really was installed, while in the second
-            // only the record went stale and that version was never installed
-            // One sentence covering both would have the log state something that did not happen
-            var key = result.Verdict == StagedRestoreVerdict.AlreadyInstalled
-                ? "log.debug.updateDiscardLanded"
-                : "log.debug.updateDiscardStale";
-            AppServices.Log.Debug(AppServices.I18n.T(key, ("version", result.Version ?? string.Empty)));
+            // The three verdicts do not say the same thing, so they read differently:
+            //   AlreadyInstalled: that version really was installed
+            //   Superseded: only the record went stale, and that version was never installed
+            //   Incomplete: the content was missing, that version was not installed either, and the user never
+            //   clicked anything at the time
+            // One sentence covering all three would have the log state something that did not happen
+            if (result.Verdict == StagedRestoreVerdict.Incomplete)
+            {
+                // 这条是 warn 而不是 debug：它意味着用户当初下载的那份更新作废了，事后值得留意
+                // 因此不再另加一条 debug，那一行只会是噪声
+                //
+                // This one is a warn rather than debug: the update the user downloaded has been thrown away, which is
+                // worth noticing afterwards
+                // No extra debug line is added, since it would only be noise
+                AppServices.Log.Warn(AppServices.I18n.T(
+                    "update.staged.incomplete", ("version", result.Version ?? string.Empty)));
+            }
+            else
+            {
+                var key = result.Verdict == StagedRestoreVerdict.AlreadyInstalled
+                    ? "log.debug.updateDiscardLanded"
+                    : "log.debug.updateDiscardStale";
+                AppServices.Log.Debug(AppServices.I18n.T(key, ("version", result.Version ?? string.Empty)));
+            }
         }
 
         if (result.Verdict != StagedRestoreVerdict.Ready)
