@@ -152,25 +152,6 @@ Config names come from user input. `ConfigLocator` reject absolute paths, and re
 
 Any future entry point that looks up a file by name must reuse this check.
 
-### 3.3 自更新须满足三项独立条件
-
-1. **校验完整性** —— 用 GitHub 自带的 SHA-256（API 的 `assets[].digest`，或网页路径 `expanded_assets` 里同一个摘要），**先校验再解压**，顺序反了校验等于没做
-2. **确认包是我们的** —— 解压后必须有 `MIDITap.exe` 和 `scripts/apply-update.ps1`，摘要对**不代表**包是本应用
-3. **替换时排除用户数据** —— 跳过 `config/` 和 `.storage/`，这条在 Core 和 `apply-update.ps1` 里**各写一遍**，因为辅助脚本是独立进程，不共享代码
-
-另有两项：解压须防范 **zip-slip**，校验不通过时须**拒绝安装并删除已下载的包**
-
-1. **Verify integrity** — use GitHub's own SHA-256 (the API's `assets[].digest`, or the same digest on the web
-   path inside `expanded_assets`). **Verify before extracting**; reversing the order makes verification
-   pointless
-2. **Confirm the package is ours** — after extraction there must be `MIDITap.exe` and
-   `scripts/apply-update.ps1`. A matching digest **does not** mean the package is this app
-3. **Exclude user data when replacing** — skip `config/` and `.storage/`. This is **written twice**, in Core
-   and in `apply-update.ps1`, because the helper script is a separate process and shares no code
-
-Two further requirements: extraction must guard against **zip-slips**, and a failed verification must
-**refuse installation and delete the downloaded package**.
-
 ## 4. 改配置的约定 / Configuration
 
 ```
