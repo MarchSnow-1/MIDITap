@@ -114,6 +114,16 @@ public static class UpdateStager
     public const string InstallerFileName = "setup.exe";
 
     /// <summary>
+    /// 便携路线下载的包在更新工作目录里的文件名
+    /// 定义在这里而不是界面层：丢弃一次已经落地的更新要按它删文件（见 DiscardStagedContent）
+    ///
+    /// The portable route's downloaded package name inside the update work directory
+    /// Defined here rather than in the UI layer, because discarding a landed update deletes by this name
+    /// (see DiscardStagedContent)
+    /// </summary>
+    public const string PortablePackageFileName = "package.zip";
+
+    /// <summary>
     /// 便携路线：下载 -> 校验 -> 解压到 <paramref name="stagingDirectory"/>
     /// <paramref name="packagePath"/> 是包在暂存区旁的落盘位置（失败时会被清掉）
     ///
@@ -374,6 +384,33 @@ public static class UpdateStager
         ClearExtractedContent(stagingDirectory);
         DeleteQuietly(packagePath);
         DeleteQuietly(packagePath + ".part");
+    }
+
+    /// <summary>
+    /// 丢弃一次更新落地后留下的全部内容：安装包、解压目录、下载的包
+    /// 用于"这次更新已经装上了"这一情形，此时这些文件没有任何用途，留着只是几十 MB 的垃圾
+    ///
+    /// 三条路径各自取自它们的定义处（StagedUpdate 与 UpdateStager），不在此另写一份，改名时不会漏掉一处
+    /// 与 CleanStaging 的分工：那个清的是下载过程本身中途留下的东西，调用方是下载流程
+    ///
+    /// Discards everything a landed update leaves behind: the installer, the extracted directory, the downloaded package
+    /// Used once the update has been installed, when those files have no further purpose and are tens of MB of litter
+    ///
+    /// Each path comes from where it is defined (StagedUpdate and UpdateStager) rather than being written out again
+    /// here, so a rename cannot miss one
+    /// The split against CleanStaging: that one clears what a round in progress left behind and is called by the
+    /// download flow itself
+    /// </summary>
+    public static void DiscardStagedContent(string baseDir)
+    {
+        var installer = StagedUpdate.InstallerPath(baseDir);
+        var package = Path.Combine(Settings.AppPaths.UpdateDir(baseDir), PortablePackageFileName);
+
+        DeleteQuietly(installer);
+        DeleteQuietly(installer + ".part");
+        ClearExtractedContent(StagedUpdate.StagingDir(baseDir));
+        DeleteQuietly(package);
+        DeleteQuietly(package + ".part");
     }
 
     /// <summary>

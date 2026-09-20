@@ -369,4 +369,49 @@ public sealed class StagedUpdateTests : IDisposable
     {
         Assert.Equal(UpdatePackageKind.Portable, StagedUpdate.ParseKind(stored));
     }
+
+    // ================================================================ 落地内容的清理 / Discarding landed content
+
+    /// <summary>铺出一次更新落地后会留下的全部内容 / Lays down everything a landed update leaves behind</summary>
+    private (string Installer, string Staging, string Package) WriteLandedContent()
+    {
+        WriteInstaller();
+        WriteCompletePayload();
+        var package = Path.Combine(AppPaths.UpdateDir(_dir), UpdateStager.PortablePackageFileName);
+        File.WriteAllText(package, "zip");
+        File.WriteAllText(package + ".part", "partial");
+        return (StagedUpdate.InstallerPath(_dir), StagedUpdate.StagingDir(_dir), package);
+    }
+
+    [Fact]
+    public void Discarding_a_landed_update_removes_everything_it_left()
+    {
+        // 更新装上之后再留着这些文件只是占地方，而"占地方"会一直被忽略下去
+        // 实测：安装器路线成功后 .update 里的 setup.exe 有 62 MB，此前没有任何一步删它
+        //
+        // Once the update is installed these files only take up room, and that goes unnoticed
+        // Measured: after a successful installer-route update the setup.exe in .update was 62 MB, and no step
+        // deleted it
+        var landed = WriteLandedContent();
+
+        UpdateStager.DiscardStagedContent(_dir);
+
+        Assert.False(File.Exists(landed.Installer), "the installer should be gone");
+        Assert.False(Directory.Exists(landed.Staging), "the extracted directory should be gone");
+        Assert.False(File.Exists(landed.Package), "the downloaded package should be gone");
+        Assert.False(File.Exists(landed.Package + ".part"), "a half-written download should be gone too");
+    }
+
+    [Fact]
+    public void Discarding_nothing_is_quiet()
+    {
+        // 启动时每次都会走到这里，而绝大多数启动根本没有落地内容
+        // 目录不存在就抛异常会让应用在启动阶段失败
+        //
+        // Every launch reaches this point, and most launches have nothing landed
+        // Throwing on a missing directory would fail the app during startup
+        UpdateStager.DiscardStagedContent(_dir);
+
+        Assert.True(Directory.Exists(_dir));
+    }
 }

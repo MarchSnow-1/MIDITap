@@ -43,7 +43,11 @@ public static class UpdateService
     // The staging directory is defined by StagedUpdate in Core, which needs the same path when restoring
     // One path, one definition, so a rename cannot miss a place
     private static string StagingDir => StagedUpdate.StagingDir(AppServices.BaseDir);
-    private static string PackagePath => Path.Combine(UpdateRoot, "package.zip");
+    // 包名的定义在 Core 的 UpdateStager 里：丢弃一次已落地的更新时也要按它删文件
+    //
+    // The package name is defined by UpdateStager in Core, which also deletes by it when a landed update is discarded
+    private static string PackagePath =>
+        Path.Combine(UpdateRoot, UpdateStager.PortablePackageFileName);
 
     /// <summary>当前阶段（UI 读取）</summary>
 /// <remarks>The current stage (read by the UI)</remarks>
@@ -272,6 +276,14 @@ public static class UpdateService
             }
 
             Progress = 1;
+            // 这里记下的是 info.Latest，也就是**远端标签**（v2.0.1，带 v）
+            // 而重启后核对时传给 StagedUpdate.Restore 的是程序集版本（2.0.1，不带 v）
+            // 两者形式不同却指同一个版本，那一步因此按 semver 比较而不是比文字（见 StagedUpdate 的文件头）
+            //
+            // What is recorded here is info.Latest, the REMOTE TAG (v2.0.1, with the v)
+            // After a relaunch StagedUpdate.Restore is handed the assembly version (2.0.1, without it)
+            // The two forms differ yet name the same version, so that step compares versions as semver rather than
+            // as text (see the StagedUpdate file header)
             StagedUpdate.Mark(
                 AppServices.BaseDir, info.Latest, InstallKindDetector.PackageKindFor(AppServices.InstallKind));
             SetStage(UpdateStage.ReadyToRestart);
@@ -511,6 +523,22 @@ public static class UpdateService
                 AppServices.I18n.T("update.staged.incomplete", ("version", result.Version ?? string.Empty)));
         }
 
+        // 更新已经装上了，或记录里的版本比在跑的更旧：两种情形下这条记录都没有意义了
+        // 它留在磁盘上的那份内容同样没有用途，一并清掉
+        // 少了这一步，包会一直占着几十 MB，而且下次启动仍会被当成"可恢复的更新"再提示一遍
+        //
+        // The update has already been installed, or the record is older than the running version
+        // In both cases the record means nothing any more, and so does what it left on disk
+        // Both are cleared here
+        // Without this step the package keeps tens of MB occupied and the next launch restores it as an update
+        // awaiting a restart, offering the same version again
+        if (result.Verdict is StagedRestoreVerdict.AlreadyInstalled or StagedRestoreVerdict.Superseded)
+        {
+            UpdateStager.DiscardStagedContent(AppServices.BaseDir);
+            AppServices.Log.Debug(AppServices.I18n.T(
+                "log.debug.updateDiscardLanded", ("version", result.Version ?? string.Empty)));
+        }
+
         if (result.Verdict != StagedRestoreVerdict.Ready)
         {
             return null;
@@ -568,23 +596,14 @@ public static class UpdateService
 /// <remarks>Discards the staged content (called only by DiscardAsync, see the ordering requirement there)</remarks>
     private static void CleanStaging()
     {
-        try
-        {
-            if (Directory.Exists(StagingDir))
-            {
-                Directory.Delete(StagingDir, recursive: true);
-            }
-            if (File.Exists(PackagePath))
-            {
-                File.Delete(PackagePath);
-            }
-        }
-        catch
-        {
-            // 清理失败不影响流程：下一轮会重建
-            //
-            // A failed cleanup does not affect the flow: the next round rebuilds these files
-        }
+        // 删除交给 Core：三条路径各自取自它们的定义处，界面层不再自己拼路径
+        // 因此这一处**会连安装包一起删**：取消安装器路线的那一轮更新时，那个几十 MB 的 setup.exe 同样该走
+        //
+        // The deletion is delegated to Core, where each of the three paths comes from its own definition, so the UI
+        // layer no longer builds them
+        // That also means the installer is deleted here: cancelling a round on the installer route should take that
+        // setup.exe, tens of MB of it, with it
+        UpdateStager.DiscardStagedContent(AppServices.BaseDir);
         // 内容已经丢掉了，那条"等待重启"的记录也必须跟着失效
         // 两者不一致时下次启动会显示一个已经不存在了的更新
         //

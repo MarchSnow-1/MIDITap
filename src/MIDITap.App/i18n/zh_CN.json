@@ -56,6 +56,7 @@
   "log.debug.restartRegistered": "已向 Windows 登记重启，安装完成后由安装器拉起",
   "log.debug.updateCheck": "开始检查更新 (当前 {version})",
   "log.debug.updateDiscard": "已丢弃本轮更新，回到空闲",
+  "log.debug.updateDiscardLanded": "已安装更新 {version} 并清理临时文件",
   "log.debug.updateFallback": "GitHub API 不可用，已改走网页路径（因此没有发布说明原文）",
   "log.debug.updateFound": "发现新版本 {latest} (当前 {current})",
   "log.debug.updateNoStaged": "没有可恢复的暂存更新，继续检查网络",
