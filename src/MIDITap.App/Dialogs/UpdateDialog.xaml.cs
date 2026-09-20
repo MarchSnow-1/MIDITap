@@ -81,7 +81,14 @@ public sealed partial class UpdateDialog : ContentDialog
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        NeverRemindBtn.Visibility = showNeverRemind ? Visibility.Visible : Visibility.Collapsed;
+        // 不在这里定它的显隐：那会与 RenderState 里的规则各写一份
+        // 构造参数只说明"这个窗口允不允许出现它"，是否真的显示由 RenderState 统一决定（见 RestoreDismissAffordances）
+        // RefreshTexts 末尾会调一次 RenderState，因此它一定会被设到
+        //
+        // Its visibility is not decided here: that would duplicate the rule in RenderState
+        // The constructor argument only says whether this dialog may offer it at all, while the actual display is owned
+        // by RenderState (see RestoreDismissAffordances)
+        // RefreshTexts calls RenderState at its end, so it is always set
 
         RefreshTexts();
     }
@@ -248,16 +255,19 @@ public sealed partial class UpdateDialog : ContentDialog
                 SetActionsEnabled(true);
                 ActionBtn.Content = t("update.restart");
                 // 包已经躺在磁盘上，此时只剩"重启"这一条有意义的路
-                // 因此收起叉号与「忽略此版本」：在这个状态下关掉窗口只会把已下载好的更新搁在那里，
-                // 而用户下次启动仍会看到同一个窗口，白下一次；「忽略」更是会让他从此错过这个版本
+                // 因此收起叉号、「忽略此版本」与「不再提醒更新」：在这个状态下关掉窗口只会把已下载好的更新搁在那里，
+                // 而用户下次启动仍会看到同一个窗口，白下一次；「忽略」更是会让他从此错过这个版本；
+                // 而「不再提醒更新」会把启动检查一起关掉，等于让用户再也看不到下一次更新
                 //
                 // The package is on disk, so only "restart" is a meaningful path at this point
-                // The cross and "ignore this version" are therefore withdrawn
+                // The cross, "ignore this version" and "do not remind me again" are therefore withdrawn
                 // Closing the window here would merely park a finished download, and the next launch would show
                 // the same window again after a needless re-download
-                // Ignoring would make the user miss this version for good
+                // Ignoring would make the user miss this version for good, and turning off the reminders would stop the
+                // start-up check altogether, so the next update is never seen at all
                 CloseBtn.Visibility = Visibility.Collapsed;
                 IgnoreBtn.Visibility = Visibility.Collapsed;
+                NeverRemindBtn.Visibility = Visibility.Collapsed;
                 break;
 
             case UpdateStage.Failed:
@@ -281,15 +291,23 @@ public sealed partial class UpdateDialog : ContentDialog
     private void SetActionsEnabled(bool enabled)
     {
         ActionBtn.IsEnabled = enabled;
+        // 「忽略此版本」与「不再提醒更新」都是放弃性的操作，下载与解压期间一并置灰
+        // 一次点击就关掉后续更新提示，不该发生在更新正跑到一半的时候
+        //
+        // Both "ignore this version" and "do not remind me again" are dismissive actions, greyed out during the
+        // download and extraction
+        // One click that silences later update prompts should not be available mid-update
         IgnoreBtn.IsEnabled = enabled;
+        NeverRemindBtn.IsEnabled = enabled;
     }
 
     /// <summary>
-    /// 恢复叉号与「忽略此版本」的显示（离开"将重启更新"这一阶段时调用）
+    /// 恢复叉号、「忽略此版本」与「不再提醒更新」的显示（离开"将重启更新"这一阶段时调用）
     /// 它们在"将重启更新"时被收起，而失败后重试、或取消下载回到空闲时都要重新出现，
     /// 否则用户会被困在一个既不能关也不能忽略的窗口里
     ///
-    /// Restores the cross and "ignore this version" (called when leaving the "restart to update" stage)
+    /// Restores the cross, "ignore this version" and "do not remind me again" (called when leaving the
+    /// "restart to update" stage)
     /// They are withdrawn there, and must come back after a failure, a retry, or a cancelled download,
     /// or the user would be stuck in a window that can neither be closed nor ignored
     /// </summary>
@@ -297,6 +315,11 @@ public sealed partial class UpdateDialog : ContentDialog
     {
         CloseBtn.Visibility = Visibility.Visible;
         IgnoreBtn.Visibility = Visibility.Visible;
+        // 「不再提醒更新」还多一层：手动检查弹出的窗口本来就不提供它（见构造函数）
+        //
+        // "Do not remind me again" has one more condition: the dialog raised by a manual check never offers it
+        // (see the constructor)
+        NeverRemindBtn.Visibility = _showNeverRemind ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
