@@ -238,7 +238,8 @@ public static class UpdateService
             }
 
             Progress = 1;
-            StagedUpdate.Mark(AppServices.BaseDir, info.Latest);
+            StagedUpdate.Mark(
+                AppServices.BaseDir, info.Latest, InstallKindDetector.PackageKindFor(AppServices.InstallKind));
             SetStage(UpdateStage.ReadyToRestart);
             return true;
         }

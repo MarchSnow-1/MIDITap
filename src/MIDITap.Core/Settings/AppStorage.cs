@@ -253,6 +253,20 @@ public static class AppStorage
     /// </summary>
     public const string StagedUpdateStorageKey = "miditap_staged_update";
 
+    /// <summary>
+    /// 与上面那条记录配套的形态存储键，值是 portable 或 installer
+    /// 两种形态要核对的凭据不同：便携看解压出来的必需文件，安装器看那个 setup.exe 还在不在
+    /// 因此必须一起记下来，否则重启后无从判断该核对什么
+    /// 旧版本只写了版本号，因此这条缺失时按便携路线处理（见 StagedUpdate）
+    ///
+    /// The storage key for the shape that goes with the record above; the value is portable or installer
+    /// The two shapes check different evidence: the portable one looks for the extracted required files, the
+    /// installer one only asks whether that setup.exe is still there
+    /// Both therefore have to be recorded, or a relaunch cannot know what to check
+    /// An older version wrote only the version, so a missing key means the portable route (see StagedUpdate)
+    /// </summary>
+    public const string StagedUpdateKindStorageKey = "miditap_staged_update_kind";
+
     private static string AutoCheckPath(string baseDir)
         => AppPaths.StorageFile(baseDir, AutoCheckUpdatesStorageKey);
 
@@ -264,6 +278,9 @@ public static class AppStorage
 
     private static string StagedUpdatePath(string baseDir)
         => AppPaths.StorageFile(baseDir, StagedUpdateStorageKey);
+
+    private static string StagedUpdateKindPath(string baseDir)
+        => AppPaths.StorageFile(baseDir, StagedUpdateKindStorageKey);
 
     /// <summary>
     /// 是否在启动时自动检查更新
@@ -361,13 +378,39 @@ public static class AppStorage
         }
     }
 
-    /// <summary>记录等待重启的版本号，空串表示清除记录 / Records the version awaiting a restart; an empty string clears it</summary>
-    public static bool SaveStagedUpdate(string baseDir, string version)
+    /// <summary>
+    /// 读取那条记录配套的形态，没有记录时返回空串
+    /// 读失败同样返回空串：调用方据此按便携路线处理，那是保守的一侧
+    ///
+    /// Reads the shape that goes with the record; empty when there is none
+    /// A read failure is empty as well, so the caller takes the portable route, which is the cautious side
+    /// </summary>
+    public static string GetStagedUpdateKind(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(StagedUpdateKindPath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 记录等待重启的版本号与形态，版本号为空串表示清除记录
+    /// 两条一起写：只写其中一条会让重启后的核对依据与记录对不上
+    ///
+    /// Records the version and shape awaiting a restart; an empty version clears the record
+    /// Both are written together: leaving one out would make the evidence a relaunch checks disagree with the record
+    /// </summary>
+    public static bool SaveStagedUpdate(string baseDir, string version, string kind)
     {
         try
         {
             EnsureStorageDir(baseDir);
             File.WriteAllText(StagedUpdatePath(baseDir), version.Trim());
+            File.WriteAllText(StagedUpdateKindPath(baseDir), kind.Trim());
             return true;
         }
         catch

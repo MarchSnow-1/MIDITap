@@ -78,6 +78,19 @@ public static class InstallKindDetector
     }
 
     /// <summary>
+    /// 安装方式对应的包种类
+    /// 两处概念分开是为了各守其责：安装方式是"本机怎么装的"，包种类是"该下载哪一个资产"
+    /// 映射只写在这一处，将来任一侧改名都不会漏掉另一边
+    ///
+    /// The package kind that matches an install kind
+    /// The two concepts stay apart so each owns one thing: how this machine installed the app, and which asset
+    /// to download
+    /// The mapping lives here alone, so renaming either side cannot miss the other
+    /// </summary>
+    public static UpdatePackageKind PackageKindFor(InstallKind kind)
+        => kind == InstallKind.Installed ? UpdatePackageKind.Installer : UpdatePackageKind.Portable;
+
+    /// <summary>
     /// 规范化一个路径：去空白、转成完整路径、裁掉尾部分隔符
     /// 拿不到可用路径时返回 null
     ///

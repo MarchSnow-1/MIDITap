@@ -96,6 +96,23 @@ public static class AppServices
         !Core.Update.UpdateChannel.IsDevelopment(AppVersion);
 #endif
 
+    private static Core.Update.InstallKind? _installKind;
+
+    /// <summary>
+    /// 本机这份应用是怎么装上的：便携包解压，还是安装器装的
+    /// 注册表只读一次并缓存：这个值在一次运行内不会变
+    ///
+    /// 更新的落地路径由它决定（见 UpdateService）：安装器装的走静默安装包，便携的走辅助脚本
+    ///
+    /// How this copy of the app was installed: unpacked from the portable archive, or set up by the installer
+    /// The registry is read once and cached, since the value cannot change during a run
+    ///
+    /// It decides how an update lands (see UpdateService): an installed copy runs the installer silently, while
+    /// a portable copy hands over to the helper script
+    /// </summary>
+    public static Core.Update.InstallKind InstallKind
+        => _installKind ??= InstallKindProbe.Detect(BaseDir);
+
     /// <summary>在 MainWindow 构造最早期调用（页面渲染文本依赖 I18n）</summary>
     /// <remarks>Called at the very start of MainWindow's constructor (pages need I18n to render their text)</remarks>
     public static void Initialize(DispatcherQueue dispatcher)
