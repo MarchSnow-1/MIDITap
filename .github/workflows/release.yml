@@ -252,6 +252,24 @@ jobs:
           if (-not (Test-Path $setup)) { throw "Expected installer not found: $setup" }
           Write-Host ("installed package: " + $setup + "  " + [math]::Round((Get-Item $setup).Length / 1MB, 1) + " MB")
 
+          # 安装器路线的身份校验靠安装包版本资源里的三个字段（见 Core 的 InstallerIdentity）
+          # 这条假设一旦漂移，应用会把自家安装包判成"不是本应用的"而拒绝更新
+          # 因此在这里钉住：改了 .iss 的 AppName 或 AppPublisher，CI 立刻失败，而不是等用户点更新才发现
+          #
+          # The installer route's identity check rests on three version-resource fields (see InstallerIdentity in Core)
+          # If that assumption drifts, the app would judge its own installer as "not ours" and refuse to update
+          # It is pinned here: changing the .iss AppName or AppPublisher fails CI at once, rather than at the moment
+          # a user clicks update
+          $setupInfo = (Get-Item $setup).VersionInfo
+          $identityProblems = @()
+          if ($setupInfo.ProductName -notmatch "MIDITap") { $identityProblems += "ProductName is '$($setupInfo.ProductName)'" }
+          if ($setupInfo.CompanyName -notmatch "MarchSnow") { $identityProblems += "CompanyName is '$($setupInfo.CompanyName)'" }
+          if ($setupInfo.Comments -notmatch "Inno Setup") { $identityProblems += "Comments is '$($setupInfo.Comments)'" }
+          if ($identityProblems.Count -gt 0) {
+            throw "The installer no longer carries the identity fields the app checks: $($identityProblems -join '; ')"
+          }
+          Write-Host "安装包身份字段齐备（应用据此确认它是自家安装包）。"
+
       # 资产文件名必须与应用的期望一致，即 UpdateAssetSelector 匹配的 -win-x64.zip
       # 这里提前断言，否则用户会看得见新版本却下不到，那是最难解释的一类故障
       #

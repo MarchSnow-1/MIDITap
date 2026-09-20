@@ -68,6 +68,29 @@ AppSupportURL=https://github.com/MarchSnow-1/MIDITap/issues
 ; Installing under the user profile needs no administrator rights, hence no UAC prompt
 DefaultDirName={localappdata}\Programs\MIDITap
 PrivilegesRequired=lowest
+
+; 自更新走安装器路线时，是 Inno 关掉正在运行的应用、装完再把它拉回来
+; 三项缺一不可（依据官方文档，且已实测）
+;   CloseApplications —— 静默安装时它会**总是**关闭占用待替换文件的程序
+;   RestartApplications —— 装完把刚才关掉的拉回来
+;     前提是应用自己调用过 RegisterApplicationRestart，本应用在用户点更新的那一刻调用
+;   CloseApplicationsFilter —— 默认只查 *.exe,*.dll,*.chm
+;     而 WinUI 自包含应用还锁 .pri 与 .winmd 等，不设成 *.* 会漏检
+;     那些文件替换失败会让整次更新失败
+;
+; When self-update takes the installer route, Inno closes the running app and brings it back afterwards
+; All three are required (per the official documentation, and measured)
+;   CloseApplications: while running silently it ALWAYS closes the programs holding files about to be replaced
+;   RestartApplications: it restarts what it closed
+;     The precondition is that the app itself called RegisterApplicationRestart, which this app does at the
+;     moment the user clicks update
+;   CloseApplicationsFilter: the default only checks *.exe,*.dll,*.chm
+;     A self-contained WinUI app also holds .pri, .winmd and others, which would go unchecked
+;     A failed replacement on any of them fails the whole update
+CloseApplications=yes
+RestartApplications=yes
+CloseApplicationsFilter=*.*
+
 DisableProgramGroupPage=yes
 DisableDirPage=no
 AllowNoIcons=yes
