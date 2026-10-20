@@ -24,11 +24,11 @@
 > [!WARNING]
 > **This branch is no longer maintained**
 >
-> This branch is the `v1` release of MIDITap, written in Node.js + Neutralino, kept for reference only
-> 
-> The project has been rewritten in C# with WinUI 3, see the [`v2`](../../tree/v2) branch for the current version
+> This branch contains the `v1` release of MIDITap, written in Node.js + Neutralino, and is kept for reference only.
 >
-> Everything below describes that earlier implementation and no longer matches the code under development
+> The project has been rewritten in C# using WinUI 3. See the [latest version](https://github.com/MarchSnow-1/MIDITap) for the current release.
+>
+> Everything below describes the v1 implementation and no longer matches the code currently under development.
 
 ## 📖 Introduction
 
