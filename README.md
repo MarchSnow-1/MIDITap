@@ -25,8 +25,8 @@
 > **This branch is no longer maintained**
 >
 > This branch is the `v1` release of MIDITap, written in Node.js + Neutralino, kept for reference only
-> The project has been rewritten in C# with WinUI 3
-> See the [`v2`](../../tree/v2) branch for the current version
+> 
+> The project has been rewritten in C# with WinUI 3, see the [`v2`](../../tree/v2) branch for the current version
 >
 > Everything below describes that earlier implementation and no longer matches the code under development
 
@@ -46,16 +46,7 @@ If you encounter any issues, please feel free to submit feedback via [Issues](..
 
 * Windows (x64)
 * A MIDI-compatible device
-* [Node.js](https://nodejs.org/) 22+ — the packaged app runs its backend extension
-  with the system `node`, and the bundled native modules (`node-midi`, `koffi`)
-  are compiled against the Node.js 22 ABI. Use the **same Node major version
-  the release was built with** (22); a missing Node or a different major will
-  leave the GUI unable to start monitoring (a clear error is shown in the
-  backend log).
-
-> Note: if a future release bundles its own Node runtime, this requirement will
-> be dropped — until then the app is *not* fully self-contained despite the
-> "no installation required" convenience of a portable `.exe`.
+* [Node.js](https://nodejs.org/) 22
 
 ## 🚀 Quick Start
 
