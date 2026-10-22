@@ -5,7 +5,7 @@
 // 弹窗把提示与操作合到一处，用户在哪一页都能直接完成更新
 //
 // 关闭约束：ContentDialog 点深灰遮罩本来就关不掉（它没有该行为），但 ESC 与系统返回键会关
-// 因此 OnClosing 拦下所有不是本文件主动发起的关闭，唯一出口是右上角叉号与三个操作按钮
+// 因此 OnClosing 拦下所有不是本文件主动发起的关闭，唯一出口是右上角叉号与两个操作按钮
 //
 // UpdateDialog.xaml.cs — the grey dialog shown when a new version is found
 //
@@ -16,7 +16,7 @@
 //
 // Closing: clicking the scrim does not close a ContentDialog to begin with (it has no such behaviour),
 // but ESC and the system back button do. OnClosing therefore blocks every close this file did not start.
-// The only exits are the top-right cross and the three action buttons
+// The only exits are the top-right cross and the two action buttons
 
 using CommunityToolkit.WinUI.UI.Controls;
 using MIDITap.App.Services;
@@ -24,6 +24,7 @@ using MIDITap.Core.Settings;
 using MIDITap.Core.Update;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 
 namespace MIDITap.App.Dialogs;
 
@@ -67,16 +68,24 @@ public sealed partial class UpdateDialog : ContentDialog
         // That is the boundary of the chosen control, so notes written in plain markdown render best
         NotesMd.Text = _info.Notes ?? string.Empty;
         var hasNotes = !string.IsNullOrWhiteSpace(_info.Notes);
-        NotesCard.Visibility = hasNotes ? Visibility.Visible : Visibility.Collapsed;
-
-        // 没有发布说明时区分两种情形，而不是一律留白
-        //   * 走了网页回退：GitHub 只给渲染后的 HTML，说明预览不可用并给出发布页入口
-        //   * 该版本本来就没写说明：什么都不显示，那是正常情况
+        // 卡片始终显示：发布页入口现在在正文里，没有发布说明时它仍然要有地方可放
+        // 没有 markdown 时只显示那一行链接，markdown 控件本身收起
         //
-        // Absent notes are split into two cases rather than left blank
+        // The card is always shown: the release page entry now lives in the body, so it needs a place even when there
+        // are no release notes
+        // With no markdown only the link line remains and the markdown control itself is collapsed
+        NotesCard.Visibility = Visibility.Visible;
+        NotesMd.Visibility = hasNotes ? Visibility.Visible : Visibility.Collapsed;
+
+        // 没有发布说明时区分两种情形
+        //   * 走了网页回退：GitHub 只给渲染后的 HTML，说明预览不可用
+        //   * 该版本本来就没写说明：不额外说明，正文里只剩那行发布页链接
+        // 发布页入口不再依赖这两种情形，它一直在正文最前面
+        //
+        // Absent notes are split into two cases
         //   * the web fallback was used: GitHub served rendered HTML only, so say the preview is unavailable
-        //     and offer the release page
-        //   * the release simply has no notes: show nothing, which is normal
+        //   * the release simply has no notes: nothing is explained and only the release-page line remains
+        // The release-page entry no longer depends on either case: it always sits at the top of the body
         NotesUnavailableText.Visibility = !hasNotes && _info.ViaFallback
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -148,11 +157,13 @@ public sealed partial class UpdateDialog : ContentDialog
         CloseAfter(ignored: false, neverRemind: false);
     }
 
-    private void OnOpenPageClick(object sender, RoutedEventArgs e)
+    private void OnOpenPageClick(Hyperlink sender, HyperlinkClickEventArgs args)
     {
-        // 预览不可用时的出口：把用户送到发布页，说明原文在那里
+        // 正文最前面那行发布页链接：把用户送到发布页看完整说明
+        // 完整说明（含图片与折叠块）只有网页上有，这里的预览只覆盖 markdown 那部分
         //
-        // The way out when the preview is unavailable: send the user to the release page, where the notes are
+        // The release-page link at the top of the body: send the user to the page for the full notes
+        // The full notes, images and collapsed blocks included, exist only there; this preview covers the markdown part
         AppServices.Backend.OpenUrl(_info.Url);
     }
 
@@ -431,7 +442,15 @@ public sealed partial class UpdateDialog : ContentDialog
         // Screen readers and automated tests both rely on it to find this control
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(NotesToggle, t("update.notes"));
         NotesUnavailableText.Text = DescribeUnavailableNotes();
-        PageBtn.Content = t("update.notes.viewOnPage");
+        // 发布页入口的文字随语言变，地址不随语言变，因此分开设
+        // 前缀与链接之间留一个空格：两者是两段 Run，不会自动补空白
+        //
+        // The release-page label follows the UI language while the address does not, so the two are set apart
+        // A space separates the prefix from the link: they are two Runs and no whitespace is inserted for them
+        ReleasePageLabel.Text = t("update.notes.releasePage");
+        ReleasePageLink.Inlines.Clear();
+        ReleasePageLink.Inlines.Add(new Run { Text = _info.Url });
+        ReleasePageLink.NavigateUri = new Uri(_info.Url, UriKind.Absolute);
         IgnoreBtn.Content = t("update.ignoreVersion");
         NeverRemindBtn.Content = t("update.neverRemind");
         ToolTipService.SetToolTip(CloseBtn, t("update.close"));

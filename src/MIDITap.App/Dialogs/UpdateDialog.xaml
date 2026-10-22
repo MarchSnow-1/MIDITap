@@ -188,17 +188,22 @@
                                        Margin="0,0,28,0"
                                        TextWrapping="Wrap"
                                        Foreground="{ThemeResource MiditapTextPrimaryBrush}" />
+                            <!-- 初始朝上：正文默认展开，箭头表示"点了会收起" -->
+                            <!-- Points up initially: the body starts expanded, so the chevron means "clicking collapses" -->
                             <FontIcon x:Name="NotesChevron"
                                       HorizontalAlignment="Right" VerticalAlignment="Center"
                                       FontSize="12"
-                                      Glyph="&#xE70D;"
+                                      Glyph="&#xE70E;"
                                       Foreground="{ThemeResource MiditapTextSecondaryBrush}" />
                         </Grid>
                     </Button>
 
                     <!-- 表头与内容之间一条分隔线：同在一张卡片里，没有它两块会连成一片
                          A divider between header and content: they share one card, and without it the two run together -->
-                    <Border x:Name="NotesBodyHost" Grid.Row="1" Visibility="Collapsed"
+                    <!-- 默认展开：正文第一行就是发布页入口，收起会让它在打开弹窗时看不见 -->
+                    <!-- Expanded by default: the first line of the body is the release page entry, and collapsing it
+                         would hide that entry the moment the dialog opens -->
+                    <Border x:Name="NotesBodyHost" Grid.Row="1" Visibility="Visible"
                             BorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
                             BorderThickness="0,1,0,0">
                         <ScrollViewer x:Name="NotesBody"
@@ -206,24 +211,42 @@
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
                                       Padding="16,12,10,12">
+                        <StackPanel Spacing="10">
+                            <!-- 发布页入口：原先由操作行里的「前往发布页」按钮承担，现在放在正文最顶端
+                                 单独一段文字而不是拼进 markdown：拼进去就要依赖控件对链接的渲染与点击行为，
+                                 而这里用 Hyperlink 自己发起导航，行为与原来的按钮完全一样
+                                 两个 Run 之间不能有换行与缩进：XAML 会把那段空白当成正文，前缀与链接之间于是多出空格
+
+                                 The release page entry: it used to be the "open release page" button in the action row
+                                 and now sits at the very top of the body
+                                 A separate line rather than text spliced into the markdown: splicing would rely on how
+                                 the control renders and handles links, while a Hyperlink navigates from here and
+                                 behaves as the button did
+                                 No line break or indentation between the two Runs: XAML keeps that whitespace as text,
+                                 so the prefix and the link would be separated by extra spaces -->
+                            <TextBlock x:Name="ReleasePageLine"
+                                       Style="{ThemeResource MiditapBodyStyle}"
+                                       TextWrapping="Wrap"
+                                       Foreground="{ThemeResource MiditapTextSecondaryBrush}"><Run x:Name="ReleasePageLabel" /><Hyperlink x:Name="ReleasePageLink" Click="OnOpenPageClick" Foreground="{ThemeResource MiditapAccentBrush}" /></TextBlock>
                             <ct:MarkdownTextBlock x:Name="NotesMd"
-                                                  Background="Transparent"
-                                                  Foreground="{ThemeResource MiditapTextPrimaryBrush}"
-                                                  CodeBackground="Transparent"
-                                                  CodeBorderBrush="Transparent"
-                                                  CodeForeground="{ThemeResource MiditapTextPrimaryBrush}"
-                                                  InlineCodeBackground="Transparent"
-                                                  InlineCodeBorderBrush="Transparent"
-                                                  InlineCodeForeground="{ThemeResource MiditapTextPrimaryBrush}"
-                                                  QuoteBackground="Transparent"
-                                                  QuoteBorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
-                                                  QuoteForeground="{ThemeResource MiditapTextPrimaryBrush}"
-                                                  TableBorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
-                                                  HorizontalRuleBrush="{ThemeResource MiditapSubtleBorderBrush}"
-                                                  Header1Foreground="{ThemeResource MiditapTextPrimaryBrush}"
-                                                  Header2Foreground="{ThemeResource MiditapTextPrimaryBrush}"
-                                                  Header3Foreground="{ThemeResource MiditapTextPrimaryBrush}"
-                                                  LinkForeground="{ThemeResource MiditapAccentBrush}" />
+                                                      Background="Transparent"
+                                                      Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      CodeBackground="Transparent"
+                                                      CodeBorderBrush="Transparent"
+                                                      CodeForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      InlineCodeBackground="Transparent"
+                                                      InlineCodeBorderBrush="Transparent"
+                                                      InlineCodeForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      QuoteBackground="Transparent"
+                                                      QuoteBorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                      QuoteForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      TableBorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                      HorizontalRuleBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                      Header1Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      Header2Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      Header3Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      LinkForeground="{ThemeResource MiditapAccentBrush}" />
+                        </StackPanel>
                         </ScrollViewer>
                     </Border>
                 </Grid>
@@ -252,34 +275,30 @@
                  Action buttons
                  The primary action comes first and the dismissive one right after it,
                  matching the log toolbar and the mapping editor dialog -->
-            <!-- 操作行：左侧是三个按钮，右侧是「不再提醒」小字，同处一行
-                 用 Grid 而不是水平 StackPanel：小字要贴住右边缘，而 StackPanel 只会把它紧挨着上一个按钮
+            <!-- 操作行：左侧是两个按钮，右侧是「不再提醒」小字
+                 按钮列取 Auto、小字列取 * 并靠右贴边：小字因此始终停在行末，与按钮之间有多少空档都不会叠上去
                  小字与按钮垂直居中对齐，读起来是同一行而不是掉在下面
                  刻意不做成按钮：它与两个主操作不是一类东西
                  仅在启动时自动弹出的那个窗口里出现（由构造参数控制）
 
-                 The action row: three buttons on the left, the "do not remind me" link on the right, in one row
-                 A Grid rather than a horizontal StackPanel: the link has to sit against the right edge,
-                 and a StackPanel would only place it next to the previous button
+                 The action row: two buttons on the left, the "do not remind me" link on the right
+                 The button column is Auto and the link column is * aligned to the right, so the link always sits at the
+                 end of the row and cannot overlap the buttons no matter how much room is left between them
                  The link is centred vertically so the row reads as one line rather than something dropped below
                  Deliberately not a button: it is not the same kind of thing as the two main actions
                  It appears only in the dialog shown automatically at startup (controlled by a constructor argument) -->
-            <Grid>
+            <!-- 小字贴住行末：右列留 MinWidth，按钮再长也先挤压中间这段空档，不会把小字压出边界 -->
+            <!-- The link hugs the end of the row: the right column carries a MinWidth, so a long button row eats into the
+                 gap in the middle first rather than pushing the link out of bounds -->
+            <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" MinWidth="0" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                     <Button AutomationProperties.AutomationId="UpdateActionBtn" x:Name="ActionBtn" Click="OnActionClick" Style="{ThemeResource AccentButtonStyle}" />
                     <Button AutomationProperties.AutomationId="UpdateIgnoreBtn" x:Name="IgnoreBtn" Click="OnIgnoreClick" />
-                    <!-- 「前往发布页」常驻：发布说明能不能在这里预览，与用户要不要去网页看是两件事
-                         预览成功时它同样有用 —— 完整说明（含图片与折叠块）只有网页上有
-
-                         The release page button is always present: whether the notes can be previewed here
-                         has nothing to do with whether the user wants to read them on the web
-                         Even a successful preview only shows part of them: images and collapsed blocks exist only there -->
-                    <Button AutomationProperties.AutomationId="UpdatePageBtn" x:Name="PageBtn" Click="OnOpenPageClick" />
                 </StackPanel>
 
                 <HyperlinkButton Grid.Column="1" x:Name="NeverRemindBtn" Click="OnNeverRemindClick"
