@@ -444,6 +444,130 @@ public sealed class BridgeUpdateCheckerTests
         Assert.False(string.IsNullOrWhiteSpace(version.Detail));
     }
 
+    // ================================================================ 安装模式 / Install mode
+
+    [Fact]
+    public async Task Install_mode_picks_the_asset_although_nothing_is_installed_yet()
+    {
+        // 首次安装时盘上没有上游，已装版本必然是 null
+        // 安装要的是"这个发布有没有本平台的产物"，与已装版本无关，因此必须拿到资产而不是停在不可比较
+        //
+        // A first install has no upstream on disk, so the installed version is bound to be null
+        // Installing wants to know whether this release has a build for this platform, which does not depend on the
+        // installed version, so the asset must come back rather than a not-comparable verdict
+        const string apiJson = """
+            {"tag_name":"v9.9.9","assets":[{"name":"MIDIBridge-Client-v9.9.9-windows-amd64.zip","browser_download_url":"https://example/dl","size":123}]}
+            """;
+
+        using var api = new MiniHttpServer(_ => (200, null, apiJson));
+        using var page = new MiniHttpServer(_ => (500, null, "should not be reached"));
+
+        var outcome = await BridgeUpdateChecker.CheckAsync(
+            null, NoProxy, EndpointsFor(api, page), forInstall: true);
+
+        Assert.True(outcome.Ok);
+        Assert.False(outcome.NotComparable);
+        Assert.Equal("v9.9.9", outcome.Info!.Latest);
+        Assert.Equal(UpstreamAssetName, outcome.Info.Asset!.Name);
+        Assert.Empty(page.Requests);
+    }
+
+    [Fact]
+    public async Task Install_mode_still_ignores_a_verbose_probe_failure()
+    {
+        // 已装版本是 dev（探测得到不可比较的版本）时同样不比较
+        //
+        // A dev installed version (a probe yielding an incomparable value) is not compared either
+        const string apiJson = """
+            {"tag_name":"v9.9.9","assets":[{"name":"MIDIBridge-Client-v9.9.9-windows-amd64.zip","browser_download_url":"https://example/dl","size":123}]}
+            """;
+
+        using var api = new MiniHttpServer(_ => (200, null, apiJson));
+        using var page = new MiniHttpServer(_ => (500, null, "should not be reached"));
+
+        var outcome = await BridgeUpdateChecker.CheckAsync(
+            "dev", NoProxy, EndpointsFor(api, page), forInstall: true);
+
+        Assert.True(outcome.Ok);
+        Assert.False(outcome.NotComparable);
+        Assert.Equal(UpstreamAssetName, outcome.Info!.Asset!.Name);
+    }
+
+    [Fact]
+    public async Task Install_mode_fetches_the_assets_on_the_web_path_without_comparing()
+    {
+        // 清单与 API 都不通时走网页：安装不比较版本，标签到手就该去取资产列表
+        // 比较版本会让这条路上"已装版本未知"直接停下，用户点了安装什么也拿不到
+        //
+        // With both the manifest and the API unreachable the web path takes over: installing compares nothing, so the
+        // asset list is fetched once the tag is in hand
+        // Comparing would stop this path dead on an unknown installed version, and a click on install would yield
+        // nothing at all
+        const string pageHtml = """
+            <a href="/username/repository/releases/download/v4.2.0/MIDIBridge-Client-v4.2.0-windows-amd64.zip">dl</a>
+            """;
+
+        using var page = new MiniHttpServer(path => path switch
+        {
+            var p when p.StartsWith("/releases/latest") => (302, "/releases/tag/v4.2.0", string.Empty),
+            var p when p.Contains("/expanded_assets/") => (200, null, pageHtml),
+            _ => (404, null, string.Empty),
+        });
+
+        var endpoints = new BridgeUpdateEndpoints(
+            "http://127.0.0.1:9/latest", page.BaseUrl + "/releases/latest", page.BaseUrl + "/releases");
+
+        var outcome = await BridgeUpdateChecker.CheckAsync(
+            null, NoProxy, endpoints, forInstall: true);
+
+        Assert.True(outcome.Ok);
+        Assert.False(outcome.NotComparable);
+        Assert.Equal("v4.2.0", outcome.Info!.Latest);
+        Assert.Equal(2, page.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Install_mode_uses_the_manifest_artifact_without_comparing_versions()
+    {
+        // 安装路径的正路：清单里有本平台产物就直接交出去，不看已装版本
+        //
+        // The install path's main route: when the manifest carries this platform's artifact it is handed over without
+        // consulting the installed version
+        const string manifestJson = """
+            {
+              "client": "midibridge-client",
+              "channel": "release",
+              "version": "v9.9.9",
+              "versionSemver": "9.9.9",
+              "ipcProtocol": "1.0.0",
+              "ipcProtocolSchema": 1,
+              "artifacts": [
+                {
+                  "platform": "windows-amd64",
+                  "os": "windows",
+                  "arch": "amd64",
+                  "filename": "MIDIBridge-Client-v9.9.9-windows-amd64.exe",
+                  "size": 123,
+                  "sha256": "483000c9fab10950e3c81a6fa4e5e5d8dabc0322691e43bc77e9da494090a842",
+                  "url": "https://example/dl"
+                }
+              ],
+              "warnings": []
+            }
+            """;
+
+        using var manifest = new MiniHttpServer(_ => (200, null, manifestJson));
+
+        var outcome = await BridgeUpdateChecker.CheckManifestAsync(
+            null, NoProxy, manifest.BaseUrl + "/version.json", forInstall: true);
+
+        Assert.True(outcome.Ok);
+        Assert.False(outcome.NotComparable);
+        Assert.Equal("v9.9.9", outcome.Info!.Manifest.Version);
+        Assert.NotNull(outcome.Artifact);
+        Assert.Equal("MIDIBridge-Client-v9.9.9-windows-amd64.exe", outcome.Artifact!.FileName);
+    }
+
     // ================================================================ 端点默认值 / The default endpoints
 
     [Fact]

@@ -1138,14 +1138,17 @@ public sealed class BridgeService
     {
         // 清单优先：一次请求就拿到版本、本平台产物、大小与 SHA-256，且不消耗 API 配额
         // 清单取不到才回退到 API/网页路径，两者失败的语义不同，因此回退只在"拿不到清单"时发生
+        // 安装不做版本比较：首次安装时盘上还没有上游，读出来的已装版本只会是 unknown，比较只会得出"不可比较"
         //
         // The manifest comes first: one request yields the version, this platform's artifact, its size and SHA-256,
         // spending no API quota
         // Only when the manifest cannot be fetched does it fall back to the API/web path; the two failures read
         // differently, so the fallback happens on "no manifest" alone
-        var installedVersion = await RefreshInstalledVersionAsync().ConfigureAwait(false);
+        // Installing compares no versions: a first install has no upstream on disk, so the installed version reads as
+        // unknown and the comparison can only yield "not comparable"
         var manifestOutcome = await BridgeUpdateChecker
-            .CheckManifestAsync(installedVersion, AppServices.Backend.UpdateOptions, cancellationToken)
+            .CheckManifestAsync(
+                null, AppServices.Backend.UpdateOptions, cancellationToken, forInstall: true)
             .ConfigureAwait(false);
 
         if (manifestOutcome.Info?.Manifest is { } manifest)
@@ -1170,7 +1173,7 @@ public sealed class BridgeService
             // 清单拿不到：回退到 API/网页路径
             //
             // No manifest: fall back to the API/web path
-            return await InstallViaApiAsync(installedVersion, progress, cancellationToken).ConfigureAwait(false);
+            return await InstallViaApiAsync(progress, cancellationToken).ConfigureAwait(false);
         }
 
         if (manifestOutcome.Artifact is null)
@@ -1180,11 +1183,7 @@ public sealed class BridgeService
             // The remote does have a version but no build for this platform: that is the publisher's side, and nothing
             // the user does changes it
             return new BridgeInstallOutcome(
-                false,
-                manifestOutcome.NotComparable
-                    ? "the installed version cannot be compared, so the release was not picked for download"
-                    : "the release publishes no build for this platform",
-                BridgeInstallFailure.Download);
+                false, "the release publishes no build for this platform", BridgeInstallFailure.Download);
         }
 
         if (manifestOutcome.Artifact.Sha256 is null)
@@ -1221,18 +1220,20 @@ public sealed class BridgeService
     /// address while the API still works
     /// </summary>
     private async Task<BridgeInstallOutcome> InstallViaApiAsync(
-        string installedVersion, IProgress<DownloadProgress>? progress, CancellationToken cancellationToken)
+        IProgress<DownloadProgress>? progress, CancellationToken cancellationToken)
     {
+        // 同样不做版本比较：这条路也只是"挑一份能装的产物"
+        //
+        // This path compares no versions either: it only picks an artifact that can be installed
         var outcome = await BridgeUpdateChecker
-            .CheckAsync(installedVersion, AppServices.Backend.UpdateOptions, cancellationToken)
+            .CheckAsync(
+                null, AppServices.Backend.UpdateOptions, cancellationToken, forInstall: true)
             .ConfigureAwait(false);
 
-        // 检查失败、版本不可比较、没有可用资产三种情形分开：它们的下一步动作完全不同
-        // 第一种等一会儿或配代理，第二种要用户自己看发布页，第三种是发布方没有提供 Windows 构建
+        // 检查失败与没有可用资产两种情形分开：前者等一会儿或配代理，后者是发布方没有提供 Windows 构建
         //
-        // A failed check, a not-comparable version and a missing asset stay apart: each has a different next step
-        // The first needs waiting or a proxy, the second needs the user to read the release page, and the third means
-        // the publisher shipped no Windows build
+        // A failed check and a missing asset stay apart: the first needs waiting or a proxy, the second means the
+        // publisher shipped no Windows build
         if (!outcome.Ok)
         {
             return new BridgeInstallOutcome(
@@ -1241,11 +1242,7 @@ public sealed class BridgeService
         if (outcome.Info?.Asset is null)
         {
             return new BridgeInstallOutcome(
-                false,
-                outcome.NotComparable
-                    ? "the installed version cannot be compared, so the release was not picked for download"
-                    : "no downloadable asset in the latest release",
-                BridgeInstallFailure.Download);
+                false, "no downloadable asset in the latest release", BridgeInstallFailure.Download);
         }
         if (!outcome.Info.DigestAvailable)
         {

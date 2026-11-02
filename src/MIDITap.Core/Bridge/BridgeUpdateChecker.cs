@@ -513,8 +513,9 @@ public static class BridgeUpdateChecker
 
     /// <summary>检查上游是否有新版本（默认端点：BridgeRepository）/ Checks the upstream for a newer version (default endpoints)</summary>
     public static Task<BridgeUpdateCheckOutcome> CheckAsync(
-        string? installedVersion, UpdateOptions options, CancellationToken cancellationToken = default)
-        => CheckAsync(installedVersion, options, BridgeUpdateEndpoints.Default, cancellationToken);
+        string? installedVersion, UpdateOptions options, CancellationToken cancellationToken = default,
+        bool forInstall = false)
+        => CheckAsync(installedVersion, options, BridgeUpdateEndpoints.Default, cancellationToken, forInstall);
 
     /// <summary>
     /// 带端点覆盖的检查（供测试注入本地服务器）
@@ -522,14 +523,21 @@ public static class BridgeUpdateChecker
     /// 已装版本不可比较时返回成功 + NotComparable=true，**不触发**回退：
     /// API 已经给出答案，回退只该为"拿不到答案"服务
     ///
+    /// <paramref name="forInstall"/> 为 true 时不与已装版本比较：安装要的是"这个发布的本平台产物"，
+    /// 装没装过、装的是 dev 还是旧版都与选产物无关；此时 <paramref name="installedVersion"/> 可以传 null
+    ///
     /// The check with endpoint overrides (tests inject local servers)
     /// Order: API first, any API failure falls back to the web page, and a double failure reports the API's reason
     /// A not-comparable installed version returns success with NotComparable=true and does NOT trigger the fallback:
     /// the API already produced an answer, and the fallback exists for "no answer could be obtained"
+    ///
+    /// With <paramref name="forInstall"/> set, the installed version is not compared: installing wants this release's
+    /// artifact for this platform, and whether an older build or a dev build is already there does not enter that
+    /// choice; <paramref name="installedVersion"/> may be null then
     /// </summary>
     public static async Task<BridgeUpdateCheckOutcome> CheckAsync(
         string? installedVersion, UpdateOptions options, BridgeUpdateEndpoints endpoints,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool forInstall = false)
     {
         // 1) API 优先 / API first
         var read = await UpdateChecker
@@ -537,12 +545,14 @@ public static class BridgeUpdateChecker
             .ConfigureAwait(false);
         if (read.Ok)
         {
-            return Judge(read.Tag, read.Assets, installedVersion, viaFallback: false, read.Notes, read.RateLimit);
+            return Judge(
+                read.Tag, read.Assets, installedVersion, viaFallback: false, read.Notes, read.RateLimit,
+                forInstall);
         }
 
         // 2) API 失败 -> 网页路径 / API failed -> the web page
         var viaPage = await CheckViaReleasePageAsync(
-            endpoints, options, read.RateLimit, installedVersion, cancellationToken).ConfigureAwait(false);
+            endpoints, options, read.RateLimit, installedVersion, cancellationToken, forInstall).ConfigureAwait(false);
         if (viaPage is not null)
         {
             Console.Error.WriteLine(
@@ -585,20 +595,31 @@ public static class BridgeUpdateChecker
     /// This method returns Ok=false with a reason, and the caller decides between a message and a fallback
     /// </summary>
     public static Task<BridgeManifestCheckOutcome> CheckManifestAsync(
-        string? installedVersion, UpdateOptions options, CancellationToken cancellationToken = default)
-        => CheckManifestAsync(installedVersion, options, BridgeRepository.LatestManifestUrl, cancellationToken);
+        string? installedVersion, UpdateOptions options, CancellationToken cancellationToken = default,
+        bool forInstall = false)
+        => CheckManifestAsync(
+            installedVersion, options, BridgeRepository.LatestManifestUrl, cancellationToken, forInstall);
 
     /// <summary>
     /// 带清单地址覆盖的检查（供测试注入本地服务器）
     /// 端点可覆盖，使回退与解析能在本地服务器上测到，不必访问公网
     ///
+    /// <paramref name="forInstall"/> 为 true 时只挑产物、不与已装版本比较：
+    /// 首次安装时磁盘上还没有上游，已装版本读出来是 unknown，比较只会得出"不可比较"，
+    /// 而"这个发布有没有本平台的产物"与装没装过无关
+    ///
     /// The check with an overridable manifest address (tests inject a local server)
     /// The endpoint is overridable so the fallback and the parsing are testable against a local server without
     /// touching the public internet
+    ///
+    /// With <paramref name="forInstall"/> set, only the artifact is picked and the installed version is not compared:
+    /// a first install has no upstream on disk, so the installed version reads as unknown and the comparison can only
+    /// yield "not comparable"; whether this release carries a build for this platform does not depend on what is
+    /// already installed
     /// </summary>
     public static async Task<BridgeManifestCheckOutcome> CheckManifestAsync(
         string? installedVersion, UpdateOptions options, string manifestUrl,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool forInstall = false)
     {
         var fetch = await FetchManifestAsync(manifestUrl, options, cancellationToken).ConfigureAwait(false);
         if (fetch.Manifest is null)
@@ -615,6 +636,12 @@ public static class BridgeUpdateChecker
         // still counts as a successful check: the remote does have a version, this platform simply cannot install it
         // Folding that into "network failure" would make the UI say the wrong thing
         var artifact = BridgeInstaller.SelectInstallable(manifest, BridgePlatform.WindowsAmd64);
+
+        if (forInstall)
+        {
+            return new BridgeManifestCheckOutcome(
+                new BridgeManifestCheckInfo(manifest, artifact), Ok: true, UpdateAvailable: true);
+        }
 
         var comparison = CompareLatest(manifest.Version, installedVersion);
         if (comparison.NotComparable)
@@ -708,8 +735,25 @@ public static class BridgeUpdateChecker
         string? installedVersion,
         bool viaFallback,
         string? notes,
-        RateLimitInfo? rateLimit)
+        RateLimitInfo? rateLimit,
+        bool forInstall = false)
     {
+        // 安装不比较版本：远端有这个 tag 就够了，产物挑不挑得到是另一回事
+        //
+        // Installing does not compare versions: the tag existing is enough, and whether an artifact is found is a
+        // separate matter
+        if (forInstall)
+        {
+            return tag is null
+                ? new BridgeUpdateCheckOutcome(
+                    null, Ok: true, Detail: "the release carries no tag", RateLimit: rateLimit, NotComparable: true)
+                : new BridgeUpdateCheckOutcome(
+                    new BridgeUpdateInfo(
+                        tag, BridgeAssetSelector.SelectFromApiAssets(assets), notes, viaFallback, rateLimit),
+                    Ok: true,
+                    RateLimit: rateLimit);
+        }
+
         var comparison = CompareLatest(tag, installedVersion);
         if (comparison.NotComparable)
         {
@@ -763,7 +807,8 @@ public static class BridgeUpdateChecker
         UpdateOptions options,
         RateLimitInfo? rateLimit,
         string? installedVersion,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forInstall = false)
     {
         try
         {
@@ -776,18 +821,23 @@ public static class BridgeUpdateChecker
             }
 
             // 与 API 路径同一套比较：不可比较或已是最新都不必再取资产列表
+            // 安装时跳过比较，标签到手就去取资产列表
             //
             // The same comparison as the API path: neither a not-comparable verdict nor "up to date" needs the asset
             // list fetched
-            var comparison = CompareLatest(tag, installedVersion);
-            if (comparison.NotComparable)
+            // Installing skips the comparison, so the asset list is fetched as soon as the tag is in hand
+            if (!forInstall)
             {
-                return new BridgeUpdateCheckOutcome(
-                    null, Ok: true, Detail: comparison.Detail, RateLimit: rateLimit, NotComparable: true);
-            }
-            if (comparison.Precedence <= 0)
-            {
-                return new BridgeUpdateCheckOutcome(null, Ok: true, RateLimit: rateLimit);
+                var comparison = CompareLatest(tag, installedVersion);
+                if (comparison.NotComparable)
+                {
+                    return new BridgeUpdateCheckOutcome(
+                        null, Ok: true, Detail: comparison.Detail, RateLimit: rateLimit, NotComparable: true);
+                }
+                if (comparison.Precedence <= 0)
+                {
+                    return new BridgeUpdateCheckOutcome(null, Ok: true, RateLimit: rateLimit);
+                }
             }
 
             var assets = await ReleasePageChecker
