@@ -156,7 +156,10 @@ jobs:
           # Filtering explicitly with -Force beats relying on a lucky wildcard
           Get-ChildItem publish -Force | Where-Object { $_.Name -ne ".storage" } |
             ForEach-Object { Copy-Item $_.FullName $stage -Recurse -Force }
-          Copy-Item README.md, README_zh-CN.md, CHANGELOG.md, LICENSE $stage/ -ErrorAction SilentlyContinue
+          # README 按通配符复制：每加一门语言就多一份，逐个列名字会在加语言时漏掉
+          #
+          # READMEs are copied by wildcard: one more file per language, and an explicit list misses entries when a language is added
+          Copy-Item README*.md, CHANGELOG.md, LICENSE $stage/ -ErrorAction SilentlyContinue
           # config/ 不打进包：首次启动由应用按界面语言生成（见 LanguageCatalog.DefaultConfigStem）
           # 包里不带它，用户的配置就不会被任何一次更新覆盖，这比事后排除更彻底
           #

@@ -20,7 +20,7 @@
 ![GitHub Last Commit](https://img.shields.io/github/last-commit/MarchSnow-1/MIDITap?style=for-the-badge)
 [![Total Download](https://img.shields.io/github/downloads/MarchSnow-1/MIDITap/total?style=for-the-badge)](https://github.com/MarchSnow-1/MIDITap/releases)
 
-[English](README.md) | [简体中文](README_zh-CN.md)
+[English](README.md) | [简体中文](README_zh-Hans.md) | [繁體中文](README_zh-Hant.md)
 
 </div>
 
@@ -42,6 +42,7 @@ MIDITap 是一个调用 Windows 原生 API 的低延迟 MIDI → 键盘映射工
 - 🎵 **长按支持**：按住琴键时对应按键持续触发，松开即释放，手感自然
 - 🔑 **完整按键支持**：字母、数字、功能键、方向键、小键盘、媒体键，一应俱全
 - 🖥️ **人性化 UI**：原生 WinUI 3 美观界面，附带可视化一键绑定功能，便于上手
+- 🎛️ **MIDIBridge（可选）**：在应用内一键下载 [MIDIBridge Client](https://github.com/MarchSnow-1/midibridge-client)，即可把远程 `midibridge-server` 上的 MIDI 当作输入源（详见下方的「扩展功能」一节）
 
 ## 🛠️ 环境要求
 
@@ -103,6 +104,32 @@ MIDITap 是一个调用 Windows 原生 API 的低延迟 MIDI → 键盘映射工
 - **代理**：仅用于更新检查与下载，留空则跟随 Windows 系统代理
   可填 HTTP 或 Socks5 代理 (如 `http://127.0.0.1:8080`、`socks5://127.0.0.1:1080`)
   需带协议前缀；地址格式无效时界面会提示，并自动退回系统代理
+- **MIDIBridge**：可选扩展，见下一节
+
+## 🎛️ 扩展功能：MIDIBridge
+
+### 它是什么
+
+MIDITap 包含对 [MIDIBridge Client](https://github.com/MarchSnow-1/midibridge-client) 的支持，可以将任意一台机器上连接的 MIDI 设备通过网络传输来当作 MIDITap 的输入源
+
+MIDIBridge 程序**不内置**在 MIDITap 的安装包/更新包内，可按需在程序内从 [MIDIBridge Client](https://github.com/MarchSnow-1/midibridge-client) 仓库一键下载，MIDITap 不代为分发源程序
+
+主页的设备下拉框常驻一个 MIDIBridge 条目，位于最底部
+
+未安装时，选中它会弹出下载与安装的确认框
+
+在设置页可查看当前运行状态、版本与协议版本，并支持在 MIDITap 内检查 MIDIBridge 是否有更新
+
+检查 MIDIBridge 更新只在 MIDITap 自身为最新时才进行，当 MIDITap 有新版本时无法检查，请先更新 MIDITap 本体再进行尝试
+
+检查到新版本时会弹出与本体更新相同的窗口，显示版本对照与更新日志，确认后再下载安装
+
+> [!NOTE]
+> MIDITap 仅提供 MIDIBridge Client 侧相关适配
+>
+> 使用 MIDIBridge 相关功能仍需自行搭建对应的 MIDIBridge Server
+>
+> 详情请参考: [MIDIBridge](https://github.com/MarchSnow-1/midibridge) 中的相关介绍及搭建教程
 
 ## ✏️ 手动编写配置文件
 

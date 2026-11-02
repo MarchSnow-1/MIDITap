@@ -36,8 +36,33 @@ jobs:
 
       # ------------------------------------------------------- 测试 / Tests
 
+      # 除了"必须通过"，这里还要断言**跳过数不超过预期上限**
+      # 为什么：本套件里有一组 ACL 用例带条件跳过（AclCapableFact，无法改写 DACL 的机器会跳过）
+      # 不加这一条时，一批本该执行的用例若因环境或代码原因整体跳过，输出依旧是全绿
+      # 那正是 [MidiFact] 那条断言要防的同一件事，只是这里发生在单元测试而非集成测试
+      # 上限 10 是当前 ACL 用例的实际条数，调高它必须同时说明是哪一类新用例
+      #
+      # Beyond "must pass", this also asserts the skip count stays within an expected bound
+      # Why: the suite carries conditionally skipped ACL cases (AclCapableFact, skipped on machines that cannot rewrite a DACL)
+      # Without this line, a group of cases meant to run but skipped for an environment or code reason still reports green
+      # That is the same thing the [MidiFact] assertion guards against, only here in the unit tests rather than the integration ones
+      # The bound of 10 is today's actual ACL case count; raising it requires naming which new kind of case skipped
       - name: Core tests (pure logic, no hardware)
-        run: dotnet test src/MIDITap.Core.Tests/MIDITap.Core.Tests.csproj -c Release --logger "console;verbosity=normal"
+        shell: pwsh
+        run: |
+          $output = dotnet test src/MIDITap.Core.Tests/MIDITap.Core.Tests.csproj -c Release --logger "console;verbosity=normal" 2>&1
+          $output | Write-Host
+          if ($LASTEXITCODE -ne 0) { throw "Core test run failed" }
+          if ($output -match "(失败|Failed):\s*[1-9]") { throw "Core tests reported failures" }
+
+          $skipped = 0
+          foreach ($line in $output) {
+            if ($line -match "(已跳过|Skipped):\s*(\d+)") { $skipped += [int]$matches[2] }
+          }
+          if ($skipped -gt 10) {
+            throw "Unexpected skip count: $skipped (at most 10, all of them the ACL cases). Something meant to run was skipped silently."
+          }
+          Write-Host "Core tests passed; skipped $skipped case(s), within the expected ACL bound."
 
       # 集成测试经真实驱动往返字节，需要虚拟 MIDI 回环端口
       # CI 的 windows-latest 没有 MIDI 设备，也不该为了跑测试去装一台
@@ -69,6 +94,41 @@ jobs:
       - name: Validate language files
         run: node dev-scripts/sort-i18n.js --check
 
+      # --check 只保证两份文件**互相一致且有序**，它不看代码里引用了哪些键
+      # 于是代码里写错一个键名（或新增代码引用了尚未添加的键）时，--check 依旧全绿
+      # 用户那边看到的是那个键名本身，而不是文案；中文界面上冒出一行 bridge.xxx 很难被当成缺陷报上来
+      # 因此这里扫一遍代码里 T("...") 的字面量键，逐个核对它在语言文件里存在
+      # 拼接出来的键（如 "bridge.status." + 枚举名）无法静态还原，这里只查字面量；那几族由枚举成员逐条列出的测试覆盖
+      #
+      # --check only guarantees the TWO FILES agree with each other and are ordered; it never looks at which keys the code uses
+      # So a mistyped key, or new code referring to a key nobody added yet, still passes --check
+      # What the user sees is the key name itself rather than the copy, and a stray bridge.xxx line in a Chinese UI is rarely reported as a defect
+      # This step therefore scans every T("...") literal in the code and checks that the key exists in the language files
+      # Composed keys (such as "bridge.status." + an enum member) cannot be reconstructed statically, so only literals are checked here; those families are covered by tests that list the enum members
+      - name: Assert every literal translation key exists
+        shell: pwsh
+        run: |
+          $json = Get-Content "src/MIDITap.App/i18n/en_US.json" -Raw | ConvertFrom-Json
+          $keys = @($json.PSObject.Properties.Name)
+          $missing = @()
+          $files = Get-ChildItem "src/MIDITap.App" -Recurse -Include *.cs,*.xaml |
+            Where-Object { $_.FullName -notmatch '\\obj\\|\\bin\\' }
+          foreach ($file in $files) {
+            $text = Get-Content $file.FullName -Raw
+            # 只认 T("...") 与 T( @"..." ) 这类完整字面量；以 . 结尾的是拼接前缀，跳过
+            foreach ($m in [regex]::Matches($text, '\.T\(\s*"([^"]*)"')) {
+              $key = $m.Groups[1].Value
+              if ($key.EndsWith(".")) { continue }
+              if ($keys -notcontains $key) { $missing += "$($file.Name): $key" }
+            }
+          }
+          if ($missing.Count -gt 0) {
+            $missing | ForEach-Object { Write-Host "::error::Missing translation key -> $_" }
+            throw "$($missing.Count) translation key(s) referenced in code are absent from en_US.json"
+          }
+          Write-Host "OK: every literal translation key referenced in code exists"
+
+
       # E2E 脚本无法在 CI 上运行（需要回环端口、交互式桌面与 GetAsyncKeyState）
       # 但语法可以在 CI 上验证
       # 脚本出错若只在本地真跑时才发现，代价很高
@@ -97,6 +157,28 @@ jobs:
             }
           }
           if ($failed) { throw "PowerShell script parse errors" }
+
+      # apply-update.ps1 必须带 UTF-8 BOM，否则 Windows PowerShell 5.1 会按 ANSI 代码页解码
+      # 5.1 解码错时，成片的中文注释会把 `#>` 吃掉，注释块与代码块错位，脚本整体解析失败
+      # 后果是只有 5.1 的用户点「重启以更新」后脚本起不来，更新落不了地
+      # 只对这一份检查：它随包发布且必须支持 5.1（见 docs/DEVELOPMENT_zh-CN.md）
+      # 其余 PowerShell 脚本只在仓库里或只在本机跑，没有这条要求
+      #
+      # apply-update.ps1 must carry a UTF-8 BOM, or Windows PowerShell 5.1 decodes it as ANSI
+      # A wrong decode lets the Chinese comments swallow the `#>` terminator, misaligning the comment and code blocks
+      # The whole script then fails to parse, so a user whose machine only has 5.1 cannot land any update
+      # Only this file is checked: it ships in the package and must work on 5.1 (see docs/DEVELOPMENT_zh-CN.md)
+      # The other PowerShell scripts either stay in the repository or only run locally, with no such requirement
+      - name: Assert the shipped update helper keeps its BOM
+        shell: pwsh
+        run: |
+          $path = "scripts/apply-update.ps1"
+          $head = [System.IO.File]::ReadAllBytes((Resolve-Path $path))[0..2]
+          if ($head[0] -ne 0xEF -or $head[1] -ne 0xBB -or $head[2] -ne 0xBF) {
+            throw "$path lost its UTF-8 BOM (first bytes: $($head -join ',')); Windows PowerShell 5.1 would fail to parse it"
+          }
+          Write-Host "OK: $path starts with a UTF-8 BOM"
+
 
       # --------------------------------------------- 版本号 / Version number
 
@@ -163,7 +245,10 @@ jobs:
           # Filtering explicitly with -Force beats relying on a lucky wildcard
           Get-ChildItem publish -Force | Where-Object { $_.Name -ne ".storage" } |
             ForEach-Object { Copy-Item $_.FullName $stage -Recurse -Force }
-          Copy-Item README.md, README_zh-CN.md, CHANGELOG.md, LICENSE $stage/ -ErrorAction SilentlyContinue
+          # README 按通配符复制：每加一门语言就多一份，逐个列名字会在加语言时漏掉
+          #
+          # READMEs are copied by wildcard: one more file per language, and an explicit list misses entries when a language is added
+          Copy-Item README*.md, CHANGELOG.md, LICENSE $stage/ -ErrorAction SilentlyContinue
           # config/ 不打进包：首次启动由应用按界面语言生成（见 LanguageCatalog.DefaultConfigStem）
           # 包里不带它，用户的配置就不会被任何一次更新覆盖，这比事后排除更彻底
           #

@@ -22,7 +22,7 @@ public sealed class AppStorageTests : IDisposable
         var i18n = Path.Combine(BaseDir, "i18n");
         Directory.CreateDirectory(i18n);
         File.WriteAllText(Path.Combine(i18n, "en_US.json"), "{\"lang.name\":\"English\"}");
-        File.WriteAllText(Path.Combine(i18n, "zh_CN.json"), "{\"lang.name\":\"简体中文\"}");
+        File.WriteAllText(Path.Combine(i18n, "zh-Hans.json"), "{\"lang.name\":\"简体中文\"}");
     }
 
     public void Dispose()
@@ -41,8 +41,8 @@ public sealed class AppStorageTests : IDisposable
     public void Locale_round_trips()
     {
         Assert.Null(AppStorage.GetLocale(BaseDir));
-        Assert.True(AppStorage.SaveLocale(BaseDir, "zh_CN"));
-        Assert.Equal("zh_CN", AppStorage.GetLocale(BaseDir));
+        Assert.True(AppStorage.SaveLocale(BaseDir, "zh-Hans"));
+        Assert.Equal("zh-Hans", AppStorage.GetLocale(BaseDir));
     }
 
     [Fact]
@@ -63,8 +63,8 @@ public sealed class AppStorageTests : IDisposable
         //
         // Once the language file is gone (the user cleaned up by hand)
         // The stored old value can no longer be trusted
-        Assert.True(AppStorage.SaveLocale(BaseDir, "zh_CN"));
-        File.Delete(Path.Combine(BaseDir, "i18n", "zh_CN.json"));
+        Assert.True(AppStorage.SaveLocale(BaseDir, "zh-Hans"));
+        File.Delete(Path.Combine(BaseDir, "i18n", "zh-Hans.json"));
         Assert.Null(AppStorage.GetLocale(BaseDir));
     }
 
@@ -148,7 +148,7 @@ public sealed class LanguageCatalogTests : IDisposable
     [Fact]
     public void Discover_reads_native_names_and_puts_default_first()
     {
-        Write("zh_CN", "{\"lang.name\":\"简体中文\"}");
+        Write("zh-Hans", "{\"lang.name\":\"简体中文\"}");
         Write("en_US", "{\"lang.name\":\"English\"}");
         Write("ja_JP", "{\"lang.name\":\"日本語\"}");
 
@@ -158,8 +158,8 @@ public sealed class LanguageCatalogTests : IDisposable
         // 默认语言固定第一，保证界面顺序稳定 / The default language is pinned first so the UI order stays stable
         Assert.Equal(LanguageCatalog.DefaultCode, list[0].Code);
         Assert.Equal("English", list[0].NativeName);
-        // 其余按代码排序（ja_JP < zh_CN） / The rest are sorted by code (ja_JP < zh_CN)
-        Assert.Equal(["en_US", "ja_JP", "zh_CN"], list.Select(l => l.Code));
+        // 其余按代码排序（ja_JP < zh-Hans） / The rest are sorted by code (ja_JP < zh-Hans)
+        Assert.Equal(["en_US", "ja_JP", "zh-Hans"], list.Select(l => l.Code));
         Assert.Equal("日本語", list[1].NativeName);
     }
 
@@ -204,6 +204,24 @@ public sealed class LanguageCatalogTests : IDisposable
         Assert.False(LanguageCatalog.IsSupported(BaseDir, "fr_FR"));
         Assert.False(LanguageCatalog.IsSupported(BaseDir, string.Empty));
         Assert.False(LanguageCatalog.IsSupported(BaseDir, null));
+    }
+
+    [Fact]
+    public void Both_chinese_files_are_discovered_with_their_native_names()
+    {
+        // 两份中文都要出现在语言清单里，并各自带母语名：调用方据此显示「简体中文」「繁體中文」
+        //
+        // Both Chinese files appear in the catalogue with their own native names, which is what the caller shows as
+        // 简体中文 and 繁體中文
+        Write("en_US", "{\"lang.name\":\"English\"}");
+        Write("zh-Hans", "{\"lang.name\":\"简体中文\"}");
+        Write("zh-Hant", "{\"lang.name\":\"繁體中文\"}");
+
+        var list = LanguageCatalog.Discover(BaseDir);
+
+        Assert.Equal(["en_US", "zh-Hans", "zh-Hant"], list.Select(l => l.Code));
+        Assert.Equal("简体中文", list[1].NativeName);
+        Assert.Equal("繁體中文", list[2].NativeName);
     }
 }
 

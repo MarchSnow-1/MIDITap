@@ -17,11 +17,11 @@ namespace MIDITap.Core.Settings;
 
 /// <summary>
 /// 一门可用语言
-/// <paramref name="Code"/> 为文件名（如 zh_CN）
+/// <paramref name="Code"/> 为文件名（如 zh-Hans）
 /// <paramref name="NativeName"/> 为母语名（如 简体中文）
 ///
 /// An available language
-/// <paramref name="Code"/> is the file name (e.g. zh_CN)
+/// <paramref name="Code"/> is the file name (e.g. zh-Hans)
 /// <paramref name="NativeName"/> is the native name (e.g. 简体中文)
 /// </summary>
 public sealed record LanguageInfo(string Code, string NativeName);
@@ -211,10 +211,10 @@ public static class LanguageCatalog
             return DefaultCode;
         }
 
-        // 文化名用 '-'（zh-Hans-CN），语言代码用 '_'（zh_CN），统一后再比较
+        // 文化名用 '-'（zh-Hans-CN），语言代码同样用 '-'（zh-Hans），统一后再比较
         //
-        // Culture names use '-' (zh-Hans-CN) while language codes use '_' (zh_CN); the two are normalised before being compared
-        var normalized = culture.Replace('-', '_');
+        // Culture names use '-' (zh-Hans-CN) and so do language codes (zh-Hans); both are normalised before comparison
+        var normalized = culture.Replace('_', '-');
 
         var exact = available.FirstOrDefault(code => string.Equals(code, normalized, StringComparison.OrdinalIgnoreCase));
         if (exact is not null)
@@ -225,14 +225,14 @@ public static class LanguageCatalog
         // 简体/繁体：系统给出 zh-Hans / zh-Hant 或 zh-CN / zh-TW 时挑对应写法
         //
         // Simplified/Traditional: when the system reports zh-Hans / zh-Hant or zh-CN / zh-TW, the matching spelling is picked
-        var language = normalized.Split('_')[0];
+        var language = normalized.Split('-')[0];
         if (string.Equals(language, "zh", StringComparison.OrdinalIgnoreCase))
         {
             var wantsTraditional = normalized.Contains("Hant", StringComparison.OrdinalIgnoreCase)
                 || normalized.Contains("TW", StringComparison.OrdinalIgnoreCase)
                 || normalized.Contains("HK", StringComparison.OrdinalIgnoreCase)
                 || normalized.Contains("MO", StringComparison.OrdinalIgnoreCase);
-            var preferred = wantsTraditional ? "zh_TW" : "zh_CN";
+            var preferred = wantsTraditional ? "zh-Hant" : "zh-Hans";
             if (available.Contains(preferred))
             {
                 return preferred;
@@ -243,7 +243,8 @@ public static class LanguageCatalog
         //
         // Language-only match (the system culture is ja-JP-... while only ja_JP is available)
         var byLanguage = available.FirstOrDefault(
-            code => code.StartsWith(language + "_", StringComparison.OrdinalIgnoreCase));
+            code => code.StartsWith(language + "-", StringComparison.OrdinalIgnoreCase)
+                || code.StartsWith(language + "_", StringComparison.OrdinalIgnoreCase));
         return byLanguage ?? DefaultCode;
     }
 }
