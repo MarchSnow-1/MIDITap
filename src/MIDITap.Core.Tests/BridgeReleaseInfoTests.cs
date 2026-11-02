@@ -74,7 +74,13 @@ public sealed class BridgeReleaseInfoTests
     [Fact]
     public async Task Reports_a_403_with_the_quota_and_keeps_the_release_url()
     {
+        // GitHub 的 403（匿名配额用尽）同时带这三个头，缺一个界面就少一段可显示的信息
+        //
+        // GitHub's 403 (anonymous quota spent) carries all three headers; each missing one costs the UI a fact
         using var api = new MiniHttpServer(_ => (403, null, "{\"message\":\"rate limit\"}"));
+        api.ExtraHeaders["x-ratelimit-reset"] = "1790000000";
+        api.ExtraHeaders["x-ratelimit-remaining"] = "0";
+        api.ExtraHeaders["x-ratelimit-limit"] = "60";
 
         var read = await BridgeReleaseInfo.FetchAsync(Tag, null, NoProxy, api.BaseUrl + "/latest");
 
@@ -86,6 +92,14 @@ public sealed class BridgeReleaseInfoTests
         Assert.Null(read.Notes);
         Assert.Equal(UpdateFailure.Http, read.Failure);
         Assert.NotNull(read.RateLimit);
+        // 三个头各自独立，逐个核对读出值，而不是只核对“非空”
+        // Reset 存的是本地时间，比回去要换回 UTC
+        //
+        // The three headers are independent, so each read value is checked rather than just "not null"
+        // Reset is stored in local time, so the comparison converts back to UTC
+        Assert.Equal(0, read.RateLimit!.Remaining);
+        Assert.Equal(60, read.RateLimit.Limit);
+        Assert.Equal(1790000000L, read.RateLimit.Reset!.Value.ToUniversalTime().ToUnixTimeSeconds());
         Assert.Equal(BridgeRepository.ReleasePageUrl(Tag), read.ReleaseUrl);
     }
 
