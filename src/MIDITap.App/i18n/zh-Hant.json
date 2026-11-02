@@ -72,7 +72,6 @@
   "edit.title": "新增映射",
   "home.configCount": "{count} 個映射",
   "home.currentConfig": "目前設定",
-  "lang.name": "繁體中文",
   "log.bridge.protocolUnsupported": "已安裝的 MIDIBridge 使用 IPC 協定 {protocol}，其主版本本版無法對接，重新安裝前該功能保持停用",
   "log.bridge.status": "{status}",
   "log.clear": "清空",

@@ -17,10 +17,9 @@ public static class AppStorage
 
     /// <summary>
     /// 语言是否可用
-    /// 判定交给 <see cref="LanguageCatalog"/>（按 i18n/*.json 动态发现），而不是在这里维护一份硬编码清单 —— 那样每加一门语言都得改两个地方
+    /// 判定交给 <see cref="LanguageCatalog"/>，清单只有它那一份，这里不重复维护
     ///
-    /// Validity is delegated to LanguageCatalog (dynamic discovery from i18n/*.json) rather than to a hard-coded list here
-    /// Such a list would need editing for every new language
+    /// Validity is delegated to LanguageCatalog, which owns the only copy of the list
     /// </summary>
     public static bool IsSupportedLocale(string baseDir, string locale)
         => LanguageCatalog.IsSupported(baseDir, locale);

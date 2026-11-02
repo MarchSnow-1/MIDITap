@@ -1,13 +1,12 @@
-// LanguageCatalog.cs — 语言清单的发现与校验
-// 设计：语言由 i18n/*.json 文件**动态发现**，而不是在代码里维护一份硬编码清单
-// 新增一门语言 = 往 i18n/ 丢一个 <code>.json（内含 lang.name 作为母语名），无需改代码
-// 这样"多语言"是可扩展的，而不是每加一门语言都要动 C# 与 XAML
+// LanguageCatalog.cs — 语言清单与校验
+// 语言由本文件里的硬编码清单决定，不再扫描 i18n 目录
+// 发布包升级时并不会删除旧文件，目录里可能留着上一版的 <code>.json；只按清单走，多出来的文件不会被当成一门语言
 // 放在 Core（而非 App）是为了能脱离 WinUI 单测：本类只依赖 System.Text.Json
 //
-// Language catalogue discovery and validation
-// Languages are DISCOVERED from the i18n/*.json files, not kept in a hard-coded list
-// Adding a language means dropping <code>.json into i18n/ (with lang.name holding the native name)
-// No code change is needed, so the feature is genuinely extensible
+// Language catalogue and validation
+// The languages are the hard-coded list below; the i18n directory is no longer scanned
+// An upgrade does not delete files the new package no longer ships, so a stale <code>.json can survive in the directory
+// Following the list alone keeps such a file from becoming a language of its own
 // Lives in Core so it can be unit-tested without WinUI; it only needs System.Text.Json
 
 using System.Globalization;
@@ -35,11 +34,20 @@ public static class LanguageCatalog
     public const string DefaultCode = "en_US";
 
     /// <summary>
-    /// 语言文件里存放母语名的键。没有该键时退回用文件名显示
+    /// 支持的语言清单，顺序即界面显示顺序（默认语言在第一项）
+    /// 母语名是各语言的自称，写在这里而不读文件，因为它不随界面语言变化
+    /// 新增一门语言：往 i18n/ 放 <code>.json，并在这里加一项
     ///
-    /// The key holding the native name inside a language file; without it the file name is displayed instead
+    /// The supported languages, in the order the UI shows them (the default comes first)
+    /// A native name is what the language calls itself, so it lives here rather than in the file: it does not change with the UI language
+    /// To add one: drop <code>.json into i18n/ and add an entry here
     /// </summary>
-    public const string NativeNameKey = "lang.name";
+    private static readonly LanguageInfo[] Catalog =
+    [
+        new(DefaultCode, "English"),
+        new("zh-Hans", "简体中文"),
+        new("zh-Hant", "繁體中文"),
+    ];
 
     /// <summary>
     /// 语言文件里存放**默认配置文件名**的键（不带 .json）
@@ -65,75 +73,47 @@ public static class LanguageCatalog
 
     private static string DirectoryPath(string baseDir) => Path.Combine(baseDir, DirectoryName);
 
+    private static string FilePath(string baseDir, string code) => Path.Combine(DirectoryPath(baseDir), code + ".json");
+
     /// <summary>
-    /// 枚举可用语言
-    /// 目录不存在或没有可用文件时，至少返回默认语言一项 —— 让"语言"界面永远不会是空的（空的界面会让用户以为功能坏了）
+    /// 清单里是否列了这一门语言（不看文件在不在）
     ///
-    /// Enumerates available languages, always returning at least the default one
-    /// That way the language page can never be empty (an empty page looks like a broken feature)
+    /// Whether the catalogue lists the language (regardless of the file being present)
+    /// </summary>
+    private static bool IsListed(string? code)
+        => !string.IsNullOrEmpty(code) && Catalog.Any(l => string.Equals(l.Code, code, StringComparison.Ordinal));
+
+    /// <summary>
+    /// 枚举可用语言：清单里有、且文件确实存在
+    /// 默认语言无论如何都返回，让"语言"界面不会是空的（空的界面会让用户以为功能坏了）
+    /// 顺序固定为清单顺序，跨机器、跨次运行一致
+    ///
+    /// Enumerates the available languages: listed in the catalogue and present on disk
+    /// The default one is always returned, so the language page is never empty (an empty page looks like a broken feature)
+    /// The order is the catalogue order, identical across machines and runs
     /// </summary>
     public static IReadOnlyList<LanguageInfo> Discover(string baseDir)
     {
-        var result = new List<LanguageInfo>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-
-        try
+        var result = new List<LanguageInfo>(Catalog.Length) { Catalog[0] };
+        for (var i = 1; i < Catalog.Length; i++)
         {
-            var dir = DirectoryPath(baseDir);
-            if (Directory.Exists(dir))
+            if (File.Exists(FilePath(baseDir, Catalog[i].Code)))
             {
-                foreach (var path in Directory.EnumerateFiles(dir, "*.json"))
-                {
-                    var code = Path.GetFileNameWithoutExtension(path);
-                    if (!seen.Add(code))
-                    {
-                        continue;
-                    }
-                    result.Add(new LanguageInfo(code, ReadNativeName(path) ?? code));
-                }
+                result.Add(Catalog[i]);
             }
         }
-        catch
-        {
-            // 目录不可读：退回到下面的兜底，不影响应用启动
-            //
-            // An unreadable directory falls back to the code below and does not affect app startup
-        }
-
-        // 默认语言必须存在，且固定排在最前（顺序稳定，界面不会因文件系统顺序而变）
-        //
-        // The default language must exist and always comes first, so the order is stable
-        // The UI therefore does not depend on file-system order
-        var existing = result.FirstOrDefault(l => l.Code == DefaultCode);
-        result.RemoveAll(l => l.Code == DefaultCode);
-        result.Insert(0, existing ?? new LanguageInfo(DefaultCode, DefaultCode));
-
-        // 其余按语言代码排序，保证跨机器、跨次运行显示顺序一致
-        //
-        // The rest are sorted by language code, so the order is identical across machines and runs
-        var rest = result.Skip(1).OrderBy(l => l.Code, StringComparer.Ordinal).ToList();
-        return [result[0], .. rest];
+        return result;
     }
 
     /// <summary>
-    /// 该语言是否可用（即 i18n 下存在对应的 json 文件）
+    /// 该语言是否可用：清单里有它，且 i18n 下有对应的 json 文件
+    /// 两者都要，缺文件时选它只会把键名当文案显示
     ///
-    /// Whether the language is available, i.e. a matching json file exists under i18n
+    /// Whether the language is usable: listed in the catalogue with a matching json file under i18n
+    /// Both are required, since picking a language whose file is missing would show raw key names
     /// </summary>
     public static bool IsSupported(string baseDir, string? code)
-        => !string.IsNullOrEmpty(code) && File.Exists(Path.Combine(DirectoryPath(baseDir), code + ".json"));
-
-    /// <summary>
-    /// 读出语言文件里的 lang.name（母语名）
-    /// 解析失败、键缺失或值非字符串时返回 null，由调用方回退到语言代码
-    /// 语言名读不出来不该让整门语言不可用
-    ///
-    /// Reads lang.name (the native name) from a language file
-    /// A parse failure, a missing key or a non-string value yields null
-    /// The caller then falls back to the language code
-    /// An unreadable name must not make the whole language unavailable
-    /// </summary>
-    private static string? ReadNativeName(string path) => ReadKeyFrom(path, NativeNameKey);
+        => IsListed(code) && File.Exists(FilePath(baseDir, code!));
 
     /// <summary>
     /// 读某个语言文件里的一个字符串键
@@ -143,7 +123,7 @@ public static class LanguageCatalog
     /// A parse failure, a missing key or a non-string value yields null
     /// </summary>
     public static string? ReadString(string baseDir, string locale, string key)
-        => ReadKeyFrom(Path.Combine(DirectoryPath(baseDir), locale + ".json"), key);
+        => ReadKeyFrom(FilePath(baseDir, locale), key);
 
     private static string? ReadKeyFrom(string path, string key)
     {
@@ -160,9 +140,9 @@ public static class LanguageCatalog
         }
         catch
         {
-            // 文件损坏：该项仍会以文件名显示，语言本身依旧可选
+            // 文件缺失或损坏：调用方按缺键处理
             //
-            // Even a corrupt file still shows up under its file name, and the language stays selectable
+            // A missing or corrupt file is handled by the caller as a missing key
         }
         return null;
     }

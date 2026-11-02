@@ -13,16 +13,15 @@ public sealed class AppStorageTests : IDisposable
 
     public AppStorageTests()
     {
-        // 语言可用性现在按 i18n/*.json 动态判定（LanguageCatalog）
-        // 所以测试目录也要有语言文件，否则测的就不是真实运行环境
-        // 生产环境里 i18n/ 始终存在
+        // 语言可用性要同时满足「清单里有」与「文件在」，所以测试目录也要有语言文件
+        // 生产环境里 i18n/ 随包发布，始终存在
         //
-        // Locale validity is now derived from i18n/*.json, so the fixture must provide them too
-        // Otherwise the test would not reflect the real environment
+        // Locale validity needs both a catalogue entry and a file on disk, so the fixture provides them
+        // In production the i18n folder ships with the package and is always there
         var i18n = Path.Combine(BaseDir, "i18n");
         Directory.CreateDirectory(i18n);
-        File.WriteAllText(Path.Combine(i18n, "en_US.json"), "{\"lang.name\":\"English\"}");
-        File.WriteAllText(Path.Combine(i18n, "zh-Hans.json"), "{\"lang.name\":\"简体中文\"}");
+        File.WriteAllText(Path.Combine(i18n, "en_US.json"), "{ }");
+        File.WriteAllText(Path.Combine(i18n, "zh-Hans.json"), "{ }");
     }
 
     public void Dispose()
@@ -48,9 +47,9 @@ public sealed class AppStorageTests : IDisposable
     [Fact]
     public void Locale_without_language_file_is_rejected()
     {
-        // fr_FR 没有对应的 i18n/fr_FR.json，必须拒绝，避免存下一个无法加载的语言
+        // fr_FR 既不在清单里也没有文件，必须拒绝，避免存下一个无法加载的语言
         //
-        // fr_FR has no matching i18n/fr_FR.json and must be rejected
+        // fr_FR has neither a catalogue entry nor a file and must be rejected
         // That way a language that cannot be loaded is never stored
         Assert.False(AppStorage.SaveLocale(BaseDir, "fr_FR"));
         Assert.Null(AppStorage.GetLocale(BaseDir));
@@ -117,10 +116,11 @@ public sealed class AppStorageTests : IDisposable
 }
 
 /// <summary>
-/// 语言清单发现：新增语言只需丢文件，因此"发现"逻辑必须稳
+/// 语言清单：清单写死在代码里，目录里多出来的文件不算一门语言
+/// 升级不删旧文件，所以「多出来的文件」是常态而不是异常
 ///
-/// Language catalogue discovery: adding a language is just a matter of dropping in a file
-/// The "discovery" logic must therefore be solid
+/// The language catalogue is hard-coded, so a file left in the directory is not a language
+/// An upgrade does not delete files the new package no longer ships, which makes such a leftover the normal case
 /// </summary>
 public sealed class LanguageCatalogTests : IDisposable
 {
@@ -146,21 +146,21 @@ public sealed class LanguageCatalogTests : IDisposable
     }
 
     [Fact]
-    public void Discover_reads_native_names_and_puts_default_first()
+    public void Discover_follows_the_catalogue_order_and_puts_default_first()
     {
-        Write("zh-Hans", "{\"lang.name\":\"简体中文\"}");
-        Write("en_US", "{\"lang.name\":\"English\"}");
-        Write("ja_JP", "{\"lang.name\":\"日本語\"}");
+        Write("zh-Hant", "{ }");
+        Write("en_US", "{ }");
+        Write("zh-Hans", "{ }");
 
         var list = LanguageCatalog.Discover(BaseDir);
 
-        Assert.Equal(3, list.Count);
-        // 默认语言固定第一，保证界面顺序稳定 / The default language is pinned first so the UI order stays stable
-        Assert.Equal(LanguageCatalog.DefaultCode, list[0].Code);
+        // 顺序取自清单而不是文件名排序，界面顺序因此跨机器一致
+        //
+        // The order comes from the catalogue rather than from sorting file names, so the UI order is identical across machines
+        Assert.Equal(["en_US", "zh-Hans", "zh-Hant"], list.Select(l => l.Code));
         Assert.Equal("English", list[0].NativeName);
-        // 其余按代码排序（ja_JP < zh-Hans） / The rest are sorted by code (ja_JP < zh-Hans)
-        Assert.Equal(["en_US", "ja_JP", "zh-Hans"], list.Select(l => l.Code));
-        Assert.Equal("日本語", list[1].NativeName);
+        Assert.Equal("简体中文", list[1].NativeName);
+        Assert.Equal("繁體中文", list[2].NativeName);
     }
 
     [Fact]
@@ -176,46 +176,54 @@ public sealed class LanguageCatalogTests : IDisposable
     }
 
     [Fact]
-    public void File_without_native_name_falls_back_to_its_code()
+    public void File_outside_the_catalogue_is_not_a_language()
     {
-        Write("de_DE", "{ }");
-        var entry = LanguageCatalog.Discover(BaseDir).Single(l => l.Code == "de_DE");
-        Assert.Equal("de_DE", entry.NativeName);
-        // 名称读不出来，但该语言仍然必须可用 / The name cannot be read, but the language must still be usable
-        Assert.True(LanguageCatalog.IsSupported(BaseDir, "de_DE"));
+        // 升级只覆盖同名文件、不删旧文件，因此上一版的 zh_CN.json 会留在目录里
+        // 它若被当成一门语言，下拉里就会出现两个「简体中文」，且选中的那份可能缺任意键
+        //
+        // An upgrade overwrites same-named files and deletes nothing, so the previous version's zh_CN.json stays behind
+        // Were it treated as a language, the picker would list 简体中文 twice and the selected copy could be missing any key
+        Write("en_US", "{ }");
+        Write("zh-Hans", "{ }");
+        Write("zh_CN", "{\"lang.name\":\"简体中文\"}");
+
+        var list = LanguageCatalog.Discover(BaseDir);
+
+        Assert.Equal(["en_US", "zh-Hans"], list.Select(l => l.Code));
+        Assert.False(LanguageCatalog.IsSupported(BaseDir, "zh_CN"));
     }
 
     [Fact]
-    public void Malformed_file_is_still_listed_and_usable()
+    public void Listed_language_without_its_file_is_not_offered()
     {
-        // 损坏的 JSON 不能让整门语言从列表里消失（它是唯一可能修好 UI 的入口）
+        // 清单里有、文件却没打包进来：不列出它，否则选中后整屏都是键名
         //
-        // Corrupt JSON must not make an entire language vanish from the list
-        // It is the only way in that might fix the UI
-        Write("ko_KR", "{ this is not json");
-        Assert.Contains(LanguageCatalog.Discover(BaseDir), l => l.Code == "ko_KR");
-        Assert.True(LanguageCatalog.IsSupported(BaseDir, "ko_KR"));
+        // Listed but not shipped in the package: it is not offered, since selecting it would fill the screen with key names
+        Write("en_US", "{ }");
+
+        Assert.Equal(["en_US"], LanguageCatalog.Discover(BaseDir).Select(l => l.Code));
+        Assert.False(LanguageCatalog.IsSupported(BaseDir, "zh-Hans"));
+        Assert.False(LanguageCatalog.IsSupported(BaseDir, "zh-Hant"));
     }
 
     [Fact]
     public void IsSupported_rejects_unknown_and_empty_codes()
     {
-        Write("en_US", "{\"lang.name\":\"English\"}");
+        Write("en_US", "{ }");
         Assert.False(LanguageCatalog.IsSupported(BaseDir, "fr_FR"));
         Assert.False(LanguageCatalog.IsSupported(BaseDir, string.Empty));
         Assert.False(LanguageCatalog.IsSupported(BaseDir, null));
     }
 
     [Fact]
-    public void Both_chinese_files_are_discovered_with_their_native_names()
+    public void Both_chinese_files_are_distinguished_by_their_native_names()
     {
-        // 两份中文都要出现在语言清单里，并各自带母语名：调用方据此显示「简体中文」「繁體中文」
+        // 两份中文各自带母语名，调用方据此显示「简体中文」「繁體中文」
         //
-        // Both Chinese files appear in the catalogue with their own native names, which is what the caller shows as
-        // 简体中文 and 繁體中文
-        Write("en_US", "{\"lang.name\":\"English\"}");
-        Write("zh-Hans", "{\"lang.name\":\"简体中文\"}");
-        Write("zh-Hant", "{\"lang.name\":\"繁體中文\"}");
+        // The two Chinese files carry their own native names, which is what the caller shows as 简体中文 and 繁體中文
+        Write("en_US", "{ }");
+        Write("zh-Hans", "{ }");
+        Write("zh-Hant", "{ }");
 
         var list = LanguageCatalog.Discover(BaseDir);
 

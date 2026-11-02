@@ -69,6 +69,11 @@ node dev-scripts/sort-i18n.js --check  # 只检查，CI 用这个
 
 CI 会在 `Build Dev` 与 `Release` 中执行 `--check`，未排序或键集不一致会直接失败
 
+新增一门语言要做两件事：往 `i18n` 目录丢 `<code>.json`，**并且**在
+`src/MIDITap.Core/Settings/LanguageCatalog.cs` 的清单里加一项
+
+目录不会被扫描，语言是否存在由那份清单决定；上一版残留的旧文件仍留在磁盘上，但不会出现在语言选择里
+
 ### 3.4 本地验证
 
 每批改动至少跑这三条：

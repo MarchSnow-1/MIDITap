@@ -1,14 +1,14 @@
 // I18nService.cs — JSON 字典式多语言
 // en_US 为回退底包，{var} 插值，运行中可切换，页面订阅 LanguageChanged 重新绑定文本
 //
-// 语言清单不硬编码，改由 i18n/*.json **动态发现**（LanguageCatalog）
-// 新增语言只需丢一个 json 文件，代码与界面都不用动
+// 语言清单由 LanguageCatalog 决定，本类只按它的结果加载文件
+// 新增语言要同时放 json 与改那份清单，界面本身不用动
 //
 // I18nService.cs — dictionary-based localisation loaded from JSON files
 // en_US is the fallback base pack; {var} interpolation
 // The language is switchable at runtime, and pages re-bind their text on LanguageChanged
-// The language list is not hard-coded; it is **discovered** from i18n/*.json (LanguageCatalog)
-// Adding a language means dropping in one json file, and neither the code nor the UI has to change
+// The language list comes from LanguageCatalog and this class only loads files according to it
+// Adding a language means adding both the json and a catalogue entry; the UI itself stays untouched
 //
 
 using System.ComponentModel;

@@ -72,7 +72,6 @@
   "edit.title": "Add Mapping",
   "home.configCount": "{count} mappings",
   "home.currentConfig": "CURRENT CONFIG",
-  "lang.name": "English",
   "log.bridge.protocolUnsupported": "The installed MIDIBridge speaks IPC protocol {protocol}, whose major version this build cannot consume; the feature is disabled until it is reinstalled",
   "log.bridge.status": "{status}",
   "log.clear": "Clear",

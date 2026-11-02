@@ -71,6 +71,12 @@ node dev-scripts/sort-i18n.js --check  # check only, which is what CI runs
 
 CI runs `--check` in both `Build Dev` and `Release`, and fails on an unsorted file or a differing key set
 
+Adding a language takes two steps: drop `<code>.json` into the `i18n` folder **and** add an entry to the catalogue in
+`src/MIDITap.Core/Settings/LanguageCatalog.cs`
+
+The folder is not scanned, so the catalogue is what decides which languages exist; a file left behind by an older
+package stays on disk but never shows up in the picker
+
 ### 3.4 Verify locally
 
 Every batch runs at least these three:
