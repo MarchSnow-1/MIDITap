@@ -65,6 +65,19 @@ public sealed partial class SettingsCard : UserControl
         set => ActionHost.Content = value;
     }
 
+    /// <summary>卡片圆角，默认 8；只有与相邻块拼成一整块时才改（见设置页的 MIDIBridge 展开区）：
+    /// 展开时上圆下方，接缝处连成一条直线
+    ///
+    /// The card's corner radius, 8 by default; changed only where the card joins a neighbouring block
+    /// (see the MIDIBridge expanded area on the settings page): rounded on the outer edge only once expanded, so the
+    /// seam between them runs straight across
+    /// </summary>
+    public CornerRadius CardCornerRadius
+    {
+        get => CardRoot.CornerRadius;
+        set => CardRoot.CornerRadius = value;
+    }
+
     /// <summary>整张卡片上的悬浮提示；留空表示不设
     /// 提示挂在**卡片外壳**上而不是右侧控件上，因为禁用的控件不接收指针事件，挂上去也不会弹出
     /// WinUI 3 的 ToolTipService 没有 WPF 那个 ShowOnDisabled 属性，因此只能在能接收事件的元素上挂

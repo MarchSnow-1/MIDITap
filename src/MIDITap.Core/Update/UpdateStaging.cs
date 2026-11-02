@@ -26,10 +26,11 @@ public static class UpdateStaging
 
     /// <summary>
     /// 判断归档内的相对路径是否应被排除
-    /// 同时排除本地运行时文件：.pdb（调试符号，用户不需要）与旧名残留
+    /// 同时排除本地运行时文件：.pdb（调试符号，用户不需要）与 .bridge/（MIDIBridge 扩展的上游程序，见下方）
     ///
     /// Decides whether a path inside the archive should be excluded
-    /// Local runtime files are excluded too: .pdb debug symbols (useless to users)
+    /// Local runtime content is excluded too: .pdb debug symbols (useless to users) and .bridge/ (the MIDIBridge
+    /// extension's upstream program, see below)
     /// </summary>
     public static bool IsExcluded(string relativePath)
     {
@@ -50,6 +51,21 @@ public static class UpdateStaging
             {
                 return true;
             }
+        }
+
+        // .bridge/ 是 MIDIBridge 扩展的上游程序目录，更新覆盖它等于替换一个第三方可执行文件，
+        // 还会连带覆盖它自建的 data/config.json
+        // 单独判断而不并入 UserDataDirectoryNames：那份清单是「用户数据」，卸载清理按它删，
+        // .bridge 不属于用户数据（见 AppPaths.BridgeDirectoryName 的注释）
+        //
+        // .bridge/ is the MIDIBridge extension's upstream program directory; overwriting it would replace a
+        // third-party executable and take its self-generated data/config.json with it
+        // It is checked on its own rather than added to UserDataDirectoryNames: that list means user data, which
+        // uninstall and cleanup delete by, while .bridge is not user data (see the AppPaths.BridgeDirectoryName comment)
+        if (normalized.StartsWith(AppPaths.BridgeDirectoryName + "/", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, AppPaths.BridgeDirectoryName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
         }
 
         return normalized.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase);

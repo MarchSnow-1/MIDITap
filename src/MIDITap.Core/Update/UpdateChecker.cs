@@ -96,6 +96,30 @@ public sealed record UpdateCheckOutcome(
     string? Detail = null,
     RateLimitInfo? RateLimit = null);
 
+/// <summary>
+/// 一次「读取最新发布」的结果，**不含任何平台或版本比较的判断**
+/// The outcome of ONE "read the latest release", with no platform or version comparison in it
+/// </summary>
+/// <param name="Failure">失败类别；None 表示请求与解析都成功 / The failure class; None means the request and parse both succeeded</param>
+/// <param name="HttpStatus">非 200 时的状态码，否则 0 / The status code when not 200, otherwise 0</param>
+/// <param name="Detail">异常文本，供日志 / The exception text, for the log</param>
+/// <param name="Tag">发布标签，缺失为 null / The release tag, null when absent</param>
+/// <param name="Notes">发布说明 markdown 原文（仅 API 路径有）/ The raw release notes markdown (the API path alone has it)</param>
+/// <param name="Assets">全部资产，未经平台筛选 / Every asset, unfiltered by platform</param>
+/// <param name="RateLimit">403 时带回来的配额 / The quota returned with a 403</param>
+public sealed record ReleaseApiRead(
+    UpdateFailure Failure,
+    int HttpStatus,
+    string? Detail,
+    string? Tag,
+    string? Notes,
+    IReadOnlyList<UpdateAsset> Assets,
+    RateLimitInfo? RateLimit)
+{
+    /// <summary>请求与解析是否都成功 / Whether both the request and the parse succeeded</summary>
+    public bool Ok => Failure == UpdateFailure.None;
+}
+
 public static class UpdateChecker
 {
     // 三个地址**全部派生自 UpdateRepository**，改仓库只需改那一个文件
@@ -273,9 +297,59 @@ public static class UpdateChecker
         string currentVersion, UpdateOptions options, UpdateEndpoints endpoints,
         CancellationToken cancellationToken, UpdatePackageKind kind)
     {
+        var read = await ReadLatestReleaseAsync(endpoints.ApiUrl, options, cancellationToken).ConfigureAwait(false);
+        if (!read.Ok)
+        {
+            return new UpdateCheckOutcome(null, false, read.Failure, read.HttpStatus, read.Detail, read.RateLimit);
+        }
+
+        // 用 semver 库比较，而不是自己手写。SemVersionStyles.Any 接受真实的 GitHub 标签（都带 v 前缀）
+        // ComparePrecedenceTo 对应规范第 11 条的优先级比较（构建元数据不参与排序）
+        //
+        // Comparison uses the semver library rather than hand-written code
+        // SemVersionStyles.Any accepts real GitHub tags, which all carry a v prefix
+        // ComparePrecedenceTo implements the spec's rule 11 precedence comparison
+        // Build metadata does not affect that ordering
+        if (!SemVersion.TryParse(read.Tag, SemVersionStyles.Any, out var latestVersion)
+            || !SemVersion.TryParse(currentVersion, SemVersionStyles.Any, out var current))
+        {
+            // 版本解析失败走"无更新"路径（return null），不算检查失败
+            //
+            // An unparsable version takes the "no update" path (return null)
+            // That does not count as a failed check
+            return new UpdateCheckOutcome(null, true);
+        }
+
+        if (latestVersion.ComparePrecedenceTo(current) > 0)
+        {
+            var asset = UpdateAssetSelector.Select(read.Assets, kind);
+            return new UpdateCheckOutcome(
+                new UpdateInfo(read.Tag!, currentVersion, ReleasesUrl, asset, read.Notes), true);
+        }
+        return new UpdateCheckOutcome(null, true);
+    }
+
+    /// <summary>
+    /// 「读一次最新发布」的共享层：请求、8 秒超时、代理、403 配额头、JSON 字段解析
+    /// **不含**任何版本比较或平台筛选 —— 那是各条路（MIDITap 自身、扩展功能）自己的事
+    /// Bridge/BridgeUpdateChecker 读的是另一个仓库的同一种 JSON，因此这一层抽出来共用
+    /// 失败语义与 TryApiAsync 一致：任何失败都被归为 UpdateFailure 并原样回报，不抛异常
+    ///
+    /// The shared layer of ONE latest-release read: the request, the 8-second timeout, the proxy, the 403 quota
+    /// headers, and the JSON field parsing. It contains NO version comparison and NO platform filtering — those
+    /// belong to each route (MIDITap itself, the extension) on its own account
+    /// Bridge/BridgeUpdateChecker reads the same kind of JSON from another repository, which is why this layer is shared
+    /// The failure semantics match TryApiAsync: any failure is classified into UpdateFailure and reported as-is,
+    /// with nothing thrown
+    /// </summary>
+    public static async Task<ReleaseApiRead> ReadLatestReleaseAsync(
+        string apiUrl,
+        UpdateOptions options,
+        CancellationToken cancellationToken = default)
+    {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoints.ApiUrl);
+            using var request = new HttpRequestMessage(HttpMethod.Get, apiUrl);
             request.Headers.UserAgent.ParseAdd("MIDITap-updater/1.0");
             request.Headers.Accept.ParseAdd("application/vnd.github.v3+json");
 
@@ -310,13 +384,15 @@ public static class UpdateChecker
                 //
                 // The fallback to the web path is handled by CheckWithReasonAsync
                 // Here we only report the failure faithfully
-                return new UpdateCheckOutcome(null, false, UpdateFailure.Http, status, null, quota);
+                return new ReleaseApiRead(
+                    UpdateFailure.Http, status, null, Tag: null, Notes: null,
+                    Assets: [], RateLimit: quota);
             }
 
             var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             string? tagName;
-            string? notes = null;
-            UpdateAsset? asset = null;
+            string? notes;
+            var assets = new List<UpdateAsset>();
             using (var document = JsonDocument.Parse(body))
             {
                 var root = document.RootElement;
@@ -335,32 +411,11 @@ public static class UpdateChecker
                     && bodyElement.ValueKind == JsonValueKind.String
                         ? bodyElement.GetString()
                         : null;
-                asset = ParseAsset(root, kind);
+                assets = ParseAssets(root);
             }
 
-            // 用 semver 库比较，而不是自己手写。SemVersionStyles.Any 接受真实的 GitHub 标签（都带 v 前缀）
-            // ComparePrecedenceTo 对应规范第 11 条的优先级比较（构建元数据不参与排序）
-            //
-            // Comparison uses the semver library rather than hand-written code
-            // SemVersionStyles.Any accepts real GitHub tags, which all carry a v prefix
-            // ComparePrecedenceTo implements the spec's rule 11 precedence comparison
-            // Build metadata does not affect that ordering
-            if (!SemVersion.TryParse(tagName, SemVersionStyles.Any, out var latestVersion)
-                || !SemVersion.TryParse(currentVersion, SemVersionStyles.Any, out var current))
-            {
-                // 版本解析失败走"无更新"路径（return null），不算检查失败
-                //
-                // An unparsable version takes the "no update" path (return null)
-                // That does not count as a failed check
-                return new UpdateCheckOutcome(null, true);
-            }
-
-            if (latestVersion.ComparePrecedenceTo(current) > 0)
-            {
-                return new UpdateCheckOutcome(
-                    new UpdateInfo(tagName!, currentVersion, ReleasesUrl, asset, notes), true);
-            }
-            return new UpdateCheckOutcome(null, true);
+            return new ReleaseApiRead(
+                UpdateFailure.None, 0, null, tagName, notes, assets, RateLimit: null);
         }
         catch (Exception err)
         {
@@ -380,7 +435,8 @@ public static class UpdateChecker
                 System.Text.Json.JsonException => UpdateFailure.Parse,
                 _ => UpdateFailure.Unknown,
             };
-            return new UpdateCheckOutcome(null, false, failure, 0, err.Message);
+            return new ReleaseApiRead(
+                failure, 0, err.Message, Tag: null, Notes: null, Assets: [], RateLimit: null);
         }
     }
 
@@ -507,18 +563,22 @@ public static class UpdateChecker
     }
 
     /// <summary>
-    /// 从 Release JSON 里取出资产列表并挑出本平台该下载的那个
+    /// 从 Release JSON 里取出**全部**资产，不做平台筛选
+    /// 筛选（UpdateAssetSelector.Select）是各条路自己的事：MIDITap 挑自己的命名，扩展功能挑上游的命名
+    /// 因此这一层只负责"把 GitHub 给的列表原样读出来"
     ///
-    /// Takes the asset list out of the release JSON and picks the one this platform should download
+    /// Takes EVERY asset out of the release JSON, with no platform filtering
+    /// Selection (UpdateAssetSelector.Select) belongs to each route: MIDITap matches its own naming, the extension
+    /// matches the upstream's. This layer therefore only reads out the list GitHub supplies
     /// </summary>
-    private static UpdateAsset? ParseAsset(JsonElement root, UpdatePackageKind kind)
+    private static List<UpdateAsset> ParseAssets(JsonElement root)
     {
+        var list = new List<UpdateAsset>();
         if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
         {
-            return null;
+            return list;
         }
 
-        var list = new List<UpdateAsset>();
         foreach (var item in assets.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object)
@@ -546,6 +606,6 @@ public static class UpdateChecker
                 list.Add(new UpdateAsset(name, url, size, digest));
             }
         }
-        return UpdateAssetSelector.Select(list, kind);
+        return list;
     }
 }

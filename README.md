@@ -20,7 +20,7 @@
 ![GitHub Last Commit](https://img.shields.io/github/last-commit/MarchSnow-1/MIDITap?style=for-the-badge)
 [![Total Download](https://img.shields.io/github/downloads/MarchSnow-1/MIDITap/total?style=for-the-badge)](https://github.com/MarchSnow-1/MIDITap/releases)
 
-[English](README.md) | [简体中文](README_zh-CN.md)
+[English](README.md) | [简体中文](README_zh-Hans.md) | [繁體中文](README_zh-Hant.md)
 
 </div>
 
@@ -42,6 +42,7 @@ If you encounter any issues, please feel free to submit feedback via [Issues](..
 - 🎵 **Sustain Support**: the key stays triggered while the MIDI note is held, and releases on let-go, for a natural feel
 - 🔑 **Full Key Support**: letters, numbers, function keys, arrow keys, NumPad, media keys, and more
 - 🖥️ **Friendly UI**: a polished native WinUI 3 interface with visual one-click binding, easy to pick up
+- 🎛️ **Remote playing (optional)**: download [MIDIBridge Client](https://github.com/MarchSnow-1/midibridge-client) from inside the app and use the MIDI from a remote `midibridge-server` as an input source (see the "Extension" section below)
 
 ## 🛠️ Requirements
 
@@ -103,6 +104,32 @@ Full-window view of the Activity Log
 - **Proxy**: used **only** for update checks and downloads. Leave it empty to follow the Windows system proxy
   An HTTP or Socks5 proxy can be entered (such as `http://127.0.0.1:8080` or `socks5://127.0.0.1:1080`)
   The scheme prefix is required; an invalid address is reported in the UI, which then falls back to the system proxy
+- **Remote playing**: an optional extension, see the next section
+
+## 🎛️ Extension: MIDIBridge
+
+### What it is
+
+MIDITap includes support for [MIDIBridge Client](https://github.com/MarchSnow-1/midibridge-client), which carries a MIDI device attached to any machine over the network and uses it as MIDITap's input source
+
+The MIDIBridge program is **not bundled** in MIDITap's installer or update package; you can download it on demand from inside the app, straight from the [MIDIBridge Client](https://github.com/MarchSnow-1/midibridge-client) repository. MIDITap does not redistribute the program
+
+The device drop-down on the Home page always carries a MIDIBridge entry, at the bottom
+
+Before installation, picking it opens a prompt to download and install it
+
+The settings page reports the current running state, its version and its protocol version, and lets you check for MIDIBridge updates from inside MIDITap
+
+The MIDIBridge update check runs only while MIDITap itself is current; when a newer MIDITap exists the check cannot run, so update MIDITap first and try again
+
+A found update opens the same window as the app's own update, with the version pair and the release notes, and the download starts only once you confirm
+
+> [!NOTE]
+> MIDITap only provides the adaption on the MIDIBridge Client side
+>
+> Using MIDIBridge still requires running a matching MIDIBridge Server yourself
+>
+> See [MIDIBridge](https://github.com/MarchSnow-1/midibridge) for an overview and setup instructions
 
 ## ✏️ Writing Config Files Manually
 

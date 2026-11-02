@@ -116,19 +116,205 @@
                 <!-- ===== 代理 / Proxy ===== -->
                 <controls:SettingsCard x:Name="ProxyCard" Glyph="&#xE774;">
                     <controls:SettingsCard.Action>
-                        <!-- 唯一带自己宽度的控件：地址比按钮长得多，给它可输入的宽度比"填满卡片"合理
-                             The only control with a width of its own
+                        <!-- 地址比按钮长得多，给它可输入的宽度比"填满卡片"合理
                              An address is much longer than a button, and giving it room to be typed into beats filling the card -->
                         <TextBox x:Name="ProxyBox" TextChanged="OnProxyChanged" Width="240" />
                     </controls:SettingsCard.Action>
                 </controls:SettingsCard>
 
+                <!-- ===== MIDIBridge 扩展 / Remote playing (the MIDIBridge extension) =====
+                     三行控件放在卡片的 Action 里纵向排：这是本页唯一需要多个输入框的卡片
+                     行内用 Grid 两列（标签 + 输入框），而不是把说明堆在卡片左侧那一列
+                     左侧那一列放这张卡自己的标题与说明，控件区放不下第二份
+
+                     The controls are stacked vertically inside the card's Action
+                     This is the only card on the page with more than one input
+                     Each row is a two-column Grid (label + input) rather than more text in the card's left column,
+                     which already carries this card's own title and description
+                -->
+                <StackPanel Spacing="10">
+                    <!-- 状态卡与展开区要连成一整块：间距为 0、接缝处只留一条边框、圆角拼成上下两半
+                         这三件事都由 SyncBridgeConfigPanel 按"是否展开"写入，收起时又各自是完整的圆角卡片
+
+                         The status card and the expanded block have to read as a single block: no gap, a single
+                         border line at the seam, and corner radii that halve across it
+                         All three are written by SyncBridgeConfigPanel from the expanded state, so a collapsed block
+                         leaves both as ordinary rounded cards -->
+                    <StackPanel Spacing="0">
+                        <!-- 状态卡：未安装与已安装都显示，说明行与右侧按钮由 SyncBridgeStatus 按状态填写
+                             未安装时按钮禁用：没有已装的版本，"检查更新"没有比较对象
+                             Status card: shown whether or not the extension is installed, with the description line
+                             and the right-hand button filled by SyncBridgeStatus from the state
+                             The button is disabled before installation, since "check for updates" has no installed
+                             build to compare against -->
+                        <controls:SettingsCard x:Name="BridgeStatusCard" Glyph="&#xE946;">
+                            <controls:SettingsCard.Action>
+                                <!-- 右侧放"安装"与展开箭头
+                                     安装按钮留在这里而不是塞进展开区：未安装时展开区整体是收起的，
+                                     把它放在里面等于把唯一的入口藏起来
+                                     两者互斥显示：未安装时只有"安装"，装好后只剩箭头
+                                     The right slot holds the install button and the disclosure chevron
+                                     The install button stays here rather than inside the expanded block: with nothing
+                                     installed that block is collapsed, so placing the button there would hide the only
+                                     way in
+                                     The two are mutually exclusive: before installation only "install" shows, and once
+                                     the component is in place only the chevron does -->
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <Button x:Name="BridgeInstallBtn" Click="OnInstallBridgeClick"
+                                            Style="{ThemeResource AccentButtonStyle}" Visibility="Collapsed" />
+                                    <Button x:Name="BridgeConfigToggleBtn" Click="OnToggleBridgeConfig"
+                                            Padding="8,4" Background="Transparent" BorderThickness="0">
+                                        <FontIcon x:Name="BridgeConfigChevron" Glyph="&#xE70D;" FontSize="12"
+                                                  Foreground="{ThemeResource MiditapTextSecondaryBrush}" />
+                                    </Button>
+                                </StackPanel>
+                            </controls:SettingsCard.Action>
+                        </controls:SettingsCard>
+
+                    <!-- 展开区：MIDIBridge 自己的设置挂在状态卡下面，默认收起
+                         整块只有一层卡片外壳，里面是一排排的设置行（SettingsRow，不各自画边框）
+                         这样点开看到的是一连排的设置，而不是几项各自一框
+                         展开状态由 SyncBridgeConfigPanel 统一写入，箭头方向与这块的显隐不会各走各的
+
+                         The expanded block: the extension's own settings hang under the status card, collapsed by
+                         default
+                         The block has one card shell only, holding rows of settings (SettingsRow, which draw no frame
+                         of their own)
+                         Expanding therefore reveals one strip of settings rather than one box per item
+                         SyncBridgeConfigPanel writes the expanded state in one place, so the chevron direction and
+                         this block's visibility cannot drift apart -->
+                    <Border x:Name="BridgeConfigPanel" CornerRadius="0,0,8,8" Padding="16,12"
+                            Background="{ThemeResource MiditapSurfaceBrush}"
+                            BorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                            BorderThickness="1" Visibility="Collapsed">
+                        <StackPanel Spacing="14">
+                            <!-- 服务器列表：选择哪一台、当前这台叫什么、增删入口
+                                 放在最上面：它是"连去哪"的决定者，下面的地址端口密码都是它的属性
+                                 ComboBox 与名称框并排：先选后改名是最常见的两步，竖排会多一次视线跳跃
+
+                                 The server list: which entry is in use, what it is called, and the add/remove entries
+                                 It goes first because it decides where to connect, and the address, port and password
+                                 below are all attributes of it
+                                 The ComboBox and the name box sit side by side: pick, then rename, is the common order,
+                                 and stacking them would add one more eye jump -->
+                            <controls:SettingsRow x:Name="BridgeServerCard" Glyph="&#xE968;">
+                                <controls:SettingsRow.Action>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <ComboBox x:Name="BridgeServerBox" Width="150"
+                                                  DisplayMemberPath="Label"
+                                                  SelectionChanged="OnBridgeServerSelected" />
+                                        <Button x:Name="BridgeServerAddBtn" Click="OnBridgeServerAdd" />
+                                        <Button x:Name="BridgeServerRemoveBtn" Click="OnBridgeServerRemove" />
+                                    </StackPanel>
+                                </controls:SettingsRow.Action>
+                            </controls:SettingsRow>
+
+                            <controls:SettingsRow x:Name="BridgeServerNameCard" Glyph="&#xE8AC;">
+                                <controls:SettingsRow.Action>
+                                    <TextBox x:Name="BridgeServerNameBox" LostFocus="OnBridgeServerNameLostFocus"
+                                             Width="240" />
+                                </controls:SettingsRow.Action>
+                            </controls:SettingsRow>
+
+                            <controls:SettingsRow x:Name="BridgeHostCard" Glyph="&#xE774;">
+                                <controls:SettingsRow.Action>
+                                    <TextBox x:Name="BridgeHostBox" TextChanged="OnBridgeHostChanged" Width="240" />
+                                </controls:SettingsRow.Action>
+                            </controls:SettingsRow>
+
+                            <controls:SettingsRow x:Name="BridgePortCard" Glyph="&#xE712;">
+                                <controls:SettingsRow.Action>
+                                    <TextBox x:Name="BridgePortBox" TextChanged="OnBridgePortChanged" Width="100" />
+                                </controls:SettingsRow.Action>
+                            </controls:SettingsRow>
+
+                            <controls:SettingsRow x:Name="BridgePasswordCard" Glyph="&#xE192;">
+                                <controls:SettingsRow.Action>
+                                    <!-- 只在失焦时落盘：逐字符保存会给磁盘带来大量小写入，也会让 ACL 收紧反复执行
+                                         Persisted on losing focus only: per-keystroke saves mean many tiny writes and repeated
+                                         ACL narrowing -->
+                                    <PasswordBox x:Name="BridgePasswordBox" PasswordChanged="OnBridgePasswordChanged"
+                                                 LostFocus="OnBridgePasswordLostFocus" Width="240" />
+                                </controls:SettingsRow.Action>
+                            </controls:SettingsRow>
+
+                            <controls:SettingsRow x:Name="BridgeStateCard" Glyph="&#xF0B9;">
+                                <controls:SettingsRow.Action>
+                                    <Button x:Name="BridgeReconnectBtn" Click="OnBridgeReconnect" />
+                                </controls:SettingsRow.Action>
+                            </controls:SettingsRow>
+
+                            <controls:SettingsRow x:Name="BridgeUpdateRow" Glyph="&#xE895;">
+                                <controls:SettingsRow.Action>
+                                    <Button x:Name="BridgeCheckUpdateBtn" Click="OnCheckBridgeUpdate" />
+                                </controls:SettingsRow.Action>
+                            </controls:SettingsRow>
+
+                            <!-- 可执行文件损坏时的重新安装入口：挂在「更新」这一行下面，与上面几项连成一片
+                                 放在下拉区域内而不是外面另起一张卡：它说明的是"当前装的这个能不能用"，
+                                 属于这条设置的一部分；另起一张卡会把它读成一条与设置无关的公告
+                                 这一行平时收起，只有探测出损坏时才出现，且那时下拉区域会自动展开
+
+                                 The reinstall entry for a damaged executable: it sits below the update row and stays
+                                 part of the same block
+                                 It belongs inside the drop-down rather than in a card of its own, because it reports
+                                 whether the installed build works at all, which is part of these settings; a separate
+                                 card would read as an announcement unrelated to them
+                                 The row stays collapsed until a probe reports damage, and the drop-down expands by
+                                 itself at that point -->
+                            <controls:SettingsRow x:Name="BridgeDamagedRow" Glyph="&#xE7BA;" Visibility="Collapsed">
+                                <controls:SettingsRow.Action>
+                                    <Button x:Name="ReinstallDamagedBtn" Click="OnReinstallBridge"
+                                            Style="{ThemeResource AccentButtonStyle}" />
+                                </controls:SettingsRow.Action>
+                            </controls:SettingsRow>
+                        </StackPanel>
+                    </Border>
+                    </StackPanel>
+
+                    <!-- 协议不可用时的醒目提示：这是"装错了版本"而不是"没装"
+                         所以紧跟那块连体卡片，并直接给出重新安装入口
+                         它留在折叠块外面：折叠的是设置项，这条是需要当场看见的结论
+                         与下面的 ACL 提示分开两张卡：一个是功能完全用不了，一个是密码保护不到位
+
+                         The prominent notice for an unsupported protocol: this is "the wrong build is installed"
+                         rather than "nothing is installed"
+                         It therefore follows the joined card and carries the reinstall entry right here
+                         It stays outside the collapsible block: what collapses is the settings, while this is a
+                         conclusion the user has to see on arrival
+                         It is a separate card from the ACL notice below: one means the feature does not work at
+                         all, the other means the password is under-protected -->
+                    <controls:SettingsCard x:Name="BridgeUnavailableCard" Glyph="&#xE7BA;">
+                        <controls:SettingsCard.Action>
+                            <Button x:Name="ReinstallBridgeBtn" Click="OnReinstallBridge"
+                                    Style="{ThemeResource AccentButtonStyle}" />
+                        </controls:SettingsCard.Action>
+                    </controls:SettingsCard>
+
+                    <!-- ACL 收紧失败时的常驻提示：FAT32/exFAT 的 U 盘与无 ACL 的共享盘都支持不了它
+                         常驻而不是浮窗：密码已经在磁盘上以可被同机其它进程读取的形式存在了，
+                         浮窗一过用户就再没有地方看到这个事实
+                         它是可见文本而不是 Hint，因为 Hint 要求用户去悬浮才会看到，而这一条不该靠运气发现
+                         与上面的设置块分开：这是"存得不够安全"的结论，与用户填了哪些值无关
+                         A standing notice for a failed access narrowing: FAT32/exFAT USB sticks and shares
+                         without ACL support cannot do it
+                         Standing rather than a toast: the password is already on disk in a form other local
+                         processes can read, and once a toast is gone there is nowhere left to see that fact
+                         It is visible text rather than a Hint, because a Hint needs the user to hover, and this
+                         is not something to stumble upon
+                         It sits apart from the settings block above: this is a conclusion about how safely the
+                         password is stored, not one of the values the user fills in -->
+                    <controls:SettingsCard x:Name="BridgeAclCard" Glyph="&#xE72E;">
+                        <controls:SettingsCard.Action>
+                            <Button x:Name="BridgeRetryAclBtn" Click="OnRetryBridgeAcl" />
+                        </controls:SettingsCard.Action>
+                    </controls:SettingsCard>
+                </StackPanel>
+
                 <!-- ===== 关于 / About ===== -->
                 <controls:SettingsCard x:Name="AboutCard" Glyph="&#xE946;">
                     <controls:SettingsCard.Action>
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <!-- 检查更新在 GitHub 仓库左侧（用户指定顺序）
-                                 Check for updates sits left of the GitHub repo (the order the user specified) -->
                             <Button x:Name="CheckUpdateBtn" Click="OnCheckUpdates"
                                     Style="{ThemeResource AccentButtonStyle}" />
                             <Button x:Name="GitHubBtn" Click="OnGitHub" />

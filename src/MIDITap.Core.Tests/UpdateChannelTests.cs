@@ -42,4 +42,20 @@ public sealed class UpdateChannelTests
         Assert.Equal("-dev.", UpdateChannel.DevelopmentMarker);
         Assert.Equal("unknown", UpdateChannel.UnknownVersion);
     }
+
+    [Theory]
+    // 界面要把「读不出」的版本换成当语言的「未知」，因此空、空白与常量本身都要被认出来
+    // The UI turns an unreadable version into the localised "unknown", so empty, whitespace and the constant all count
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("   ", true)]
+    [InlineData("unknown", true)]
+    [InlineData("UNKNOWN", true)]
+    // 真实版本号不是未知，即使是开发构建报出的 dev
+    // A real version string is not unknown, not even the "dev" a development build reports
+    [InlineData("1.3.2", false)]
+    [InlineData("dev", false)]
+    [InlineData("2.0.0-beta.1", false)]
+    public void Recognises_the_versions_that_mean_unknown(string? version, bool expected)
+        => Assert.Equal(expected, UpdateChannel.IsUnknown(version));
 }

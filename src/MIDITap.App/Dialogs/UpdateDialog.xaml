@@ -7,65 +7,6 @@
     Closing="OnClosing"
     Style="{ThemeResource MiditapDialogStyle}">
 
-    <ContentDialog.Resources>
-        <!-- 表头按钮：极简模板，外观全部由本样式决定
-
-             为什么不用现成控件的默认外观：ToggleButton 的默认模板带内边距与勾选配色，
-             实测把表头压成一条窄带、箭头被挤出边界；Expander 则把展开动画写死在模板里，关不掉。
-             这里只留一个圆角矩形与内容呈现器，另加悬浮与按下的一点底色反馈。
-
-             The header button: a minimal template, its appearance decided entirely here
-
-             Why not the default look of an off-the-shelf control: a ToggleButton's template brings its own
-             padding and checked colours, which was measured to squash the header into a narrow strip and push
-             the chevron out of bounds; an Expander hard-codes its expand animation in the template with no switch.
-             What is left here is a rounded rectangle holding a content presenter, plus a slight background
-             change on hover and press. -->
-        <Style x:Key="NotesHeaderButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <!-- 上下 11 与左右 16：与本项目卡片的 16,12 同一量级
-                 不取 Expander 自带的 16,0,0,0，那个上下为 0，表头会被压成一条窄带（实测）
-                 Vertical 11 against horizontal 16 matches this project's cards at 16,12
-                 Not the Expander's own 16,0,0,0, which has no vertical padding and flattens the header into a strip -->
-            <Setter Property="Padding" Value="16,11" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Root"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="{TemplateBinding CornerRadius}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
-                        </Border>
-                        <VisualStateManager.VisualStateGroups>
-                            <VisualStateGroup x:Name="CommonStates">
-                                <!-- 正常态不设任何东西，透出卡片自身的底色
-                                     The normal state sets nothing, letting the card's own surface show through -->
-                                <VisualState x:Name="Normal" />
-                                <VisualState x:Name="PointerOver">
-                                    <VisualState.Setters>
-                                        <Setter Target="Root.Background" Value="{ThemeResource MiditapSurfaceBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Pressed">
-                                    <VisualState.Setters>
-                                        <Setter Target="Root.Background" Value="{ThemeResource MiditapSurfaceBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Disabled" />
-                            </VisualStateGroup>
-                        </VisualStateManager.VisualStateGroups>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </ContentDialog.Resources>
-
     <!-- 发现新版本的弹窗
 
          为什么自己画标题与叉号：ContentDialog 没有右上角关闭按钮，只有底部按钮
@@ -143,7 +84,7 @@
                  实测仅漏掉一个命名空间前缀就让应用启动即崩（0xc000027b）。
                  自绘之后结构与 SDK 版本无关，行为完全可预期。
 
-                 为什么表头也自绘：见上方 NotesHeaderButtonStyle 的说明。
+                 为什么表头也自绘：见 App.xaml 里 MiditapNotesHeaderButtonStyle 的说明。
 
                  What is new: the whole block is one card, and its header shows or hides the content outright
 
@@ -154,7 +95,7 @@
                  namespace prefix was measured to crash the app on launch (0xc000027b).
                  Drawn here, the structure is independent of the SDK version and behaves predictably.
 
-                 Why the header is drawn too: see NotesHeaderButtonStyle above.
+                 Why the header is drawn too: see MiditapNotesHeaderButtonStyle in App.xaml.
 
                  配色说明：内容区里代码块、行内代码、引用、表格的背景一律透明
                  该 markdown 控件的默认样式给每一类元素都配了自己的底色，与本节的主题字典无关；
@@ -178,7 +119,7 @@
 
                     <Button x:Name="NotesToggle" Grid.Row="0"
                             AutomationProperties.AutomationId="UpdateNotesToggle"
-                            Style="{StaticResource NotesHeaderButtonStyle}"
+                            Style="{ThemeResource MiditapNotesHeaderButtonStyle}"
                             Click="OnNotesToggled">
                         <Grid>
                             <!-- 右侧 28 留给箭头：长标题不会压到它上面

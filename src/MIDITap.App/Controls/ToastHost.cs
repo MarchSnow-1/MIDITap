@@ -42,6 +42,11 @@ public sealed class ToastHost : UserControl
     // The key is the Border to remove
     private readonly Dictionary<Border, DispatcherTimer> _timers = new();
 
+    // 每条浮窗记录它呈现的内容，键与 _timers 相同，用来挡住重复的同一句话
+    //
+    // Records what each toast says, keyed like _timers, so that a repeated identical line can be held back
+    private readonly Dictionary<Border, ToastMessage> _messages = new();
+
     public ToastHost()
     {
         // 浮窗不参与命中测试之外的布局：IsHitTestVisible 保持 true 以便点击操作按钮
@@ -74,11 +79,30 @@ public sealed class ToastHost : UserControl
             timer.Stop();
         }
         _timers.Clear();
+        _messages.Clear();
         _stack.Children.Clear();
     }
 
     private void Add(ToastMessage message)
     {
+        // 同一条提示还在屏幕上时不叠新的一条，而是重新计时：
+        // 浮窗仍然可见，位置也不跳动
+        //
+        // An identical toast still on screen is not stacked again; its timer restarts instead
+        // The line stays visible and does not jump
+        foreach (var existing in _messages)
+        {
+            if (SameMessage(existing.Value, message))
+            {
+                if (_timers.TryGetValue(existing.Key, out var running))
+                {
+                    running.Stop();
+                    running.Start();
+                }
+                return;
+            }
+        }
+
         // 超出上限时先移除最早的，避免堆满整屏
         //
         // Removes the oldest toasts once the cap is reached, so that the corner does not fill the whole screen
@@ -89,6 +113,7 @@ public sealed class ToastHost : UserControl
 
         var card = BuildCard(message, out var dismiss);
         _stack.Children.Add(card);
+        _messages[card] = message;
 
         var delay = ToastPolicy.AutoDismissAfter(message.Severity, message.Action is not null);
         if (delay is { } after)
@@ -119,6 +144,7 @@ public sealed class ToastHost : UserControl
             {
                 timer.Stop();
             }
+            _messages.Remove(oldest);
             _stack.Children.RemoveAt(0);
         }
         else
@@ -129,7 +155,7 @@ public sealed class ToastHost : UserControl
 
     private Border BuildCard(ToastMessage message, out Action dismiss)
     {
-        var (icon, accentKey) = StyleFor(message.Severity);
+        var (glyph, accentKey) = StyleFor(message.Severity);
         var accent = ThemeBrush(accentKey, message.Severity);
 
         var text = new StackPanel { Spacing = 2 };
@@ -149,15 +175,28 @@ public sealed class ToastHost : UserControl
             });
         }
 
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-        row.Children.Add(new FontIcon
+        // 图标与文字放在 Auto/Star 两列里，而不是横向 StackPanel
+        // 横向 StackPanel 以无限宽度测量子元素，文字拿不到可换行的行宽，会被卡片的 MaxWidth 直接裁掉
+        // Star 列把"卡片宽度减图标"的确定宽度交给文字，TextWrapping 才会真正生效
+        //
+        // The icon and the text sit in an Auto/Star column pair rather than a horizontal StackPanel
+        // A horizontal StackPanel measures its children with infinite width, so the text gets no line width to wrap
+        // against and is clipped by the card's MaxWidth instead
+        // The Star column hands the text the card width minus the icon, which is what makes TextWrapping take effect
+        var row = new Grid { ColumnSpacing = 10 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var icon = new FontIcon
         {
-            Glyph = icon,
+            Glyph = glyph,
             FontSize = 16,
             Foreground = accent,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 2, 0, 0),
-        });
+        };
+        Grid.SetColumn(icon, 0);
+        Grid.SetColumn(text, 1);
+        row.Children.Add(icon);
         row.Children.Add(text);
 
         var body = new StackPanel { Spacing = 10 };
@@ -255,8 +294,16 @@ public sealed class ToastHost : UserControl
         {
             timer.Stop();
         }
+        _messages.Remove(card);
         _stack.Children.Remove(card);
     }
+
+    /// <summary>两条浮窗是否在说同一件事 / Whether two toasts say the same thing</summary>
+    private static bool SameMessage(ToastMessage a, ToastMessage b)
+        => a.Severity == b.Severity
+            && a.Title == b.Title
+            && a.Message == b.Message
+            && a.ActionLabel == b.ActionLabel;
 
     /// <summary>各严重级别对应的图标与主题画笔键 / Icon and theme brush key for each severity</summary>
     private static (string Icon, string BrushKey) StyleFor(ToastSeverity severity) => severity switch

@@ -67,6 +67,52 @@ public static class AppPaths
     public const string UpdateDirectoryName = ".update";
 
     /// <summary>
+    /// MIDIBridge 扩展功能的上游程序目录名（exe 旁，放下载来的 midibridge-client.exe 与它自建的 data/）
+    /// 它是"程序文件（上游二进制）与上游自建数据"的混合目录，因此两边都不沾：
+    /// **不放进 UserDataDirectoryNames** —— 那份清单的含义是「属于用户 authored 的东西」，
+    /// 删掉 config/ 与 .storage/ 属于数据丢失，而这个目录不是用户写的，两者不能混为一谈
+    /// **也不进安装载荷** —— 所以卸载时按载荷删除的动作不会涉及它；要清掉它得用户手动删目录
+    /// 它仍然需要被两条链路跳过，理由各不相同：
+    ///   * 更新不得覆盖它：由 UpdateStaging.IsExcluded 单独返回 true（理由见那里）
+    ///   * 打包发布必须排除它：随 MIDITap 的包发一个第三方 exe 属于二次分发，而且它由用户按需下载
+    /// 密码不在这里，在 .storage 下（见 AppStorage.BridgePasswordStorageKey）
+    ///
+    /// Directory name of the MIDIBridge extension's upstream program, next to the exe
+    /// It holds the downloaded midibridge-client.exe and the data/ folder that program creates itself
+    /// It is a MIX of program files (the upstream binary) and the upstream's own data, so it joins neither side:
+    /// it is deliberately NOT in UserDataDirectoryNames, because that list means "content the user authored",
+    /// deleting config/ or .storage/ would be data loss, while this directory is not user-written, and the two must
+    /// not be merged into one list
+    /// It is not in the install payload either, so the uninstall actions MIDITap ships do not touch it; removing it
+    /// takes a manual delete of the directory
+    /// Two separate paths still have to skip it, for different reasons:
+    ///   * An update must not overwrite it: UpdateStaging.IsExcluded returns true for it on its own account (see there)
+    ///   * Packaging must exclude it: shipping a third-party exe inside MIDITap's package is redistribution, and the
+    ///     user downloads it on demand
+    /// The password is not here; it sits under .storage (see AppStorage.BridgePasswordStorageKey)
+    ///
+    /// 目录**内部**的布局（里面那个 exe 叫什么、如何回退找唯一 exe）归 Bridge/BridgeLayout.cs
+    /// 方向是 Bridge → Settings：本类只给目录名与目录路径，不引用 Bridge 下的任何东西
+    ///
+    /// The layout INSIDE the directory (the exe's file name, the fallback to a single *.exe) belongs to
+    /// Bridge/BridgeLayout.cs
+    /// The direction is Bridge → Settings: this class supplies the directory name and path only, and refers to
+    /// nothing under Bridge
+    /// </summary>
+    public const string BridgeDirectoryName = ".bridge";
+
+    /// <summary>
+    /// 上游程序在本目录里约定的可执行文件名
+    /// CI 产出的资产里它可能带版本目录前缀，安装时统一改成这个名字（见 BridgeInstaller）
+    /// 名字收在这里，是为了让"程序装在哪、叫什么"只有一处定义
+    ///
+    /// The executable name this directory is expected to hold
+    /// The release asset may wrap it in a version folder, and installation renames it to this name (see BridgeInstaller)
+    /// The name lives here so "where the program sits and what it is called" is defined in one place
+    /// </summary>
+    public const string BridgeExecutableFileName = "midibridge-client.exe";
+
+    /// <summary>
     /// 属于**用户**的顶层目录：打包、更新、卸载都必须跳过（AGENTS.md 2.4）
     /// 更新覆盖用户数据是数据丢失，而不是更新
     /// 因此这份清单只有一处，由需要它的地方引用
@@ -105,6 +151,9 @@ public static class AppPaths
 
     /// <summary>更新工作目录的完整路径 / Full path of the update work directory</summary>
     public static string UpdateDir(string baseDir) => Path.Combine(baseDir, UpdateDirectoryName);
+
+    /// <summary>MIDIBridge 扩展程序目录的完整路径 / Full path of the MIDIBridge extension directory</summary>
+    public static string BridgeDir(string baseDir) => Path.Combine(baseDir, BridgeDirectoryName);
 
     // ------------------------------------------------------------------ 基准目录 / Base directory
 

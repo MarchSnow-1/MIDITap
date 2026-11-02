@@ -61,7 +61,7 @@ internal static class ZipFixture
     /// </summary>
     public static byte[] NormalPackage() => Build(
         ("MIDITap/MIDITap.exe", "exe-bytes"),
-        ("MIDITap/i18n/zh_CN.json", "{}"),
+        ("MIDITap/i18n/zh-Hans.json", "{}"),
         ("MIDITap/scripts/apply-update.ps1", "# helper"),
         ("MIDITap/config/mapping.json", "FACTORY"),
         ("MIDITap/.storage/last_config", "X"),
@@ -122,7 +122,7 @@ public sealed class UpdateEndToEndTests : IDisposable
 
         // 程序文件已就位 / The program files are in place
         Assert.True(File.Exists(Path.Combine(StagingDir, "MIDITap.exe")));
-        Assert.True(File.Exists(Path.Combine(StagingDir, "i18n", "zh_CN.json")));
+        Assert.True(File.Exists(Path.Combine(StagingDir, "i18n", "zh-Hans.json")));
         Assert.True(File.Exists(Path.Combine(StagingDir, "scripts", "apply-update.ps1")));
 
         // **用户数据与调试符号必须被排除** —— 覆盖 config 就是数据丢失

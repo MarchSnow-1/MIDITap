@@ -7,6 +7,29 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- ===== 浮层圆角 =====
+                     未打包应用拿不到系统提供的圆角窗口，浮层因此是直角，见下方"浮层圆角"注释
+                     必须排在 XamlControlsResources 之后，覆盖才盖得住主题自带的那份
+                     三个主题字典各写一遍：浮层圆角是按主题定义的资源，只覆盖 Default 在浅色下不生效
+
+                     Overlay corner radius: an unpackaged app gets no OS-supplied rounded window, so overlays come out
+                     square; see the comment under "浮层圆角" below
+                     It has to come after XamlControlsResources for the override to win over the theme's own copy
+                     All three theme dictionaries repeat it: the overlay radius is a per-theme resource, so covering
+                     Default alone leaves light theme square -->
+                <ResourceDictionary>
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Default">
+                            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Light">
+                            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="HighContrast">
+                            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+                </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- ============================================================
@@ -237,6 +260,61 @@
                 <Setter Property="CornerRadius" Value="8" />
             </Style>
 
+            <!-- 可折叠表头的按钮：极简模板，外观全部由本样式决定，两个更新弹窗共用
+                 ToggleButton 的默认模板自带内边距与勾选配色，会把表头压成窄带并把箭头挤出边界
+                 Expander 则把展开动画写死在模板里，关不掉
+                 这里只留一个圆角矩形与内容呈现器，另加悬浮与按下的一点底色反馈
+                 上下 11 与左右 16 和本项目卡片的 16,12 同一量级；不取 Expander 自带的 16,0,0,0，其上下为 0
+                 正常态不设底色，透出卡片自身的表面
+
+                 The header button of a collapsible block: a minimal template owning the whole appearance, shared by
+                 both update dialogs
+                 A ToggleButton's default template brings its own padding and checked colours, squashing the header
+                 into a narrow strip and pushing the chevron out of bounds
+                 An Expander hard-codes its expand animation in the template, with no way to switch it off
+                 What is left here is a rounded rectangle holding a content presenter, plus a slight background change
+                 on hover and press
+                 Vertical 11 against horizontal 16 matches this project's cards at 16,12; the Expander's own
+                 16,0,0,0 has no vertical padding and flattens the header into a strip
+                 The normal state sets no background, letting the card's own surface show through -->
+            <Style x:Key="MiditapNotesHeaderButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="16,11" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Root"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                            </Border>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Root.Background" Value="{ThemeResource MiditapSurfaceBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Root.Background" Value="{ThemeResource MiditapSurfaceBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- ===== 浮层圆角 =====
                  未打包（unpackaged）的 WinUI 3 应用里，ContentDialog 等**浮层**渲染出来是直角
                  圆角窗口由系统按"打包应用"的身份提供
@@ -251,15 +329,6 @@
                  This app is WindowsPackageType=None (portable), so the override is required
                  Overriding OverlayCornerRadius rather than styling ContentDialog alone also fixes flyouts and tooltips
                  That keeps overlays consistent -->
-            <!-- 圆角覆盖见下方 MergedDictionaries 末尾的 MiditapRounding
-
-                 The overlay corner-radius override is the MiditapRounding dictionary
-                 It sits at the end of MergedDictionaries below -->
-
-            <!-- 对话框样式见下方 MergedDictionaries 末尾的 MiditapRounding
-
-                 The dialog style is the MiditapRounding dictionary at the end of MergedDictionaries
-                 below -->
 
                     <!-- 排版：标题/副标题/正文/说明/等宽 / Typography: title / subtitle / body / caption / mono -->
                     <!-- 页面标题。**不设字重**，理由与下面的副标题完全相同

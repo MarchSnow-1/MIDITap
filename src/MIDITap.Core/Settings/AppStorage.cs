@@ -461,4 +461,442 @@ public static class AppStorage
             return false;
         }
     }
+
+    // ------------------------------------------------------------------ MIDIBridge 扩展 / MIDIBridge extension
+
+    /// <summary>
+    /// MIDIBridge 上游服务器地址的存储键
+    /// 语法校验交给 BridgeSettings.Validate（那里是唯一规则源），这里只做读取与修剪
+    ///
+    /// Storage key for the MIDIBridge upstream server address
+    /// Syntax validation is BridgeSettings.Validate's job (the single rule source); this only reads and trims
+    /// </summary>
+    public const string BridgeHostStorageKey = "miditap_bridge_host";
+
+    /// <summary>MIDIBridge 上游服务器端口的存储键 / Storage key for the MIDIBridge upstream server port</summary>
+    public const string BridgePortStorageKey = "miditap_bridge_port";
+
+    /// <summary>
+    /// MIDIBridge 认证密码的键名
+    /// 文件仍在 .storage 下，与其它设置同目录；特别之处在于**本文件不提供它的读写方法**
+    /// 实现归 Bridge/BridgeSecret.cs，方向是 Bridge 引用 Settings，Settings 不反向引用 Bridge
+    /// 上面那几组普通 Save*/Get* 会写出明文且继承目录 ACL 的文件，密码不能那样存，所以实现单独放
+    ///
+    /// The key name for the MIDIBridge auth password
+    /// The file still sits under .storage beside the other settings; what differs is that **this file offers no
+    /// read/write method for it**. The implementation lives in Bridge/BridgeSecret.cs, with Bridge referring to
+    /// Settings and Settings never referring back to Bridge
+    /// The ordinary Save*/Get* pair above produces a plain-text file under the directory's inherited ACL, which is
+    /// exactly what a password must not get, so its implementation sits separately
+    /// </summary>
+    public const string BridgePasswordStorageKey = "miditap_bridge_password";
+
+    /// <summary>
+    /// 服务器列表的存储键（JSON 数组）
+    /// 列表与密码分开存：本文件里可以放用户起的名字与地址端口，不含任何密码
+    /// 单组键 miditap_bridge_host/_port/_password 由 BridgeServerStore 迁移进列表
+    ///
+    /// Storage key for the server list (a JSON array)
+    /// The list and the passwords are stored apart: this file holds user-given names, addresses and ports, and no
+    /// password at all. The single-address keys above are migrated into the list by BridgeServerStore
+    /// </summary>
+    public const string BridgeServerListStorageKey = "miditap_bridge_servers";
+
+    /// <summary>
+    /// 当前选中服务器的存储键（存的是服务器 id）
+    /// 与输入源键 miditap_bridge_source 并存：source 说明"声音从哪一路来"，本键说明"远程那一路连的是哪台服务器"
+    ///
+    /// Storage key for the selected server (the value is a server id)
+    /// It sits beside the source key miditap_bridge_source: that one says which route the sound comes from, this one
+    /// says which server the remote route connects to
+    /// </summary>
+    public const string BridgeSelectedServerStorageKey = "miditap_bridge_selected_server";
+
+    /// <summary>
+    /// 当前输入源（None / Physical / Bridge）的存储键
+    /// 枚举值由 App 层的 MidiSource 定义（i18n 键归界面层），这里按字符串原样存取
+    /// 合法性由调用方校验：读回来的字符串可能是旧版本或手工编辑留下的任意值
+    ///
+    /// Storage key for the current input source (None / Physical / Bridge)
+    /// The enum is defined in the App layer (i18n keys belong to the UI), so this stores the string as given
+    /// The caller validates it: a value read back may be anything left by an older version or a manual edit
+    /// </summary>
+    public const string BridgeSourceStorageKey = "miditap_bridge_source";
+
+    /// <summary>
+    /// 已安装上游程序的版本号存储键（形如 v1.3.1）
+    /// 它记的是**上一次探测成功**的结果，不是权威来源：真正的版本仍以上游可执行文件为准，
+    /// 探测拿不到时读这个值只用于展示，不用于"要不要更新"的判断（判断走 Core 的实时探测）
+    /// 之所以还要落盘：每次刷新界面都起一次子进程探测代价太大，而"已装版本"也是协议漂移检测的输入
+    ///
+    /// Storage key for the installed upstream version (shaped like v1.3.1)
+    /// It records the **last successful probe**, and it is not the authority: the real version still comes from the
+    /// upstream executable, so when a probe fails this value is for display only and does not feed the update verdict
+    /// (that uses Core's live probe)
+    /// It is persisted because probing spawns a subprocess on every UI refresh, and because this value is also an
+    /// input to protocol-drift detection
+    /// </summary>
+    public const string BridgeInstalledVersionStorageKey = "miditap_bridge_installed_version";
+
+    /// <summary>
+    /// 已安装上游程序的 IPC 协议版本存储键（形如 1.0.0）
+    /// 与版本号分开存：两者回答的问题不同（"要不要升级"与"能不能对接"），
+    /// 上游也可能只升版本号而协议不动，合在一个值里会让后者被前者带着走
+    ///
+    /// Storage key for the installed upstream's IPC protocol version (shaped like 1.0.0)
+    /// Kept apart from the program version because the two answer different questions ("should it be upgraded" versus
+    /// "can the two sides talk")
+    /// The upstream may also raise its version without touching the protocol, and folding both into one value would
+    /// let the former drag the latter along
+    /// </summary>
+    public const string BridgeInstalledProtocolStorageKey = "miditap_bridge_installed_protocol";
+
+    /// <summary>
+    /// 已安装上游程序的文件名存储键（形如 midibridge-client.exe）
+    /// 安装时落地的文件名是确定的，运行时就该照它启动，而不是再去目录里挑
+    /// 目录里被放进别的 exe 时，这个记录让启动目标唯一
+    ///
+    /// Storage key for the installed upstream's file name (midibridge-client.exe for example)
+    /// The file name landed at install time is a known fact, so starting the program uses it rather than choosing among
+    /// whatever the directory holds
+    /// When other exe files are dropped in, this record keeps the start target unique
+    /// </summary>
+    public const string BridgeExecutableNameStorageKey = "miditap_bridge_exe_name";
+
+    private static string BridgeHostPath(string baseDir)
+        => AppPaths.StorageFile(baseDir, BridgeHostStorageKey);
+
+    private static string BridgePortPath(string baseDir)
+        => AppPaths.StorageFile(baseDir, BridgePortStorageKey);
+
+    private static string BridgeSourcePath(string baseDir)
+        => AppPaths.StorageFile(baseDir, BridgeSourceStorageKey);
+
+    private static string BridgeInstalledVersionPath(string baseDir)
+        => AppPaths.StorageFile(baseDir, BridgeInstalledVersionStorageKey);
+
+    private static string BridgeInstalledProtocolPath(string baseDir)
+        => AppPaths.StorageFile(baseDir, BridgeInstalledProtocolStorageKey);
+
+    private static string BridgeExecutableNamePath(string baseDir)
+        => AppPaths.StorageFile(baseDir, BridgeExecutableNameStorageKey);
+
+    private static string BridgeSelectedServerPath(string baseDir)
+        => AppPaths.StorageFile(baseDir, BridgeSelectedServerStorageKey);
+
+    /// <summary>
+    /// 读取当前选中的服务器 id；未设置或读取失败返回空串
+    ///
+    /// Reads the id of the currently selected server; empty when unset or unreadable
+    /// </summary>
+    public static string GetBridgeSelectedServer(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(BridgeSelectedServerPath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 保存当前选中的服务器 id（空串表示清除选中）
+    ///
+    /// Saves the id of the currently selected server (an empty string clears the selection)
+    /// </summary>
+    public static bool SaveBridgeSelectedServer(string baseDir, string? id)
+    {
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(BridgeSelectedServerPath(baseDir), (id ?? string.Empty).Trim());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 删除旧的单组键（host/port）
+    /// 迁移成功后调用：列表文件已经接管这两项，留着旧键会让用户改了列表却被旧值带回去
+    /// 密码文件不在本方法里删：它归 Bridge 层管（方向 Settings 不反向引用 Bridge），见 BridgeSecret.ClearLegacy
+    ///
+    /// Deletes the old single-set keys (host/port)
+    /// Called after a successful migration: the list file now owns these two values, and keeping the old keys would
+    /// let a stale value win over an edit made in the list
+    /// The password file is not deleted here: the Bridge layer owns it (Settings never refers back to Bridge), see
+    /// BridgeSecret.ClearLegacy
+    /// </summary>
+    public static void DeleteLegacyBridgeConnectionKeys(string baseDir)
+    {
+        DeleteQuietly(BridgeHostPath(baseDir));
+        DeleteQuietly(BridgePortPath(baseDir));
+    }
+
+    private static void DeleteQuietly(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // 单个文件删不掉不改变迁移结论 / One undeletable file does not change the migration's outcome
+        }
+    }
+
+    /// <summary>
+    /// 读取 MIDIBridge 上游服务器地址；未设置或读取失败返回空串（未配置）
+    ///
+    /// Reads the MIDIBridge upstream server address; empty when unset or unreadable (not configured)
+    /// </summary>
+    public static string GetBridgeHost(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(BridgeHostPath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 保存 MIDIBridge 上游服务器地址（空串表示清除）
+    /// 这里不校验语法：界面层先用 BridgeSettings.Validate 拦下非法值，通过后原样落盘
+    /// 校验规则只在 BridgeSettings 一处，避免读写两侧各判一遍、判得不一样
+    ///
+    /// Saves the MIDIBridge upstream server address (an empty string clears it)
+    /// No syntax check happens here: the UI rejects invalid values via BridgeSettings.Validate first
+    /// The rule lives in BridgeSettings alone, so read and write cannot drift apart
+    /// </summary>
+    public static bool SaveBridgeHost(string baseDir, string? host)
+    {
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(BridgeHostPath(baseDir), (host ?? string.Empty).Trim());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 读取 MIDIBridge 上游服务器端口
+    /// 未设置、读取失败或内容不是 1..65535 内的整数时返回 null（未配置）
+    /// 这里即做范围判定而不留给界面：端口本来就是纯数字，两处判断只会徒增不一致的可能
+    ///
+    /// Reads the MIDIBridge upstream server port
+    /// Null when unset, unreadable, or outside 1..65535 (not configured)
+    /// The range check happens here rather than in the UI: a port is nothing but a number, and two checks would
+    /// only add one more way to disagree
+    /// </summary>
+    public static int? GetBridgePort(string baseDir)
+    {
+        try
+        {
+            var text = File.ReadAllText(BridgePortPath(baseDir)).Trim();
+            return int.TryParse(text, out var port) && port is >= 1 and <= 65535 ? port : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 保存 MIDIBridge 上游服务器端口；不在 1..65535 范围内时拒绝保存并返回 false
+    ///
+    /// Saves the MIDIBridge upstream server port; out-of-range values (outside 1..65535) are refused with false
+    /// </summary>
+    public static bool SaveBridgePort(string baseDir, int port)
+    {
+        if (port is < 1 or > 65535)
+        {
+            return false;
+        }
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(BridgePortPath(baseDir), port.ToString());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 读取当前输入源；未设置或读取失败返回空串（调用方按默认源处理）
+    ///
+    /// Reads the current input source; empty when unset or unreadable (the caller applies its default source)
+    /// </summary>
+    public static string GetBridgeSource(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(BridgeSourcePath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 保存当前输入源（空串表示回到默认的"跟随启动状态"）
+    /// 只做修剪，合法性（是不是 None/Physical/Bridge 之一）由调用方校验 ——
+    /// 枚举定义在 App 层，Core 若在这里硬编码那份清单，就会出现两份必须同步的清单
+    ///
+    /// Saves the current input source (an empty string returns to the default start-up state)
+    /// Only trimming happens here; the caller validates legality (one of None/Physical/Bridge) —
+    /// the enum lives in the App layer, and hard-coding that list here would create a second list to keep in sync
+    /// </summary>
+    public static bool SaveBridgeSource(string baseDir, string? source)
+    {
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(BridgeSourcePath(baseDir), (source ?? string.Empty).Trim());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 读取已装上游版本号；未设置或读取失败返回空串
+    /// 空串的含义是"没有记录"，而不是"版本是空" —— 调用方据此决定要不要重新探测
+    ///
+    /// Reads the recorded installed upstream version; empty when unset or unreadable
+    /// An empty string means "no record" rather than "the version is empty", so the caller can decide whether to
+    /// probe again
+    /// </summary>
+    public static string GetBridgeInstalledVersion(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(BridgeInstalledVersionPath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 记录已装上游版本号（空串表示清除记录）
+    /// 只做修剪，不校验形态：版本号由上游自己给出
+    ///
+    /// Records the installed upstream version (an empty string clears the record)
+    /// Only trimming happens here and the shape is not validated: the upstream supplies its own version string
+    /// </summary>
+    public static bool SaveBridgeInstalledVersion(string baseDir, string? version)
+    {
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(BridgeInstalledVersionPath(baseDir), (version ?? string.Empty).Trim());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 读取已装上游的 IPC 协议版本；未设置或读取失败返回空串（无记录）
+    ///
+    /// Reads the recorded installed upstream IPC protocol version; empty when unset or unreadable (no record)
+    /// </summary>
+    public static string GetBridgeInstalledProtocol(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(BridgeInstalledProtocolPath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 记录已装上游的 IPC 协议版本（空串表示清除记录）
+    /// 同样是只修剪不校验：主版本判定归 Core 的 BridgeCompatibilityPolicy，
+    /// 本层若也判一遍就会出现两处规则，迟早判得不一样
+    ///
+    /// Records the installed upstream IPC protocol version (an empty string clears the record)
+    /// Again trimming only, with no validation: the major-version verdict belongs to Core's BridgeCompatibilityPolicy,
+    /// and a second rule here would eventually disagree with it
+    /// </summary>
+    public static bool SaveBridgeInstalledProtocol(string baseDir, string? protocol)
+    {
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(BridgeInstalledProtocolPath(baseDir), (protocol ?? string.Empty).Trim());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 读取已装上游程序的文件名；未设置或读取失败返回空串（无记录）
+    /// 空串表示"没有记录"，调用方回落到约定名与目录枚举
+    ///
+    /// Reads the recorded installed upstream file name; empty when unset or unreadable (no record)
+    /// An empty string means "no record", and the caller falls back to the conventional name and a directory scan
+    /// </summary>
+    public static string GetBridgeExecutableName(string baseDir)
+    {
+        try
+        {
+            return File.ReadAllText(BridgeExecutableNamePath(baseDir)).Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 记录已装上游程序的文件名（空串表示清除记录）
+    /// 只修剪不校验：文件名是否可用由 BridgeLayout 判断，本层不重复那一套规则
+    ///
+    /// Records the installed upstream file name (an empty string clears the record)
+    /// Trimming only, with no validation: whether a name is usable belongs to BridgeLayout, and this layer does not
+    /// repeat that rule
+    /// </summary>
+    public static bool SaveBridgeExecutableName(string baseDir, string? fileName)
+    {
+        try
+        {
+            EnsureStorageDir(baseDir);
+            File.WriteAllText(BridgeExecutableNamePath(baseDir), (fileName ?? string.Empty).Trim());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

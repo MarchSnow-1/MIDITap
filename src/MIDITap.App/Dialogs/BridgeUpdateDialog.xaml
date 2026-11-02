@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MIDIBridge 组件有新版本时的弹窗
+
+     组件装完即生效，本体的更新走 UpdateService 那套"下载、暂存、重启生效"的状态机，两者没有共同的阶段，
+     因此是两个弹窗而不是复用同一个类
+
+     关闭约束：点深灰遮罩本来就关不掉（ContentDialog 无此行为），
+     但 ESC 与系统返回键会关，因此 OnClosing 拦下所有不是本文件主动发起的关闭
+
+     The dialog shown when the MIDIBridge component has a new version
+
+     A component install takes effect at once, while the app's own update runs through UpdateService's "download,
+     stage, restart" state machine, so the two share no stages and are two dialogs rather than one reused class
+
+     Closing: clicking the scrim does not close a ContentDialog to begin with (it has no such behaviour), but ESC and
+     the system back button do, so OnClosing blocks every close this file did not start -->
+<ContentDialog
+    x:Class="MIDITap.App.Dialogs.BridgeUpdateDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ct="using:CommunityToolkit.WinUI.UI.Controls"
+    Closing="OnClosing"
+    Style="{ThemeResource MiditapDialogStyle}">
+
+    <Grid MinWidth="460" Margin="0,8,0,0">
+        <StackPanel Spacing="14">
+
+            <!-- 标题行：标题 + 右上角叉号
+                 Title row: the heading plus the top-right cross -->
+            <Grid>
+                <TextBlock x:Name="TitleText" Style="{ThemeResource MiditapSubtitleStyle}"
+                           VerticalAlignment="Center" Margin="0,0,40,0" TextWrapping="Wrap" />
+                <Button x:Name="CloseBtn" Click="OnCloseClick"
+                        AutomationProperties.AutomationId="BridgeUpdateCloseBtn"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Background="Transparent" BorderThickness="0" Padding="6"
+                        Width="32" Height="32">
+                    <FontIcon Glyph="&#xE711;" FontSize="13" />
+                </Button>
+            </Grid>
+
+            <!-- 版本对照：当前 / 最新
+                 标签与数值同字号，层级由颜色承担
+                 Version pair: current and latest
+                 The label and the value share one font size and colour carries the hierarchy -->
+            <Grid ColumnSpacing="12" RowSpacing="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="CurrentLabel" Grid.Row="0" Grid.Column="0"
+                           Style="{ThemeResource MiditapBodyStyle}"
+                           Foreground="{ThemeResource MiditapTextTertiaryBrush}" />
+                <TextBlock x:Name="CurrentValue" Grid.Row="0" Grid.Column="1"
+                           Style="{ThemeResource MiditapBodyStyle}" />
+                <TextBlock x:Name="LatestLabel" Grid.Row="1" Grid.Column="0"
+                           Style="{ThemeResource MiditapBodyStyle}"
+                           Foreground="{ThemeResource MiditapTextTertiaryBrush}" />
+                <TextBlock x:Name="LatestValue" Grid.Row="1" Grid.Column="1"
+                           Style="{ThemeResource MiditapBodyStyle}" />
+            </Grid>
+
+            <!-- 更新内容：自绘的折叠卡片，表头与箭头都不走 Expander
+                 What is new: a hand-drawn collapsible card; the header and the chevron do not use Expander -->
+            <Border x:Name="NotesCard"
+                    CornerRadius="8"
+                    Background="{ThemeResource MiditapSurfaceAltBrush}"
+                    BorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                    BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Button x:Name="NotesToggle" Grid.Row="0"
+                            AutomationProperties.AutomationId="BridgeUpdateNotesToggle"
+                            Style="{ThemeResource MiditapNotesHeaderButtonStyle}"
+                            Click="OnNotesToggled">
+                        <Grid>
+                            <TextBlock x:Name="NotesHeaderText"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,28,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{ThemeResource MiditapTextPrimaryBrush}" />
+                            <FontIcon x:Name="NotesChevron"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      FontSize="12"
+                                      Glyph="&#xE70E;"
+                                      Foreground="{ThemeResource MiditapTextSecondaryBrush}" />
+                        </Grid>
+                    </Button>
+
+                    <Border x:Name="NotesBodyHost" Grid.Row="1" Visibility="Visible"
+                            BorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                            BorderThickness="0,1,0,0">
+                        <ScrollViewer x:Name="NotesBody"
+                                      MaxHeight="260"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="16,12,10,12">
+                            <StackPanel Spacing="10">
+                                <!-- 发布页入口放在正文最顶端，两个 Run 之间不留空白：行内元素之间的空白会被渲染成一个空格
+                                     The release page entry sits at the top of the body, with no whitespace between the
+                                     two Runs, since whitespace between inline elements renders as a space -->
+                                <TextBlock x:Name="ReleasePageLine"
+                                           Style="{ThemeResource MiditapBodyStyle}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{ThemeResource MiditapTextSecondaryBrush}"><Run x:Name="ReleasePageLabel" /><Hyperlink x:Name="ReleasePageLink" Click="OnOpenPageClick" Foreground="{ThemeResource MiditapAccentBrush}" /></TextBlock>
+                                <ct:MarkdownTextBlock x:Name="NotesMd"
+                                                      Background="Transparent"
+                                                      Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      CodeBackground="Transparent"
+                                                      CodeBorderBrush="Transparent"
+                                                      CodeForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      InlineCodeBackground="Transparent"
+                                                      InlineCodeBorderBrush="Transparent"
+                                                      InlineCodeForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      QuoteBackground="Transparent"
+                                                      QuoteBorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                      QuoteForeground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      TableBorderBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                      HorizontalRuleBrush="{ThemeResource MiditapSubtleBorderBrush}"
+                                                      Header1Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      Header2Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      Header3Foreground="{ThemeResource MiditapTextPrimaryBrush}"
+                                                      LinkForeground="{ThemeResource MiditapAccentBrush}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- 发布说明拿不到时的说明
+                 Shown when the release notes cannot be obtained -->
+            <TextBlock x:Name="NotesUnavailableText" Style="{ThemeResource MiditapCaptionStyle}"
+                       TextWrapping="Wrap" Visibility="Collapsed" />
+
+            <!-- 进度区：只在下载与安装期间出现
+                 Progress area: shown only while downloading and installing -->
+            <StackPanel x:Name="ProgressArea" Spacing="6" Visibility="Collapsed">
+                <TextBlock x:Name="StatusText" Style="{ThemeResource MiditapBodyStyle}" TextWrapping="Wrap" />
+                <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Value="0" />
+            </StackPanel>
+
+            <!-- 操作行：只有一个主按钮
+                 UpdateDialog 那里还有「忽略此版本」与「不再提醒更新」；本弹窗只在用户自己点"检查更新"之后出现，
+                 没有需要压制的后续提示，因此不给出那两个按钮
+                 The action row: one primary button only
+                 UpdateDialog also offers "ignore this version" and "do not remind me again"; this dialog appears only
+                 after the user clicked "check for updates", so there is no later prompt to silence and no button for it -->
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button AutomationProperties.AutomationId="BridgeUpdateActionBtn" x:Name="ActionBtn"
+                        Click="OnActionClick" Style="{ThemeResource AccentButtonStyle}" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</ContentDialog>

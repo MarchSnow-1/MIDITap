@@ -63,4 +63,15 @@ public static class UpdateChannel
         => string.IsNullOrWhiteSpace(informationalVersion)
            || informationalVersion.Equals(UnknownVersion, StringComparison.OrdinalIgnoreCase)
            || informationalVersion.Contains(DevelopmentMarker, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 界面要把空、纯空白与 UnknownVersion 都换成当地语言的「未知」，因此它们必须由同一条规则判定
+    /// 只判 IsNullOrEmpty 会漏掉 UnknownVersion —— 那是常量字符串，不是空串
+    ///
+    /// The UI turns empty, whitespace and UnknownVersion into the localised "unknown", so one rule has to recognise them together
+    /// Testing IsNullOrEmpty alone misses UnknownVersion, which is a constant string rather than an empty one
+    /// </summary>
+    public static bool IsUnknown(string? version)
+        => string.IsNullOrWhiteSpace(version)
+           || version.Equals(UnknownVersion, StringComparison.OrdinalIgnoreCase);
 }

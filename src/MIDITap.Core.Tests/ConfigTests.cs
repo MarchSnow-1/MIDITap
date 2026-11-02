@@ -507,9 +507,9 @@ public sealed class ConfigTests : IDisposable
         var i18nDir = Path.Combine(temp.BaseDir, LanguageCatalog.DirectoryName);
         Directory.CreateDirectory(i18nDir);
         File.WriteAllText(
-            Path.Combine(i18nDir, "zh_CN.json"),
+            Path.Combine(i18nDir, "zh-Hans.json"),
             "{\n  \"" + LanguageCatalog.DefaultConfigStemKey + "\": \"默认配置\"\n}\n");
-        Assert.True(AppStorage.SaveLocale(temp.BaseDir, "zh_CN"));
+        Assert.True(AppStorage.SaveLocale(temp.BaseDir, "zh-Hans"));
 
         var created = ConfigLocator.EnsureConfigDir(temp.BaseDir);
         Assert.NotNull(created);

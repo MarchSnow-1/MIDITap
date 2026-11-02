@@ -25,8 +25,8 @@ public sealed class I18nService : INotifyPropertyChanged
     public event Action? LanguageChanged;
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    /// <summary>当前语言代码（如 zh_CN）</summary>
-    /// <remarks>The current language code (e.g. zh_CN)</remarks>
+    /// <summary>当前语言代码（如 zh-Hans）</summary>
+    /// <remarks>The current language code (e.g. zh-Hans)</remarks>
     public string Current { get; private set; } = LanguageCatalog.DefaultCode;
 
     /// <summary>当前语言的母语名（用于界面显示）</summary>

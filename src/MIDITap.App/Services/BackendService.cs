@@ -9,10 +9,12 @@
 //     它自己既不注入按键也不派发事件
 //   * 一个专用工作线程按入队顺序执行：注入按键、广播事件
 //     动作因此严格有序、不会两个交错
-//     Stop 先排空队列（Drain）再收尾，所以退出前"按下的键已抬起"必然已经落地
+//     Stop 先排空队列（Drain）再收尾，所以退出前"按下的键已抬起"已经落地
 //   * 启停切换由 _lifecycleGate 串行化
 //     启动可能来自启动序列、热插拔轮询或主页选择设备
 //     不加锁会让两个 Start 交错打开同一端口、泄漏其中一个 MidiIn
+//   * 远程 IPC 帧同样只在 _gate 内跑状态机（OnBridgeMessage）
+//     它自己既不注入按键，也不取 _lifecycleGate：取后者会让正在等读线程退出的停止动作死锁
 // 事件处理器不得同步回调本服务 —— UI 一侧先经 DispatcherQueue 编组过去
 //
 // BackendService.cs — the layer behind the UI
@@ -50,6 +52,54 @@ namespace MIDITap.App.Services;
 public sealed record MidiPortInfo(int Index, string Name);
 
 /// <summary>
+/// 当前的 MIDI 输入源
+/// None = 没有任何活动输入源（物理端口没打开，远程也没接管）
+/// Physical = 正在监听本机 WinMM 输入端口
+/// Bridge = 正在消费 MIDIBridge Client 送来的远程 MIDI 流
+///
+/// 为什么这个枚举在 App 层而不是 Core：它记的是「界面把哪一路接到状态机」，不是音符推导规则
+///
+/// The current MIDI input source
+/// None: no active input source (no physical port is open and the remote has not taken over)
+/// Physical: a local WinMM input port is being monitored
+/// Bridge: the remote MIDI stream from MIDIBridge Client is being consumed
+///
+/// Why this enum sits in the App layer rather than Core: it records which route the UI handed to the state
+/// machine, not a note-derivation rule
+/// </summary>
+public enum MidiSource
+{
+    None,
+    Physical,
+    Bridge,
+}
+
+/// <summary>
+/// 设备下拉框里「远程桥接」这个哨兵项的端口号
+/// WinMM 的端口索引从 0 开始分配，-2 因此不在任何真实设备的索引范围内
+/// 它不是 MidiSource，只是一个列表项的标识；选到它等于选择 Bridge
+///
+/// The sentinel port index for the "remote bridge" entry in the device drop-down
+/// WinMM assigns port indexes starting at 0, so -2 falls outside the index range of any real device
+/// It is not a MidiSource, only an identifier for one list item; picking it means picking Bridge
+/// </summary>
+public static class MidiSourcePort
+{
+    public const int Bridge = -2;
+
+    /// <summary>
+    /// 设备下拉框里空行的标识
+    /// 一台物理设备都没有时列表顶部留一个空项，使列表不会只剩下「远程桥接」这一项
+    /// 选中即退回（见 HomePage.OnDeviceSelected），因此和 -2 分属两个哨兵值
+    ///
+    /// The identifier of the empty row in the device drop-down
+    /// With no physical device at all a blank item sits at the top, so the list does not hold the remote bridge entry alone
+    /// Picking it rolls back (see HomePage.OnDeviceSelected), hence a sentinel of its own
+    /// </summary>
+    public const int EmptyRow = -3;
+}
+
+/// <summary>
     /// 一条映射的展示数据：键位标签 + 它是单键还是组合键
     /// "是否组合键"由**权威来源**判定（该音符的 VK 码个数 > 1），而不是在 UI 层用 "标签里是否含 '+ '" 反推
     /// 后者只是恰好等价，一旦出现名字带 '+' 的按键就会失效
@@ -83,6 +133,16 @@ public sealed class BackendService
     private readonly string _baseDir;
     private MidiIn? _input;
     private MidiIn? _captureInput;
+
+    // 远程通路是否接在状态机上：与 _input 是否为 null 起同样作用
+    // 受 _gate 保护，而不是受 _lifecycleGate 保护的 ActiveSource：OnBridgeMessage 在 _gate 内判定它
+    // 两个锁在此混用会让"读一个由另一把锁保护的字段"这件事说不清楚
+    //
+    // Whether the remote route is attached to the state machine; it does the job _input != null does locally
+    // It is guarded by _gate rather than by ActiveSource's _lifecycleGate, because OnBridgeMessage decides on it
+    // inside _gate
+    // Mixing the two locks here would leave "reading a field guarded by the other lock" without a clear contract
+    private bool _bridgeRoute;
 
     // 按键注入专用队列：注入动作入队后异步执行，以免阻塞事件循环
     // 这里同样不在 WinMM 回调线程上同步调用 SendInput（慢速低级键盘钩子会拖慢注入并反压 MIDI 消息），而是交给独立的工作线程按序执行
@@ -153,7 +213,52 @@ public sealed class BackendService
     public int SelectedPort { get; set; }
 
     public string? CurrentConfigPath { get; private set; }
-    public bool IsRunning { get; private set; }
+
+    // 物理端口是否打开：受 _lifecycleGate 保护（StartCore 与 StopMonitoringCore 都在这把锁里）
+    //「是否在运行」有物理端口与远程通路两个来源，这个字段只记物理端口那一个
+    //
+    // Whether the physical port is open, guarded by _lifecycleGate (StartCore and StopMonitoringCore both run
+    // inside it)
+    // "Is it running" has two sources, the physical port and the remote route, and this field covers the former
+    private bool _monitoring;
+
+    // 用户选定的输入源：受 _lifecycleGate 保护
+    // 它记的是"用户选了哪一路"，与数据通路当前是否接通无关
+    // 因此热插拔轮询按它判定能不能抢回物理监听，而不是按 IsRunning
+    //
+    // The input source the user chose, guarded by _lifecycleGate
+    // It records the user's choice rather than whether the data path is currently up
+    // So the hot-plug poll decides on it, not on IsRunning, before taking monitoring back
+    private MidiSource _activeSource;
+
+    /// <summary>
+    /// 是否有活动的输入源：物理端口已打开，或远程桥接的数据通路已接通
+    /// 读取不加锁
+    /// 热插拔轮询要判断的是"用户选了哪一路"，因此那里读 <see cref="ActiveSource"/> 而不是这个
+    ///
+    /// Whether an input source is active: the physical port is open, or the remote bridge data path is up
+    /// The read takes no lock
+    /// The hot-plug poll needs "which source the user picked", so it reads <see cref="ActiveSource"/> rather than this
+    /// </summary>
+    public bool IsRunning => _monitoring || _bridgeRoute;
+
+    /// <summary>
+    /// 用户选定的输入源
+    /// 主页恢复下拉框的选中项、标题栏状态药丸区分本地与远程，都读它
+    ///
+    /// The input source the user picked
+    /// The Home page restores its drop-down selection from it, and the title-bar pill tells local from remote by it
+    /// </summary>
+    public MidiSource ActiveSource
+    {
+        get
+        {
+            lock (_lifecycleGate)
+            {
+                return _activeSource;
+            }
+        }
+    }
 
     /// <summary>当前正在监听的端口（未监听时为 null）。主页在页面重建后用它恢复下拉框选中项</summary>
     /// <remarks>
@@ -316,6 +421,17 @@ public sealed class BackendService
     {
         lock (_lifecycleGate)
         {
+            // 用户选的是远程源时不启动物理监听：这一路的输入不经过 WinMM
+            // 抢回来的话MIDIBridge会被本地端口的回调掺进来，而且选中的源与数据来源就对不上了
+            //
+            // No physical monitoring starts while the user picked the remote source: that route does not go
+            // through WinMM
+            // Taking it back would mix callbacks from a local port into remote playing, and the selected source
+            // would no longer match where the data comes from
+            if (_activeSource == MidiSource.Bridge)
+            {
+                return;
+            }
             if (IsRunning)
             {
                 return;
@@ -386,6 +502,18 @@ public sealed class BackendService
     {
         lock (_lifecycleGate)
         {
+            // 用户选了远程源：热插拔一律不接管
+            // 插拔事件只影响本机设备，而这一路的输入不来自它们
+            // 若在这里抢回物理监听，一次插拔就会打断正在进行的MIDIBridge
+            //
+            // The user picked the remote source, so hot-plug never takes over
+            // Plug and unplug events concern local devices only, and this route's input does not come from them
+            // Taking physical monitoring back here would let a single plug event interrupt remote playing
+            if (_activeSource == MidiSource.Bridge)
+            {
+                return;
+            }
+
             if (ports.Count == 0)
             {
                 // 设备全部拔出：停止监听并抬起所有按键
@@ -408,12 +536,12 @@ public sealed class BackendService
 
             // 未监听（应用启动即有设备，或设备插入）
             // 或正在监听的设备被拔出（自动热切换），都切到当前选中/第一台可用设备
-            // 监听在 v2 里是常态，因此这里不再判断"用户是否需要开始监听"
+            // 监听是常态，因此这里不判断"用户是否需要开始监听"
             //
             // Not monitoring (the app started with a device already present, or a device was plugged in)
             // Or the monitored device was unplugged (automatic hot switch)
             // Either way, switch to the currently selected or first available device
-            // Monitoring is the normal state in v2, so this no longer asks whether the user wants to start monitoring
+            // Monitoring is the normal state, so this does not ask whether the user wants to start monitoring
             if (IsRunning)
             {
                 Stop();
@@ -457,6 +585,172 @@ public sealed class BackendService
         HeldNotesRestored?.Invoke(held);
     }
 
+    // ------------------------------------------------------------------ remote bridge source
+
+    /// <summary>
+    /// 切到远程桥接源：关掉物理监听并抬起按键，把状态机交给 IPC 通路
+    /// 只切来源，不启动上游进程 —— 那是 BridgeService 的事
+    ///
+    /// 为什么先把物理端口关掉：两路输入同时接在状态机上时，同一个音符会由两条回调各计一次引用
+    /// 抬起时却只减一次，结果就是卡键
+    /// 因此任一时刻只有一条通路接在状态机上
+    ///
+    /// Switches to the remote bridge source: closes physical monitoring, releases the keys and hands the state
+    /// machine to the IPC route
+    /// It only switches the source; starting the upstream process is BridgeService's job
+    ///
+    /// Why the physical port is closed first: with both routes attached, one note is counted twice by the two
+    /// callbacks but released once, which leaves a key stuck
+    /// So exactly one route is attached to the state machine at a time
+    /// </summary>
+    public void SelectBridgeSource()
+    {
+        lock (_lifecycleGate)
+        {
+            // 关物理端口时先摘掉 _input 并抬起所有按键（在 _gate 内）
+            // 这之后到达的回调看到 _input 为 null，直接返回，不会漏进状态机
+            //
+            // Stopping the physical port detaches _input and releases every key inside _gate
+            // A callback arriving after that sees _input as null and returns, so nothing leaks into the state machine
+            StopMonitoringCore();
+            _activeSource = MidiSource.Bridge;
+            lock (_gate)
+            {
+                _bridgeRoute = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 切回本机设备源：先把远程通路从状态机上摘掉并抬起按键，再启动物理监听
+    /// 没有设备时不报错，热插拔轮询会在设备出现时接上
+    ///
+    /// Switches back to the local device source: detaches the remote route and releases the keys, then starts
+    /// physical monitoring
+    /// No device present is not an error, since the hot-plug poll attaches one when it appears
+    /// </summary>
+    public void SelectPhysicalSource()
+    {
+        // EnsureMonitoring 自己取 _lifecycleGate，而 C# 的 lock 可重入
+        // 因此这里整段在同一次持锁之内完成，中途不会被另一路切换插进来
+        //
+        // EnsureMonitoring takes _lifecycleGate itself, and C#'s lock is reentrant
+        // The whole sequence therefore happens inside one hold of the lock, so no other switch can slip in between
+        lock (_lifecycleGate)
+        {
+            DetachBridgeRouteCore(raiseEvent: true);
+            _activeSource = MidiSource.Physical;
+            EnsureMonitoring();
+        }
+    }
+
+    /// <summary>
+    /// 远程通路断开了（上游进程退出、IPC 连接断开、协议不匹配等）
+    /// 抬起所有按键后把通路摘掉，但不改用户选的来源：重连成功后仍然是同一路
+    ///
+    /// 为什么必须抬起按键：最后一次按下之后再没有抬起帧会到来（连接已经断了）
+    /// 不主动释放的话，那些键在系统层面会一直按着，直到用户自己按一下
+    ///
+    /// The remote route dropped (the upstream process exited, the IPC connection closed, the protocol did not
+    /// match, and so on)
+    /// Every key is released and the route is detached, but the user's chosen source is kept, since a successful
+    /// reconnect is still the same source
+    ///
+    /// Why the keys must be released: no further release frame arrives for whatever was last pressed, because the
+    /// connection is already gone
+    /// Without releasing them here those keys stay down at the OS level until the user presses them again
+    /// </summary>
+    public void OnBridgeDisconnected()
+    {
+        lock (_lifecycleGate)
+        {
+            // raiseEvent 为 true：这一路的输入断了，前端据此清掉实时预览
+            // 语义与 Stop 发出 Stopped 时一致（"这一路不再有输入了"）
+            //
+            // raiseEvent is true: this route has no more input, so the front end clears its live preview
+            // The meaning matches the Stopped event raised by Stop, "this route no longer has input"
+            DetachBridgeRouteCore(raiseEvent: true);
+        }
+    }
+
+    /// <summary>
+    /// 把远程通路从状态机上摘掉并抬起所有按键，不动 _activeSource
+    /// 必须在 _lifecycleGate 内调用；释放动作走既有的注入队列并 drain，与 StopMonitoringCore 的顺序一致
+    ///
+    /// 摘掉 _bridgeRoute 之后 OnBridgeMessage 会立刻返回，因此在途的读取循环再送帧也不会漏进状态机
+    ///
+    /// Detaches the remote route from the state machine and releases every key, leaving _activeSource alone
+    /// It must be called inside _lifecycleGate; the release goes through the existing injection queue and drains,
+    /// in the same order as StopMonitoringCore
+    ///
+    /// Once _bridgeRoute is cleared, OnBridgeMessage returns at once, so frames still being delivered by an
+    /// in-flight read loop cannot leak into the state machine
+    /// </summary>
+    private void DetachBridgeRouteCore(bool raiseEvent)
+    {
+        bool wasAttached;
+        lock (_gate)
+        {
+            wasAttached = _bridgeRoute;
+            _bridgeRoute = false;
+        }
+
+        List<MidiAction> actions;
+        lock (_gate)
+        {
+            actions = _stateMachine.ReleaseAllKeys();
+        }
+        // 释放动作入队后等注入线程清空，与 StopMonitoringCore 的做法一致
+        //
+        // After the release actions are enqueued it waits for the injection thread to empty, as StopMonitoringCore does
+        EnqueueActions(actions);
+        DrainInjectionQueue();
+
+        if (raiseEvent && wasAttached)
+        {
+            Stopped?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// 远程 IPC 送来的一条 MIDI 消息
+    /// 与 <see cref="OnInputMessage"/> 同形：只在 _gate 内跑状态机并把动作入队
+    /// 本方法自己不注入按键、不派发事件，注入一律交给既有的 _injectionQueue 与那个专用工作线程
+    ///
+    /// 为什么不直接注入：WinMM 回调线程上同步 SendInput 会被慢速低级键盘钩子拖慢并反压 MIDI 消息
+    /// 远程通路有同样的问题，只是它的"回调线程"是读 socket 的那个线程
+    /// 两条通路共用同一个队列，动作因此在全局范围内有序
+    ///
+    /// One MIDI message from the remote IPC stream
+    /// It is shaped exactly like <see cref="OnInputMessage"/>: the state machine runs only inside _gate and the
+    /// actions are enqueued
+    /// This method injects no key and raises no event itself; injection goes through the existing
+    /// _injectionQueue and its dedicated worker thread
+    ///
+    /// Why not inject here: a synchronous SendInput on a callback thread is slowed down by a slow low-level
+    /// keyboard hook, which back-pressures MIDI messages
+    /// The remote route has the same problem, its "callback thread" being the one reading the socket
+    /// Both routes share one queue, so the actions are ordered globally
+    /// </summary>
+    public void OnBridgeMessage(ReadOnlySpan<byte> message)
+    {
+        lock (_gate)
+        {
+            if (!_bridgeRoute)
+            {
+                return;
+            }
+            // 状态机自己会过滤非音符消息，因此这里不做类型判断
+            // 与 OnInputMessage 的差别只在于后者先过滤再用三字节拼装，而这里已经是完整的消息字节
+            //
+            // The state machine filters non-note messages itself, so no type check happens here
+            // The only difference from OnInputMessage is that the latter filters first and then assembles three
+            // bytes, while here the message bytes are already complete
+            var actions = _stateMachine.HandleMessage(message);
+            EnqueueActions(actions);
+        }
+    }
+
     // ------------------------------------------------------------------ start / stop
 
     /// <summary>先停旧会话，可选加载配置，再打开端口</summary>
@@ -472,7 +766,20 @@ public sealed class BackendService
     private void StartCore(int portIndex, string? configPath)
     {
         var wasRunning = IsRunning;
+        // 显式启动物理端口时，先把接在状态机上的远程通路摘掉
+        // 否则两路输入会同时驱动同一个状态机，按键的引用计数就对不上了
+        //
+        // An explicit physical start detaches the remote route from the state machine first
+        // Otherwise both routes would drive the same state machine and the key reference counts would no longer
+        // add up
+        DetachBridgeRouteCore(raiseEvent: false);
         StopMonitoringCore();
+        // 走到这里用户要的是本机设备，与成功与否无关
+        // 失败时保持 Physical：下一次热插拔轮询会照旧重试
+        //
+        // Reaching here means the user wants a local device, whether or not the attempt succeeds
+        // Physical is kept on failure so that the next hot-plug poll retries on its own
+        _activeSource = MidiSource.Physical;
 
         if (!string.IsNullOrEmpty(configPath))
         {
@@ -516,7 +823,8 @@ public sealed class BackendService
             }
             input.Start();
             var portName = MidiIn.DeviceInfo(portIndex).ProductName;
-            IsRunning = true;
+            _monitoring = true;
+            _activeSource = MidiSource.Physical;
             _activePortIndex = portIndex;
             Started?.Invoke(portIndex, portName);
         }
@@ -525,7 +833,7 @@ public sealed class BackendService
             // 半打开的端口必须释放而不是泄漏
             //
             // A half-opened port must be released rather than leaked
-            IsRunning = false;
+            _monitoring = false;
             MidiIn? leaked = null;
             lock (_gate)
             {
@@ -543,13 +851,14 @@ public sealed class BackendService
 
     /// <summary>停止监听并广播 midiStopped / Stops monitoring and broadcasts midiStopped</summary>
     /// <remarks>
-    /// 停止监听只有两个调用方：设备全部拔出（热插拔兜底）与窗口关闭（退出前抬起所有按键）
-    /// 两者都必须保证按键全部落地，所以这里不允许与并发的 Start 交错
+    /// 停止监听只有三个调用方：设备全部拔出（热插拔兜底）、切到远程源（见 SelectBridgeSource），以及窗口关闭（退出前抬起所有按键）
+    /// 三者都必须保证按键全部落地，所以这里不允许与并发的 Start 交错
     ///
-    /// Stopping has only two callers
-    /// The first is every device unplugged (the hot-plug fallback)
-    /// The second is window close (releasing all keys before exit)
-    /// Both have to make sure the pressed keys have landed, so interleaving with a concurrent Start is not permitted here
+    /// Stopping has three callers
+    /// Every device unplugged (the hot-plug fallback), switching to the remote source (see SelectBridgeSource),
+    /// and window close (releasing all keys before exit)
+    /// All three have to make sure the pressed keys have landed, so interleaving with a concurrent Start is not
+    /// permitted here
     /// </remarks>
     public void Stop()
     {
@@ -575,7 +884,7 @@ public sealed class BackendService
     }
 
     /// <summary>
-    /// stopMonitoring：先摘除监听，再关闭连接（绝不在回调线程内关闭），最后 release-all-keys
+    /// stopMonitoring：先摘除监听，再关闭连接（不在回调线程内关闭），最后 release-all-keys
     /// 连接关闭放在锁外，回调线程若正等锁不会死锁
     ///
     /// stopMonitoring: detach the monitoring first, then close the connection
@@ -593,7 +902,7 @@ public sealed class BackendService
             _input = null;
             capture = _captureInput;
             _captureInput = null;
-            IsRunning = false;
+            _monitoring = false;
             _activePortIndex = null;
         }
         if (input is not null)
@@ -611,7 +920,7 @@ public sealed class BackendService
             actions = _stateMachine.ReleaseAllKeys();
         }
         // 释放动作入队后等待注入线程清空队列
-        // 顺序保证先于 Close 生效，且退出时被按住的键一定被抬起
+        // 顺序保证先于 Close 生效，退出时被按住的键在这里抬起
         //
         // After the release actions are enqueued it waits for the injection thread to empty the queue
         // The order guarantees they take effect before the Close, and a key held at exit is released
@@ -645,7 +954,7 @@ public sealed class BackendService
         }
     }
 
-    /// <summary>异步关闭：供采集连接自身的回调线程使用（绝不在回调内同步 Dispose）</summary>
+    /// <summary>异步关闭：供采集连接自身的回调线程使用（回调内不做同步 Dispose）</summary>
     /// <remarks>
     /// Asynchronous close, for the capture connection's own callback thread
     /// A synchronous Dispose inside that callback is not performed
@@ -807,13 +1116,14 @@ public sealed class BackendService
         }
         if (toClose is null)
         {
-            // 关闭落地前又来了一条 note-on：这里忽略后续消息，保证只捕获第一个音符
+            // _captureInput 已被清空（前一个音符已捕获，或 StopCapture 已接手）：这里忽略后续消息，保证只捕获第一个音符
             //
-            // Another note-on arrived before the close landed: later messages are ignored here, so only the first note is captured
+            // _captureInput has already been cleared (the previous note was captured, or StopCapture took over), so
+            // later messages are ignored here and only the first note is captured
             return;
         }
         NoteCaptured?.Invoke(note);
-        // 绝不从采集连接自身的回调线程内同步 Dispose —— 交给线程池
+        // 采集连接自身的回调线程内不做同步 Dispose —— 交给线程池
         //
         // The capture connection's own callback thread does not Dispose synchronously — that work goes to the thread pool
         CloseMidiInAsync(toClose);
@@ -1094,7 +1404,7 @@ public sealed class BackendService
     /// 当前配置里某个音符的映射；该音符未绑定、或尚无配置加载完成时返回 null
     /// 界面据此判断「移除映射」是否可用：让按钮置灰，比点下去再报「没有可移除的映射」更加直观
     /// 读的是 _lastConfigLoaded 这份快照，与 CurrentConfigPath 一样不加锁
-    /// 该字段整体替换，而记录本身不可变，因此读到的永远是某一次完整加载的结果，不会是半个状态
+    /// 该字段整体替换，而记录本身不可变，因此一次读取拿到的是某一次完整加载的结果，不会读到半个状态
     ///
     /// The mapping for one note in the current config; null when the note is unbound or no config has finished loading yet
     /// The UI uses this to decide whether "Remove mapping" is available
@@ -1302,7 +1612,6 @@ public sealed class BackendService
         {
             // 配置文件被外部删除/改名后，下拉列表必须立即刷新
             // 否则界面里还会列出一个已经不存在的文件
-            // 否则界面里还会列出一个已经不存在的文件
             //
             // After a config file is deleted or renamed externally the drop-down has to refresh immediately
             // Otherwise the UI would keep listing a file that no longer exists
@@ -1311,9 +1620,9 @@ public sealed class BackendService
             var path = CurrentConfigPath;
             if (path is null || File.Exists(path))
             {
-                // 未被删除的是当前配置：无需其它处理
+                // 当前配置文件仍在磁盘上：无需其它处理
                 //
-                // A file that was not deleted is the current config: no further handling is needed
+                // The current config file is still on disk: no further handling is needed
                 return;
             }
 

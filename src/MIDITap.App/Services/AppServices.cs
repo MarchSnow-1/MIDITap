@@ -32,6 +32,16 @@ public static class AppServices
 
     public static BackendService Backend { get; private set; } = null!;
 
+    /// <summary>
+    /// MIDIBridge Client 扩展的运行器：上游进程、IPC 连接与重连
+    /// 与 Backend 分开：一个管"MIDI 数据从哪来"，一个管"怎么把数据接到状态机上"，生命周期也互不相同
+    ///
+    /// The runner for the MIDIBridge Client extension: the upstream process, the IPC connection and reconnects
+    /// Kept apart from Backend: one owns where MIDI data comes from, the other how it reaches the state machine,
+    /// and their lifetimes differ
+    /// </summary>
+    public static BridgeService Bridge { get; private set; } = null!;
+
     private static DispatcherQueue? _dispatcher;
 
     /// <summary>
@@ -120,6 +130,7 @@ public static class AppServices
         _dispatcher = dispatcher;
         I18n ??= new I18nService(BaseDir);
         Backend ??= new BackendService(BaseDir);
+        Bridge ??= new BridgeService(BaseDir, Backend);
     }
 
     /// <summary>

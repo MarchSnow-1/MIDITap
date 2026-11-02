@@ -100,9 +100,19 @@ function Write-Log([string]$message) {
 }
 
 # 用户数据目录：无论发生什么都不能被更新覆盖
+# .bridge 走的是另一条理由：它不是用户 authored 的数据，而是 MIDIBridge 扩展下载来的上游程序（第三方可执行文件），
+# MIDITap 的更新包从不含它，一旦某个包里出现（误打或自打），覆盖它等于替换一个第三方 exe
+# 这份清单与 src/MIDITap.Core/Update/UpdateStaging.cs 里的排除规则是**刻意的第二份**：
+# 本脚本是独立进程，不共享任何代码，两边各写一份、改名时都要改（见 AppPaths.cs 文件头同样的说明）
 #
 # User-data directories: whatever happens, an update must never overwrite them
-$protected = @("config", ".storage")
+# .bridge is here for a different reason: it is not user-authored data but the upstream program the MIDIBridge extension
+# downloads (a third-party executable). A MIDITap package never carries it, and if one appeared (a mis-built or
+# self-built package) copying over it would replace a third-party exe
+# This list is a **deliberate second copy** of the exclusions in src/MIDITap.Core/Update/UpdateStaging.cs:
+# this script is a separate process sharing no code, so both spellings exist and a rename has to touch both
+# (the same note lives at the top of AppPaths.cs)
+$protected = @("config", ".storage", ".bridge")
 
 $backupDir = Join-Path $AppDir ".update\backup"
 

@@ -111,6 +111,14 @@ public sealed partial class MainWindow : Window
         // Config hot reload is enabled at the same time
         // Editing config/*.json externally then takes effect automatically
         AppServices.Backend.StartDeviceWatcher();
+        // 恢复上次会话选择的远程来源：上次选了 Bridge 且扩展可用时自动接上
+        // 不等待：接不上时 Bridge 自己会发出失败，界面不该为它推迟启动序列的其余部分
+        //
+        // Restores the remote source chosen in the last session: Bridge, when picked last time and the extension is
+        // usable, is re-attached
+        // It is not awaited: a failed re-attachment raises its own event, and the rest of the startup sequence must
+        // not wait on it
+        _ = AppServices.Bridge.RestoreAsync();
         // 启动时的静默更新检查：开发构建不做（见 AppServices.UpdatesEnabled），其余默认开启，可在设置里关闭
         // 开发构建仍留一条 debug 说明原因
         // 否则日志里少了那行"开始检查"，看起来会像是检查被静默跳过了
@@ -319,6 +327,12 @@ public sealed partial class MainWindow : Window
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
             _uiSettings = null;
         }
+        // 先收掉上游进程：它由本进程拉起，本进程退出后没人再管它
+        // 顺序放在 Backend.Stop 之前：Stop 会抬起并 drain 按键，那时上游已经不会再送帧
+        //
+        // The upstream process is stopped first: this process started it, and nothing would manage it afterwards
+        // It comes before Backend.Stop, which releases and drains the keys, by which time no more frames can arrive
+        AppServices.Bridge.Stop();
         AppServices.Backend.Stop();
         // 最后再关日志：这样 Backend.Stop() 的日志（含 release-all-keys）也能落盘
         //
@@ -500,12 +514,10 @@ public sealed partial class MainWindow : Window
                 "log.debug.updateFound", ("latest", info.Latest), ("current", info.Current))));
         // 更新可用时弹窗，弹一次即可
         // 订阅在窗口上而不是某个页面上：页面按导航重建，页面级订阅会随之消失并可能重复
-        // 早先主页与设置页各订阅一次，同一个事件因此可能弹两个提示
         //
         // The update dialog is raised here, once
         // The subscription lives on the window rather than on a page: pages are rebuilt on navigation,
         // so a page-level subscription both disappears and duplicates
-        // The home page and the settings page each had one before, which could raise two prompts for one event
         backend.UpdateAvailable += info => AppServices.RunOnUi(() =>
         {
             _ = UpdateNotifier.ShowAsync(info);
@@ -565,23 +577,213 @@ public sealed partial class MainWindow : Window
             log.Warn(AppServices.I18n.T("log.unexpectedOff", ("note", note.ToString()))));
         backend.NoteCaptured += note => AppServices.RunOnUi(() =>
             log.Info(AppServices.I18n.T("log.noteCaptured", ("note", note.ToString()))));
+
+        WireBridgeEvents();
+    }
+
+    /// <summary>
+    /// MIDIBridge 扩展的事件 -> 日志与状态药丸
+    /// 与后端事件分开：扩展是可选的，它订阅的是另一个服务
+    ///
+    /// 高频事件不弹浮窗：状态行可能随重连反复出现，弹成浮窗会刷屏并遮住界面
+    /// 需要用户动手的（未安装、协议不匹配）走 warn + 一条浮窗
+    ///
+    /// The MIDIBridge extension's events -> the log and the status pill
+    /// Kept apart from the backend events: the extension is optional and subscribes to a different service
+    ///
+    /// High-frequency events raise no toast: a status line can repeat on every reconnect, and toasting each one would
+    /// flood the screen
+    /// What does need the user (not installed, protocol mismatch) goes to warn plus one toast
+    /// </summary>
+    private void WireBridgeEvents()
+    {
+        var bridge = AppServices.Bridge;
+        var log = AppServices.Log;
+
+        bridge.StatusReceived += status => AppServices.RunOnUi(() =>
+        {
+            log.Info(AppServices.I18n.T("log.bridge.status", ("status", DescribeBridgeStatus(status))));
+            SetMonitorState();
+        });        bridge.StateChanged += state => AppServices.RunOnUi(() =>
+        {
+            // Streaming 已经由 StatusReceived 覆盖（转成 info）；这里只记其余的状态迁移，
+            // 否则同一次连接会在日志里留下两行说的是同一件事
+            //
+            // Streaming is already covered by StatusReceived (as an info line); only the other transitions are
+            // recorded here, or one connection would leave two log lines saying the same thing
+            if (state != BridgeSessionState.Streaming)
+            {
+                log.Debug(AppServices.I18n.T("log.debug.bridgeState", ("state", state.ToString())));
+            }
+            SetMonitorState();
+        });
+        bridge.Failed += (failure, detail) => AppServices.RunOnUi(() =>
+        {
+            var text = DescribeBridgeFailure(failure, detail);
+            // 这些失败意味着扩展这一路走不通了，用户需要知道，因此是 warn 而不是 debug
+            // 浮窗只给其中一条：设置页那张卡片会常驻显示同一个结论，浮窗只是把"刚发生"告诉用户
+            //
+            // These failures mean the extension route cannot work, so the user needs to know: warn, not debug
+            // Only one of them raises a toast: the settings card shows the same conclusion as a standing line, and
+            // the toast only says it just happened
+            log.Warn(text);
+            ToastService.Show(text, severity: Core.Notifications.ToastSeverity.Warning);
+        });
+
+        ReportBridgeCompatibilityOnStartup();
+    }
+
+    /// <summary>
+    /// 启动时按已装版本判一次门禁：损坏与协议不支持记 warn，其余记 debug
+    /// 损坏额外浮窗一条：用户不进设置页就看不到那个状态，而这时扩展整条路都是断的
+    ///
+    /// 判定要起上游子进程，因此不等待它：启动序列不该为一个可选扩展的探测阻塞
+    /// 探测走 EnsureInstalledMetadataAsync，整个进程只探一轮，设置页随后读的就是这一次的结果
+    ///
+    /// Judges the gate once at startup from the installed version: damaged and unsupported protocols go to warn,
+    /// everything else to debug
+    /// A damaged build raises a toast on top of that, because the user would not see the state without opening the
+    /// settings page, while the whole extension route is broken at that point
+    ///
+    /// The verdict spawns the upstream, so it is not awaited: the startup sequence must not block on an optional
+    /// extension's probe
+    /// The probe goes through EnsureInstalledMetadataAsync, so the process probes once and the settings page later reads
+    /// that one result
+    /// </summary>
+    private void ReportBridgeCompatibilityOnStartup()
+    {
+        // 未安装时没有任何可判的东西，也不该为它起子进程
+        //
+        // With nothing installed there is nothing to judge, and spawning a subprocess for it is pointless
+        if (!Core.Bridge.BridgeLayout.IsInstalled(AppServices.BaseDir))
+        {
+            return;
+        }
+        _ = ReportAsync();
+
+        async Task ReportAsync()
+        {
+            var bridge = AppServices.Bridge;
+            try
+            {
+                await bridge.EnsureInstalledMetadataAsync();
+            }
+            catch
+            {
+                return;
+            }
+            AppServices.RunOnUi(() =>
+            {
+                var reason = bridge.BridgeUnusableReason;
+                if (reason == BridgeUnusableReason.Damaged)
+                {
+                    // warn + 浮窗：这个可执行文件跑不起来，用户不主动进设置页就无从得知
+                    //
+                    // warn plus a toast: the executable does not run, and a user who never opens the settings page
+                    // would have no way of knowing
+                    var damaged = AppServices.I18n.T("settings.bridge.damaged");
+                    AppServices.Log.Warn(damaged);
+                    ToastService.Show(damaged, severity: Core.Notifications.ToastSeverity.Warning);
+                }
+                else if (reason == BridgeUnusableReason.ProtocolUnsupported)
+                {
+                    // warn：这一版 MIDIBridge 装上了也用不了，用户需要重新安装，属于要留下痕迹的故障
+                    //
+                    // warn: this MIDIBridge build is installed but unusable and a reinstall is needed, which is a
+                    // fault worth recording
+                    AppServices.Log.Warn(AppServices.I18n.T(
+                        "log.bridge.protocolUnsupported",
+                        ("protocol", bridge.InstalledProtocol ?? string.Empty)));
+                }
+                else
+                {
+                    // debug：其余情形（可用、未配置、协议未知）都不是故障，记一条便于比对两次运行
+                    //
+                    // debug: every other outcome (usable, not configured, protocol unknown) is not a fault, and one
+                    // line makes two runs comparable
+                    AppServices.Log.Debug(AppServices.I18n.T(
+                        "log.debug.bridgeCompatibility",
+                        ("reason", reason.ToString()),
+                        ("protocol", bridge.InstalledProtocol ?? string.Empty)));
+                }
+            });
+        }
+    }
+
+    /// <summary>
+    /// 上游状态行 -> 本地化文案。分类本身在 Core（BridgeStatusParser），这里只负责翻译
+    /// 键按约定拼出（bridge.status.&lt;枚举名&gt;）
+    ///
+    /// An upstream status line -> localised copy
+    /// The classification itself lives in Core (BridgeStatusParser) and this only translates
+    /// The keys are composed by convention (bridge.status.&lt;enum name&gt;)
+    /// </summary>
+    private static string DescribeBridgeStatus(Core.Bridge.BridgeStatus status)
+    {
+        // 文案里带 {name}：接上"这台服务器叫什么"，多服务器时用户才能对上日志说的是哪一台
+        //
+        // The copy carries {name}: it states which server this line is about, which is what a user with several
+        // servers needs to follow the log
+        return AppServices.I18n.T("bridge.status." + status, ("name", AppServices.Bridge.CurrentServerLabel));
+    }
+
+    /// <summary>
+    /// 分类后的会话失败 -> 用户能照着做的一句话
+    /// 文案不说"失败了"，而是说下一步该做什么
+    ///
+    /// A categorised session failure -> one sentence the user can act on
+    /// The copy states what to do next rather than that something failed
+    /// </summary>
+    private static string DescribeBridgeFailure(BridgeFailure failure, string? detail)
+    {
+        Func<string, string> t = AppServices.I18n.T;
+        return failure switch
+        {
+            BridgeFailure.NotConfigured => t("bridge.failed.notConfigured"),
+            BridgeFailure.NotInstalled => t("bridge.failed.notInstalled"),
+            BridgeFailure.ProtocolMismatch =>
+                AppServices.I18n.T("bridge.failed.protocol", ("detail", detail ?? string.Empty)),
+            BridgeFailure.StartFailed => AppServices.I18n.T("bridge.failed.start", ("detail", detail ?? string.Empty)),
+            _ => AppServices.I18n.T("bridge.failed.other", ("detail", detail ?? string.Empty)),
+        };
     }
 
     /// <summary>
     /// 刷新标题栏状态药丸
-    /// 没有启停按钮，用户无法从按钮推断当前状态
+    /// 界面没有启停按钮，用户无法从按钮推断当前状态
     /// 因此药丸直接反映后台真实状态：监听中 = 正在收 MIDI 事件
     /// 文案刻意用"监听中/未监听"而不是"运行中/已停止"
-    /// 没有启停按钮之后，用户关心的是"我的琴键现在会不会被转换"，而不是进程是否存活
+    /// 没有启停按钮，用户关心的是"我的琴键现在会不会被转换"，而不是进程是否存活
+    ///
+    /// 药丸还要区分输入来自哪一路：远程源在用时写"监听中（远程）"
+    /// 只说"监听中"会让拨着琴却毫无反应的用户无从判断是不是选错了源
+    /// 只有真正在收远程帧时才写"（远程）"：IPC 还连着但上游没数据时，那一路其实没有输入
     ///
     /// Refreshes the title-bar status pill
-    /// With the Start/Stop button gone the pill is the only place the real state is visible
+    /// The UI has no Start/Stop button, so the pill is the only place the real state is visible
     /// "Listening" means MIDI events are actually being consumed
+    ///
+    /// Once the extension is in play the pill also says which route the input comes from: with the remote source in
+    /// use it reads "Listening (remote)"
+    /// A plain "Listening" would leave a user playing a piano that does nothing with no way to tell whether the
+    /// wrong source is selected
+    /// The "(remote)" suffix appears only while remote frames are actually arriving: an IPC connection that is up
+    /// but carries no data does not mean that route has input
     /// </summary>
     private void SetMonitorState()
     {
-        var running = AppServices.Backend.IsRunning;
-        StatusText.Text = AppServices.I18n.T(running ? "status.running" : "status.idle");
+        var source = AppServices.Backend.ActiveSource;
+        var streaming = AppServices.Bridge.IsStreaming;
+        var running = source == MidiSource.Bridge
+            ? streaming
+            : AppServices.Backend.IsRunning;
+        var remote = source == MidiSource.Bridge && streaming;
+        var key = !running
+            ? "status.idle"
+            : remote
+                ? "status.runningBridge"
+                : "status.running";
+        StatusText.Text = AppServices.I18n.T(key);
         // 只切换可见性，不赋值画刷：两个圆点各自带 {ThemeResource}，颜色由框架按当前主题解析（含对比度分支）
         // 代码一旦直接赋值画刷，就会绕过主题解析、在主题切换后变成陈旧颜色
         //
